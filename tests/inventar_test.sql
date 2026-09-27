@@ -329,6 +329,185 @@ reset role;
 \echo 'ok  Was essen wir?: Session, Vorschlag, Feedback, Rezept anlegen und lesen – nichts änderbar, Bestand unberührt'
 
 
+-- ─── Baukasten: bestehende Sorten werden eingeordnet ───
+do $$
+begin
+  assert (select count(*) from block_typ where farbe = 'blau' and name not like 'Test%') = 5
+     and (select count(*) from block_typ where farbe = 'blau' and name not like 'Test%' and art <> 'komplettgericht') = 0,
+    'blaue Seed-Sorten sind Komplettgerichte';
+  assert (select art from block_typ where name = 'Pizza') = 'komplettgericht', 'Pizza = Komplettgericht';
+  assert (select art from block_typ where name = 'Tomatensoße') = 'komponente', 'Tomatensoße = Komponente';
+  assert (select art from block_typ where name = 'TK-Spinat') = 'zutat', 'TK-Spinat = Zutat';
+  assert (select bool_and(herkunft is null and zusammensetzung is null and einheit = 'portion'
+                          and portion_menge = 1 and kosten_menge = 1) from block_typ where name not like 'Test%'),
+    'Herkunft und Zusammensetzung bleiben unbekannt, Einheit Portion, Preis pro Portion';
+end $$;
+\echo 'ok  Baukasten: Blau → Komplettgericht, TK → Zutat, sonst Komponente; Unbekanntes bleibt null'
+
+
+-- ─── Baukasten: Standardwerte und Prüfungen ───
+do $$
+declare v_id bigint;
+begin
+  insert into block_typ (name, farbe) values ('Test Standard', 'rot') returning id into v_id;
+  assert (select array[art, einheit, portion_menge::text, kosten_menge::text]
+          from block_typ where id = v_id) = array['komponente', 'portion', '1', '1'],
+    'Standard: Komponente, Portion, 1 Einheit pro Portion, Preis pro Einheit';
+
+  assert pg_temp.fehler($sql$insert into block_typ (name, farbe, art) values ('x', 'rot', 'snack')$sql$)
+    like '%violates check constraint%', 'unbekannte Art wird abgelehnt';
+  assert pg_temp.fehler($sql$insert into block_typ (name, farbe, einheit) values ('x', 'rot', 'kg')$sql$)
+    like '%violates check constraint%', 'unbekannte Einheit wird abgelehnt';
+  assert pg_temp.fehler($sql$insert into block_typ (name, farbe, portion_menge) values ('x', 'rot', 2)$sql$)
+    like '%violates check constraint%', 'bei Einheit Portion ist eine Portion genau 1';
+  assert pg_temp.fehler($sql$insert into block_typ (name, farbe, zusammensetzung) values ('x', 'rot', '{}')$sql$)
+    like '%violates check constraint%', 'leere Zusammensetzung wird abgelehnt (unbekannt = null)';
+  assert pg_temp.fehler($sql$insert into block_typ (name, farbe, kosten_menge) values ('x', 'rot', 0)$sql$)
+    like '%violates check constraint%', 'Preisbezug 0 wird abgelehnt';
+  assert pg_temp.fehler($sql$insert into block_typ (name, farbe, herkunft) values ('x', 'rot', 'geschenkt')$sql$)
+    like '%violates check constraint%', 'unbekannte Herkunft wird abgelehnt';
+
+  insert into block_typ (name, farbe, art, herkunft, zusammensetzung, kosten_cent, kosten_menge, notiz)
+  values ('Test Lasagne', 'blau', 'komplettgericht', 'selbstgemacht',
+          array['Nudelplatten', 'Linsen-Bolognese', 'Béchamel'], 200, 4, 'vom Sonntag')
+  returning id into v_id;
+  perform einfrieren(v_id, 4);
+  assert (select array[art, herkunft, kosten_cent::text, kosten_menge::text, notiz]
+          from bestand where id = v_id)
+    = array['komplettgericht', 'selbstgemacht', '200', '4', 'vom Sonntag'], 'View liefert die neuen Felder';
+  assert (select zusammensetzung from bestand where id = v_id) = array['Nudelplatten', 'Linsen-Bolognese', 'Béchamel'],
+    'View liefert die Zusammensetzung';
+end $$;
+\echo 'ok  Baukasten: Standardwerte, Prüfungen, View liefert Art, Herkunft, Preisbezug, Zusammensetzung'
+
+
+-- ─── Gramm/ml: ganzzahlige Mengen, verständliche Meldung ───
+do $$
+declare
+  v_id     bigint;
+  v_fehler text;
+begin
+  insert into block_typ (name, farbe, art, lagerort, einheit, portion_menge, kosten_cent, kosten_menge)
+  values ('Test Spaghetti', 'gelb', 'zutat', 'vorrat', 'g', 125, 129, 500)
+  returning id into v_id;
+  perform einfrieren(v_id, 500);
+  v_fehler := pg_temp.fehler(format('select entnehmen(%s, 600)', v_id));
+  assert v_fehler = 'Nur noch 500 g Test Spaghetti da – 600 g angefragt. Es wurde nichts entnommen.',
+    format('Meldung war: %s', v_fehler);
+  perform entnehmen(v_id, 125);
+  assert (select anzahl from bestand where id = v_id) = 375, '500 g − 125 g = 375 g';
+end $$;
+\echo 'ok  Gramm: 500 g − 125 g = 375 g, Meldung in Gramm'
+
+
+-- ─── Einfrieren mit Ablaufdatum, alte Aufrufe gehen weiter ───
+do $$
+declare v_id bigint;
+begin
+  insert into block_typ (name, farbe) values ('Test MHD', 'gruen') returning id into v_id;
+  perform einfrieren(v_id, 1);                           -- alter Aufruf ohne Datum
+  perform einfrieren(v_id, 2, heute() + 10);
+  assert (select array_agg(ablauf_am order by id) from charge where block_typ_id = v_id)
+    = array[null, heute() + 10], 'Ablaufdatum optional';
+  assert (select naechster_ablauf from bestand where id = v_id) = heute() + 10, 'nächster Ablauf';
+  assert not (select bald_ablaufen from bestand where id = v_id), '10 Tage → noch nicht bald';
+
+  perform einfrieren(v_id, 1, heute() + 3);
+  assert (select bald_ablaufen from bestand where id = v_id), 'Ablauf in 3 Tagen → bald ablaufen';
+  assert (select abgelaufen from bestand where id = v_id) = 0, 'nichts abgelaufen';
+
+  perform einfrieren(v_id, 2, heute() - 1);
+  assert (select abgelaufen from bestand where id = v_id) = 2, '2 abgelaufen';
+end $$;
+\echo 'ok  Ablaufdatum: optional, bald ablaufen ab ≤ 3 Tagen, abgelaufene Menge wird gezählt'
+
+
+-- ─── Entnahme-Reihenfolge: geöffnet → frühester Ablauf → FIFO ───
+do $$
+declare
+  v_id  bigint;
+  v_alt bigint;
+  v_mhd bigint;
+  v_ids bigint[];
+begin
+  insert into block_typ (name, farbe, haltbar_tage) values ('Test Reihenfolge', 'braun', 90)
+  returning id into v_id;
+  perform einfrieren(v_id, 3);
+  v_alt := (select max(id) from charge where block_typ_id = v_id);
+  update charge set eingefroren_am = heute() - 10 where id = v_alt;     -- läuft ca. in 80 Tagen ab
+  perform einfrieren(v_id, 3, heute() + 5);                              -- neuer, aber MHD in 5 Tagen
+  v_mhd := (select max(id) from charge where block_typ_id = v_id);
+
+  v_ids := entnehmen(v_id, 1);
+  assert (select charge_id from bewegung where id = v_ids[1]) = v_mhd, 'frühester Ablauf zuerst';
+
+  perform setze_geoeffnet(v_alt);
+  assert (select geoeffnet_am from charge where id = v_alt) = heute(), 'geöffnet seit heute';
+  assert (select geoeffnet from bestand where id = v_id) = 3, 'Menge in geöffneten Chargen';
+  v_ids := entnehmen(v_id, 1);
+  assert (select charge_id from bewegung where id = v_ids[1]) = v_alt, 'geöffnete Charge zuerst';
+
+  perform setze_geoeffnet(v_alt, false);
+  assert (select geoeffnet_am from charge where id = v_alt) is null, 'wieder verschlossen';
+  assert (select geoeffnet from bestand where id = v_id) = 0, 'nichts mehr geöffnet';
+
+  -- Ablauf ändern: alte Charge läuft jetzt früher ab
+  perform setze_ablauf(v_alt, heute() + 1);
+  v_ids := entnehmen(v_id, 1);
+  assert (select charge_id from bewegung where id = v_ids[1]) = v_alt, 'geändertes Ablaufdatum zählt';
+
+  -- aufgebrauchte Charge kann nicht geöffnet werden
+  perform entnehmen(v_id, 1);
+  assert (select menge_aktuell from charge where id = v_alt) = 0, 'alte Charge leer';
+  assert pg_temp.fehler(format('select setze_geoeffnet(%s)', v_alt)) = 'Diese Charge ist schon aufgebraucht.',
+    'leere Charge nicht öffnen';
+  assert pg_temp.fehler('select setze_geoeffnet(-1)') = 'Diese Charge gibt es nicht.', 'unbekannte Charge';
+  assert pg_temp.fehler('select setze_ablauf(-1, null)') = 'Diese Charge gibt es nicht.', 'unbekannte Charge (Ablauf)';
+
+  assert not exists (
+    select from charge c
+    where c.menge_aktuell <> (select coalesce(sum(b.menge), 0) from bewegung b where b.charge_id = c.id)
+  ), 'Öffnen und Ablauf ändern keine Mengen';
+end $$;
+\echo 'ok  Reihenfolge: geöffnete Charge → frühester Ablauf → FIFO; Öffnen/Ablauf ändern keine Mengen'
+
+
+-- ─── Baukasten-Rechte ohne Login ───
+set local role anon;
+do $$
+declare
+  v_id     bigint;
+  v_charge bigint;
+begin
+  insert into block_typ (name, farbe, art, herkunft, einheit, portion_menge, kosten_cent, kosten_menge, zusammensetzung)
+  values ('Test Rechte Baukasten', 'gelb', 'zutat', 'gekauft', 'g', 100, 99, 500, array['Hartweizengrieß'])
+  returning id into v_id;
+  update block_typ set herkunft = null, zusammensetzung = null where id = v_id;
+  perform einfrieren(v_id, 500, heute() + 30);
+  v_charge := (select id from charge where block_typ_id = v_id);
+  perform setze_geoeffnet(v_charge);
+  perform setze_ablauf(v_charge, heute() + 20);
+  assert (select naechster_ablauf from bestand where id = v_id) = heute() + 20, 'Ablauf gesetzt';
+
+  assert pg_temp.fehler(format('update charge set ablauf_am = null where id = %s', v_charge))
+    like 'permission denied%', 'Charge nicht direkt änderbar';
+  assert pg_temp.fehler($sql$select menge_text(1, 'g')$sql$) like 'permission denied%',
+    'Hilfsfunktion nicht direkt aufrufbar';
+
+  insert into rezept (name, daten, gerichtstyp, portionen, zutaten, schritte, bestandsarten, tags,
+                      kosten_pro_portion_cent, kosten_status, feedback)
+  values ('Test Rezept', '{}', 'pasta', 2,
+          '[{"name": "Spaghetti", "menge": 250, "einheit": "g", "art": "zutat"}]',
+          array['Nudeln kochen'], array['zutat', 'komponente'], array['schnell'], 62, 'berechnet', array['like']);
+  assert (select kosten_status from rezept where name = 'Test Rezept') = 'berechnet', 'Rezept strukturiert';
+  assert pg_temp.fehler($sql$insert into rezept (name, daten, kosten_status) values ('x', '{}', 'geschätzt')$sql$)
+    like '%violates check constraint%', 'Kostenstatus nur berechnet/teilweise/unbekannt';
+  insert into rezept (name, daten) values ('Test Rezept alt', '{}');   -- alte App-Version
+end $$;
+reset role;
+\echo 'ok  Baukasten-Rechte: Sorte mit neuen Feldern, einbuchen mit Ablauf, öffnen, Rezept strukturiert – Chargen weiter geschützt'
+
+
 rollback;
 \echo ''
 \echo 'Alle Tests bestanden.'

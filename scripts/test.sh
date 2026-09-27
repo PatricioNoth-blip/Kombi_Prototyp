@@ -54,11 +54,16 @@ sql() { psql -X -q -v ON_ERROR_STOP=1 "$URL" "$@"; }
 
 echo "→ Supabase-Rollen nachbilden"
 sql -f tests/supabase_rollen.sql
+# Reihenfolge wie beim Einrichten laut README: Der Seed kommt nach den ersten beiden
+# Migrationen. So prüfen die Tests auch, dass spätere Migrationen vorhandene Daten
+# richtig übernehmen.
 for datei in supabase/migrations/*.sql; do
   echo "→ Migration $(basename "$datei")"
   sql -f "$datei"
+  if [[ "$datei" == *_ohne_login.sql ]]; then
+    echo "→ Seed"
+    sql -f supabase/seed.sql
+  fi
 done
-echo "→ Seed"
-sql -f supabase/seed.sql
 echo "→ Tests"
 sql -f tests/inventar_test.sql
