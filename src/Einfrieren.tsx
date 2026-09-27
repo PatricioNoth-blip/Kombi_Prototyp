@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Sorte } from './api';
 import { Blatt, AnzahlWahl } from './Blatt';
-import { FARBEN } from './farben';
+import { buchungsVerb, FARBEN } from './farben';
 
 type Props = {
   bestand: Sorte[];
@@ -18,9 +18,13 @@ export function Einfrieren({ bestand, startSorte, onEinfrieren, onSchliessen }: 
 
   if (sorte) {
     return (
-      <Blatt titel={`${sorte.name} einfrieren`} onSchliessen={onSchliessen}>
-        <p className="leise">Wie viele Blöcke? Ein Tap bucht sofort.</p>
-        <AnzahlWahl werte={ANZAHLEN} aktion="Einfrieren" onWahl={(n) => onEinfrieren(sorte, n)} />
+      <Blatt titel={`${sorte.name} ${buchungsVerb(sorte.lagerort).infinitiv}`} onSchliessen={onSchliessen}>
+        <p className="leise">Wie viele {sorte.lagerort === 'vorrat' ? 'Portionen' : 'Blöcke'}? Ein Tap bucht sofort.</p>
+        <AnzahlWahl
+          werte={ANZAHLEN}
+          aktion={buchungsVerb(sorte.lagerort).infinitiv.replace(/^./, (b) => b.toUpperCase())}
+          onWahl={(n) => onEinfrieren(sorte, n)}
+        />
         <button type="button" className="link zurueck" onClick={() => setSorte(null)}>
           ← andere Sorte
         </button>

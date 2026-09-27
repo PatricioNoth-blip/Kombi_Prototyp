@@ -12,6 +12,20 @@ export const FARBEN = [
 
 export type Farbe = (typeof FARBEN)[number]['id'];
 
+export const LAGERORTE = [
+  { id: 'gefrierfach', name: 'Gefrierfach', icon: '❄' },
+  { id: 'kuehlschrank', name: 'Kühlschrank', icon: '🧊' },
+  { id: 'vorrat', name: 'Vorrat', icon: '🥫' },
+] as const;
+
+export type LagerortId = (typeof LAGERORTE)[number]['id'];
+
+/** „einfrieren“ fürs Gefrierfach, sonst „einbuchen“ */
+export const buchungsVerb = (lagerort?: LagerortId) =>
+  !lagerort || lagerort === 'gefrierfach'
+    ? { infinitiv: 'einfrieren', partizip: 'eingefroren' }
+    : { infinitiv: 'einbuchen', partizip: 'eingebucht' };
+
 export function farbe(id: Farbe) {
   return FARBEN.find((f) => f.id === id)!;
 }

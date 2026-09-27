@@ -12,6 +12,7 @@ import { bewerte, kurz, STANDARD_GEWICHTE, type Gewichte } from './bewertung.ts'
 import { pruefeEinkauf, waehleMultiUse } from './einkauf.ts';
 import { berechneLeitplanken, verletztAusschluss } from './praeferenz.ts';
 import { kannMahlzeit } from './snapshot.ts';
+import { uuid } from './id.ts';
 import { pruefeBaustein, pruefeGericht } from './validierung.ts';
 
 export type EngineOptionen = {
@@ -19,16 +20,13 @@ export type EngineOptionen = {
   gewichte?: Gewichte;
 };
 
-let zaehler = 0;
-const standardId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `v${Date.now()}-${++zaehler}`;
 
 export async function erzeugeVorschlaege(
   anbieter: KiAnbieter,
   anfrage: KiAnfrage,
   optionen: EngineOptionen = {},
 ): Promise<Ergebnis> {
-  const neueId = optionen.id ?? standardId;
+  const neueId = optionen.id ?? uuid;
   const gewichte = optionen.gewichte ?? STANDARD_GEWICHTE;
   const leitplanken = berechneLeitplanken(anfrage.feedback, anfrage.modus);
   const notfall = !kannMahlzeit(anfrage.snapshot);

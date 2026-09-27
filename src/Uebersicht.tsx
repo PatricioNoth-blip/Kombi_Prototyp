@@ -1,5 +1,5 @@
 import type { Sorte } from './api';
-import { FARBEN } from './farben';
+import { FARBEN, LAGERORTE } from './farben';
 
 type Props = {
   bestand: Sorte[];
@@ -50,7 +50,14 @@ export function Uebersicht({ bestand, laeuft, onMinusEins, onOeffnen }: Props) {
               {sorten.map((s) => (
                 <li key={s.id} className={`zeile${s.anzahl === 0 ? ' leer' : ''}`}>
                   <button type="button" className="zeile-info" onClick={() => onOeffnen(s)}>
-                    <span className="zeile-name">{s.name}</span>
+                    <span className="zeile-name">
+                      {s.name}
+                      {s.lagerort && s.lagerort !== 'gefrierfach' && (
+                        <span className="lager-symbol" title={LAGERORTE.find((l) => l.id === s.lagerort)?.name}>
+                          {' '}{LAGERORTE.find((l) => l.id === s.lagerort)?.icon}
+                        </span>
+                      )}
+                    </span>
                     {(s.nachkochen || s.bald_ablaufen) && (
                       <span className="zeile-hinweise">
                         {s.nachkochen && <span className="badge nachkochen">Nachkochen</span>}

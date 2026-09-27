@@ -75,3 +75,18 @@ describe('Rezept speichern', () => {
     assert.equal(typeof r.daten.kosten.pro_portion_cent, 'number');
   });
 });
+
+describe('IDs', () => {
+  test('uuid() liefert gültige v4-UUIDs – auch ohne crypto.randomUUID', async () => {
+    const { uuid } = await import('../../supabase/functions/_shared/kombi/id.ts');
+    const muster = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    assert.match(uuid(), muster);
+    const original = globalThis.crypto.randomUUID;
+    Object.defineProperty(globalThis.crypto, 'randomUUID', { value: undefined, configurable: true });
+    try {
+      assert.match(uuid(), muster);
+    } finally {
+      Object.defineProperty(globalThis.crypto, 'randomUUID', { value: original, configurable: true });
+    }
+  });
+});

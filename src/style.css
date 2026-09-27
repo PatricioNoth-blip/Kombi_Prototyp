@@ -541,3 +541,118 @@ input[type='number'] {
 @media (prefers-reduced-motion: reduce) {
   .blatt, .blatt-hintergrund, .meldung { animation: none; }
 }
+
+/* ───────── Was essen wir? ───────── */
+.essen-titel { margin: 4px 0 12px; font-size: 22px; }
+
+.essen-optionen { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.chip-reihe { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chip-label { width: 28px; font-size: 18px; text-align: center; }
+
+.essen-start { display: flex; flex-direction: column; gap: 12px; }
+textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--rand);
+  border-radius: 12px;
+  background: var(--flaeche);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 400;
+  resize: vertical;
+}
+
+.essen-kurz { margin: -4px 0 10px; color: var(--text-2); font-size: 15px; }
+.essen-kurz .link, .essen-optionen .link { min-height: 0; padding: 0 4px; }
+.essen-quelle { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.essen-quelle.demo { color: var(--ablauf-text); }
+
+.gericht {
+  margin-bottom: 14px;
+  padding: 18px 18px 14px;
+  border-radius: 20px;
+  background: var(--flaeche);
+  box-shadow: var(--schatten);
+}
+.gericht-emoji { font-size: 44px; line-height: 1; }
+.gericht-name { margin: 8px 0 12px; font-size: 22px; }
+.gericht-laedt { text-align: center; color: var(--text-2); }
+.gericht-laedt .gericht-emoji { animation: wippen 1.2s ease-in-out infinite; }
+
+.gericht-zutaten { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.gericht-zutaten li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-weight: 600; }
+.gericht-zutaten .badge { font-weight: 700; }
+
+.gericht-fakten { display: flex; flex-wrap: wrap; gap: 16px; margin: 14px 0 4px; font-weight: 700; font-size: 17px; }
+.gericht-begruendung { margin: 12px 0 4px; font-style: italic; }
+.gericht-warum { margin: 6px 0; padding-left: 20px; color: var(--text-2); }
+.gericht-fehlt { margin: 10px 0 0; }
+.gericht-schritte { margin-top: 10px; }
+.gericht-schritte summary { cursor: pointer; font-weight: 700; color: var(--akzent); min-height: 32px; }
+.gericht-schritte ol { margin: 6px 0 0; padding-left: 22px; }
+
+.essen-muster, .essen-tipp {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--flaeche);
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.notfall h3 { font-size: 19px; }
+.einkauf-zeile { font-size: 18px; }
+.einkauf-liste { margin: 6px 0 10px; padding-left: 22px; columns: 2; }
+
+.baustein-idee {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-left: 6px solid var(--f);
+  border-radius: 14px;
+  background: var(--flaeche);
+  box-shadow: var(--schatten);
+}
+.baustein-idee p { margin: 0 0 6px; }
+.baustein-idee .punkt { display: inline-block; vertical-align: -2px; }
+.baustein-knoepfe { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+
+.entscheidung { display: flex; justify-content: center; gap: 8px; }
+.entscheidung button {
+  flex: 1;
+  max-width: 150px;
+  min-height: 72px;
+  padding: 6px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--rand);
+  border-radius: 16px;
+  background: var(--flaeche);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--schatten);
+}
+.entscheidung button span { font-size: 24px; line-height: 1; }
+.entscheidung button.mag { border-color: transparent; background: var(--akzent); color: var(--akzent-text); }
+.entscheidung button:active { transform: scale(0.96); }
+
+.koch-liste .zeile { padding-left: 12px; gap: 10px; }
+.koch-anzahl { min-width: 28px; text-align: center; font-size: 20px; font-variant-numeric: tabular-nums; }
+.lager-symbol { font-size: 14px; }
+.f-kuehlschrank { --f: var(--rand); }
+
+@keyframes wippen { 50% { transform: rotate(-8deg) scale(1.05); } }
+@media (prefers-reduced-motion: reduce) { .gericht-laedt .gericht-emoji { animation: none; } }
+
+/* Drei Reiter + Neu laden passen auch auf schmale Handys */
+@media (max-width: 430px) {
+  .kopf { gap: 6px; padding-left: 12px; padding-right: 12px; }
+  .kopf h1 { font-size: 17px; }
+  .reiter button { padding: 0 9px; font-size: 14px; }
+  .kopf .rund { width: 40px; height: 40px; }
+}
+@media (max-width: 350px) {
+  .kopf h1 { display: none; }
+}

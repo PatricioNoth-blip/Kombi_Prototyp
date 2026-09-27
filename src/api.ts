@@ -1,7 +1,9 @@
 // Alle Zugriffe auf Supabase. Die Buchungslogik (FIFO, Rückgängig, Prüfungen)
 // liegt in der Datenbank – siehe supabase/migrations.
 import { supabase } from './supabase';
-import type { Farbe } from './farben';
+import type { Farbe, LagerortId } from './farben';
+
+export type Lagerort = LagerortId;
 
 /** Eine Zeile der View „bestand“ */
 export type Sorte = {
@@ -16,11 +18,13 @@ export type Sorte = {
   haltbar_tage: number;
   groesse_g: number;
   kosten_cent: number | null;
+  /** fehlt, solange die Migration „was_essen“ nicht eingespielt ist → Gefrierfach */
+  lagerort?: Lagerort;
 };
 
 export type SorteDaten = Pick<
   Sorte,
-  'name' | 'farbe' | 'groesse_g' | 'mindestbestand' | 'haltbar_tage' | 'kosten_cent'
+  'name' | 'farbe' | 'groesse_g' | 'mindestbestand' | 'haltbar_tage' | 'kosten_cent' | 'lagerort'
 >;
 
 export type Charge = {

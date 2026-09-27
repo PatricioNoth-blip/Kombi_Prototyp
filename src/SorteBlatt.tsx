@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fehlerText, ladeChargen, type Charge, type Sorte } from './api';
 import { Blatt, AnzahlWahl } from './Blatt';
-import { farbe } from './farben';
+import { buchungsVerb, farbe } from './farben';
 import { datum, euro, plusTage, tageSeit } from './format';
 
 type Props = {
@@ -62,7 +62,7 @@ export function SorteBlatt({ sorte, laeuft, onEntnehmen, onEinfrieren, onSchlies
 
       <section className="abschnitt">
         <button type="button" className="knopf breit" onClick={onEinfrieren}>
-          ❄ {sorte.name} einfrieren
+          ❄ {sorte.name} {buchungsVerb(sorte.lagerort).infinitiv}
         </button>
       </section>
 

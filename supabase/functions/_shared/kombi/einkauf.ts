@@ -47,7 +47,7 @@ export function waehleMultiUse(snapshot: Snapshot, id: string): Einkaufsvorschla
     name: beste.m.name,
     preis_cent: beste.preis,
     ermoeglicht: beste.m.passt_zu,
-    begruendung: `Damit sind mindestens ${beste.m.passt_zu.length} weitere Kombi-Gerichte möglich.`,
+    begruendung: 'Günstig, lange haltbar und vielseitig – passt heute und in vielen weiteren Kombi-Gerichten.',
   };
 }
 

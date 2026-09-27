@@ -5,13 +5,15 @@ import { Uebersicht } from './Uebersicht';
 import { SorteBlatt } from './SorteBlatt';
 import { Einfrieren } from './Einfrieren';
 import { Sorten } from './Sorten';
+import { Essen } from './Essen';
+import { buchungsVerb } from './farben';
 
 type Meldung = { text: string; fehler?: boolean; rueckgaengig?: number[] };
 
 export function Inventar() {
   const [bestand, setBestand] = useState<Sorte[] | null>(null);
   const [ladefehler, setLadefehler] = useState<string | null>(null);
-  const [ansicht, setAnsicht] = useState<'bestand' | 'sorten'>('bestand');
+  const [ansicht, setAnsicht] = useState<'bestand' | 'essen' | 'sorten'>('bestand');
   const [offeneSorteId, setOffeneSorteId] = useState<number | null>(null);
   // null = Dialog zu; sorteId null = Sorte muss noch gewählt werden
   const [einfrierenDialog, setEinfrierenDialog] = useState<{ sorteId: number | null } | null>(null);
@@ -88,7 +90,7 @@ export function Inventar() {
 
   function einfrieren(sorte: Sorte, anzahl: number) {
     setEinfrierenDialog(null);
-    void buchen(sorte, () => api.einfrieren(sorte.id, anzahl), `+${anzahl} ${sorte.name} eingefroren`);
+    void buchen(sorte, () => api.einfrieren(sorte.id, anzahl), `+${anzahl} ${sorte.name} ${buchungsVerb(sorte.lagerort).partizip}`);
   }
 
   const finde = (id: number | null) => bestand?.find((s) => s.id === id) ?? null;
@@ -106,6 +108,14 @@ export function Inventar() {
             onClick={() => setAnsicht('bestand')}
           >
             Bestand
+          </button>
+          <button
+            type="button"
+            className={ansicht === 'essen' ? 'aktiv' : ''}
+            aria-current={ansicht === 'essen' ? 'page' : undefined}
+            onClick={() => setAnsicht('essen')}
+          >
+            Essen
           </button>
           <button
             type="button"
@@ -139,7 +149,7 @@ export function Inventar() {
             onMinusEins={(s) => entnehmen(s, 1)}
             onOeffnen={(s) => setOffeneSorteId(s.id)}
           />
-        ) : (
+        ) : ansicht === 'sorten' ? (
           <Sorten
             bestand={bestand}
             onGespeichert={(text) => {
@@ -147,7 +157,14 @@ export function Inventar() {
               void laden();
             }}
           />
-        )}
+        ) : null}
+        {/* bleibt beim Reiterwechsel erhalten, damit die Session nicht verloren geht */}
+        <div hidden={ansicht !== 'essen'}>
+          <Essen
+            onMeldung={(text, ids) => zeige({ text, rueckgaengig: ids && ids.length ? ids : undefined })}
+            onBestandGeaendert={() => void laden()}
+          />
+        </div>
       </main>
 
       {ansicht === 'bestand' && bestand && bestand.length > 0 && (

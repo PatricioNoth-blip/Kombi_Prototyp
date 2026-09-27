@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { fehlerText, speichereSorte, type Sorte, type SorteDaten } from './api';
+import { fehlerText, speichereSorte, type Lagerort, type Sorte, type SorteDaten } from './api';
 import { Blatt } from './Blatt';
-import { FARBEN, type Farbe } from './farben';
+import { FARBEN, LAGERORTE, type Farbe } from './farben';
 import { euro, euroZuCent } from './format';
 
 type Props = {
@@ -35,6 +35,7 @@ export function Sorten({ bestand, onGespeichert }: Props) {
                     <button type="button" className="zeile-info" onClick={() => setBearbeiten(s)}>
                       <span className="zeile-name">{s.name}</span>
                       <span className="zeile-details">
+                        {s.lagerort && s.lagerort !== 'gefrierfach' && <>{LAGERORTE.find((l) => l.id === s.lagerort)?.name} · </>}
                         {s.groesse_g} g · min. {s.mindestbestand} · {s.haltbar_tage} Tage
                         {s.kosten_cent !== null && <> · {euro(s.kosten_cent)}</>}
                       </span>
@@ -84,13 +85,17 @@ function ganzeZahl(text: string, min: number): number | null {
 
 type FormularProps = {
   sorte: Sorte | null;
+  /** Vorbelegung für eine neue Sorte, z. B. aus einer Baustein-Idee */
+  vorlage?: Partial<SorteDaten>;
   onFertig: (text: string) => void;
   onSchliessen: () => void;
 };
 
-function SorteFormular({ sorte, onFertig, onSchliessen }: FormularProps) {
-  const [name, setName] = useState(sorte?.name ?? '');
-  const [farbe, setFarbe] = useState<Farbe | null>(sorte?.farbe ?? null);
+export function SorteFormular({ sorte, vorlage, onFertig, onSchliessen }: FormularProps) {
+  const [name, setName] = useState(sorte?.name ?? vorlage?.name ?? '');
+  const [farbe, setFarbe] = useState<Farbe | null>(sorte?.farbe ?? vorlage?.farbe ?? null);
+  const lagerortVorher: Lagerort = sorte?.lagerort ?? 'gefrierfach';
+  const [lagerort, setLagerort] = useState<Lagerort>(sorte?.lagerort ?? vorlage?.lagerort ?? 'gefrierfach');
   const [groesse, setGroesse] = useState(String(sorte?.groesse_g ?? 100));
   const [mindest, setMindest] = useState(String(sorte?.mindestbestand ?? 0));
   const [haltbar, setHaltbar] = useState(String(sorte?.haltbar_tage ?? 90));
@@ -112,7 +117,10 @@ function SorteFormular({ sorte, onFertig, onSchliessen }: FormularProps) {
     if (haltbar_tage === null) return 'Haltbarkeit: bitte ganze Tage ab 1 eingeben.';
     const kosten_cent = euroZuCent(kosten);
     if (Number.isNaN(kosten_cent)) return 'Kosten: z. B. 0,17 eingeben – oder leer lassen.';
-    return { name: n, farbe, groesse_g, mindestbestand, haltbar_tage, kosten_cent };
+    const daten: SorteDaten = { name: n, farbe, groesse_g, mindestbestand, haltbar_tage, kosten_cent };
+    // Nur mitschicken, wenn geändert – so klappt das Speichern auch vor der Migration „was_essen“.
+    if (lagerort !== lagerortVorher) daten.lagerort = lagerort;
+    return daten;
   }
 
   async function speichern(e: FormEvent) {
@@ -167,6 +175,24 @@ function SorteFormular({ sorte, onFertig, onSchliessen }: FormularProps) {
               </label>
             ))}
           </div>
+        </fieldset>
+
+        <fieldset className="feld">
+          <legend>Lagerort</legend>
+          <div className="groessen">
+            {LAGERORTE.map((l) => (
+              <button
+                key={l.id}
+                type="button"
+                className={`chip${lagerort === l.id ? ' gewaehlt' : ''}`}
+                aria-pressed={lagerort === l.id}
+                onClick={() => setLagerort(l.id)}
+              >
+                {l.icon} {l.name}
+              </button>
+            ))}
+          </div>
+          <small>Vorrat: z. B. Pasta, Reis, Dosen – mit Preis pro Portion, damit „Was essen wir?“ damit rechnen kann.</small>
         </fieldset>
 
         <div className="feld">
