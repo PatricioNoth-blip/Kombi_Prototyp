@@ -114,6 +114,8 @@ export function Produktion({ bestand, version, onStarten, onMeldung, onBestandGe
         </p>
       )}
 
+      {produktionen === null && <p className="leise laden">Lade Produktion …</p>}
+      {produktionen !== null && (
       <button type="button" className="bestand-aktualisieren" onClick={() => onStarten({ block_typ_id: null, eingaenge: [], menge: null })}>
         <Icon name="topf" groesse={26} />
         <span>
@@ -121,10 +123,10 @@ export function Produktion({ bestand, version, onStarten, onMeldung, onBestandGe
           <small>Einmal mehr kochen – Kombi weiß, was daraus entstanden ist</small>
         </span>
       </button>
+      )}
 
       <section className="gruppe">
         <h2 className="abschnitt-titel">🔥 Jetzt sinnvoll</h2>
-        {produktionen === null && <p className="leise klein gruppe-leer">Lade …</p>}
         {produktionen !== null && empfehlungen.length === 0 && (
           <p className="leise klein gruppe-leer">
             Noch keine Empfehlungen. Sobald du etwas produziert hast oder bei einer Komponente die Zusammensetzung hinterlegst, schlägt Kombi hier vor, was sich lohnt.

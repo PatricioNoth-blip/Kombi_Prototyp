@@ -353,6 +353,10 @@ export function Inventar() {
             setAktualisieren(false);
             setEinfrierenDialog({ sorteId: null });
           }}
+          onRueckgaengig={(text, fehler) => {
+            zeige({ text, fehler });
+            void laden();
+          }}
           onSchliessen={() => setAktualisieren(false)}
         />
       )}

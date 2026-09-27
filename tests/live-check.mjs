@@ -179,7 +179,8 @@ if (baukasten) {
 }
 
 // Migration „bon_produktion“ ist optional: Ohne sie zeigt die App Hinweise statt Fehlern.
-const { error: bonFehlt } = await db.from('bon_import').select('id', { head: true, count: 'exact' });
+// (keine HEAD-Abfrage: die meldet eine fehlende Tabelle nicht als Fehler)
+const { error: bonFehlt } = await db.from('bon_import').select('id').limit(1);
 if (!bonFehlt) {
   await pruefe('bon_buchen() erreichbar, bucht ohne Positionen nichts', async () =>
     erwarteFehler(await db.rpc('bon_buchen', { p_bon: { fingerabdruck: 'live-check', positionen: [] } }), 'P0001', 'Es wurde nichts gebucht'));
@@ -285,7 +286,7 @@ if (!APP_URL) {
 
   await pruefe('Produktion: Tab und Dialog (ohne zu buchen)', async () => {
     await page.click('.tabbar button:has-text("Produktion")');
-    await page.waitForSelector('.inhalt .hinweisbox, .inhalt .bestand-aktualisieren', { timeout: 10000 });
+    await page.waitForSelector('.inhalt .hinweisbox:has-text("bon_produktion"), .inhalt .bestand-aktualisieren', { timeout: 15000 });
     if (await page.isVisible('.inhalt .hinweisbox:has-text("bon_produktion")')) return 'Hinweis: Migration „bon_produktion“ fehlt noch';
     const abschnitte = await page.locator('.inhalt .abschnitt-titel').allTextContents();
     await page.click('.inhalt .bestand-aktualisieren');

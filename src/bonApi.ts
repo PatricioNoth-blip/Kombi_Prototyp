@@ -171,3 +171,23 @@ export function gemerkterEntwurf<T>(): { zeit: number; wert: T } | null {
     return null;
   }
 }
+
+export type ImportKurz = { id: string; haendler: string | null; kaufdatum: string | null; erstellt_am: string; artikel: number };
+
+/** Die letzten bestätigten Bon-Importe (für „Rückgängig“ auch später noch). */
+export async function ladeLetzteImporte(anzahl = 3): Promise<ImportKurz[]> {
+  const { data, error } = await supabase
+    .from('bon_import')
+    .select('id, haendler, kaufdatum, erstellt_am, bon_position(bestand_menge)')
+    .eq('status', 'gebucht')
+    .order('erstellt_am', { ascending: false })
+    .limit(anzahl);
+  if (error || !data) return [];
+  return (data as unknown as (Omit<ImportKurz, 'artikel'> & { bon_position: { bestand_menge: number }[] })[]).map((i) => ({
+    id: i.id,
+    haendler: i.haendler,
+    kaufdatum: i.kaufdatum,
+    erstellt_am: i.erstellt_am,
+    artikel: (i.bon_position ?? []).filter((p) => p.bestand_menge > 0).length,
+  }));
+}
