@@ -123,7 +123,11 @@ begin
                        'neu', jsonb_build_object('name', 'T Haferdrink Barista', 'art', 'zutat', 'farbe', 'weiss',
                                                  'lagerort', 'vorrat', 'einheit', 'ml')),
     -- Preis nicht lesbar → unbekannt, nicht geschätzt
-    pg_temp.pos(8, 'VOLLKORN BROT', 'T Vollkornbrot', 1, 1, 1, null)
+    pg_temp.pos(8, 'VOLLKORN BROT', 'T Vollkornbrot', 1, 1, 1, null),
+    -- Leergut und ein Rabatt auf den ganzen Einkauf: nur protokolliert
+    jsonb_build_object('nr', 9, 'bon_text', 'LEERGUT', 'schluessel', 'leergut', 'typ', 'pfand', 'gesamtpreis_cent', -75),
+    jsonb_build_object('nr', 10, 'bon_text', 'COUPON 10% EINKAUF', 'schluessel', 'coupon 10 einkauf', 'typ', 'rabatt',
+                       'gesamtpreis_cent', -50, 'hinweis', 'Rabatt konnte nicht eindeutig zugeordnet werden')
   )));
   v_import := (v_erg ->> 'import_id')::uuid;
 
@@ -164,7 +168,8 @@ begin
   assert (select bool_and(bestand_menge = 0 and entscheidung = 'nicht' and charge_id is null and bewegung_ids = '{}')
           from bon_position where import_id = v_import and nr in (4, 5, 6)), 'Pfand/Waschmittel/Schokolade ohne Bestand';
   assert (select grund from bon_position where import_id = v_import and nr = 4) = 'direkt_gegessen', 'Begründung gespeichert';
-  assert (select count(*) from bon_position where import_id = v_import) = 8, 'alle 8 Positionen protokolliert';
+  assert (select count(*) from bon_position where import_id = v_import) = 10, 'alle 10 Positionen protokolliert';
+  assert (select endpreis_cent from bon_position where import_id = v_import and nr = 9) = -75, 'Leergut als negative Geldposition';
   assert (select status from bon_import where id = v_import) = 'gebucht', 'Import gebucht';
 
   -- Lernen: Schokolade wurde nicht übernommen, Tomaten schon

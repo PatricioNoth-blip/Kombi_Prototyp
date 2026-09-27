@@ -253,7 +253,7 @@ begin
     if v_rabatt < 0 then
       raise exception 'Position %: Rabatt als positiven Betrag angeben. Es wurde nichts gebucht.', v_nr;
     end if;
-    if v_end is not null and v_end < 0 then
+    if v_rabatt > 0 and v_end is not null and v_end < 0 then
       raise exception 'Position %: Rabatt ist größer als der Preis. Es wurde nichts gebucht.', v_nr;
     end if;
 
