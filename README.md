@@ -80,6 +80,12 @@ npm test
 Dafür müssen die Postgres-Programme installiert sein (macOS: `brew install postgresql`, Ubuntu/WSL: `sudo apt install postgresql`). Das Skript startet eine Wegwerf-Datenbank und löscht sie danach wieder. Die echte Supabase-Datenbank wird nie angefasst.
 Bei jedem Push laufen die Tests und der App-Build außerdem automatisch in GitHub Actions (Workflow „CI“).
 
+**Live-Check:** Der Workflow „Live-Check (echte Supabase)“ prüft bei jedem Push die echte Datenbank
+aus der `.env` (Migrationen, Seed, Rechte, Buchungsfunktionen) und klickt die gebaute App im Browser durch.
+Er **ändert keine Daten**: Buchungen werden nur mit Werten aufgerufen, die garantiert abgelehnt werden.
+Über **Actions → Live-Check → Run workflow** lässt er sich auch von Hand starten, z. B. wenn die App
+plötzlich nichts mehr anzeigt.
+
 ## Wie es funktioniert
 
 **Datenmodell** (siehe Migration):
@@ -109,6 +115,7 @@ supabase/migrations/…_ohne_login.sql Zugriff für die App ohne Login (v0.1)
 supabase/seed.sql                    Beispieldaten
 tests/inventar_test.sql              Tests der Akzeptanzkriterien
 tests/supabase_rollen.sql            bildet die Supabase-Rollen für lokale Tests nach
+tests/live-check.mjs                 Live-Check gegen die echte Supabase (ändert nichts)
 scripts/test.sh                      startet Wegwerf-Postgres und führt die Tests aus
 src/api.ts                           alle Supabase-Aufrufe
 src/Inventar.tsx                     Hauptansicht: Laden, Buchen, Rückgängig

@@ -1,0 +1,36 @@
+name: Live-Check (echte Supabase)
+
+# Prüft die echte Datenbank aus der .env und die gebaute App im Browser.
+# Ändert keine Daten (siehe tests/live-check.mjs).
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run build
+      - name: Playwright installieren (nur hier, keine Projekt-Abhängigkeit)
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: App starten
+        run: |
+          npx vite preview --port 4173 --strictPort > /tmp/preview.log 2>&1 &
+          for i in $(seq 30); do curl -sf http://localhost:4173/ > /dev/null && exit 0; sleep 1; done
+          cat /tmp/preview.log; exit 1
+      - run: node tests/live-check.mjs
+        env:
+          APP_URL: http://localhost:4173/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-check-screenshot
+          path: live-check-uebersicht.png
+          if-no-files-found: ignore
