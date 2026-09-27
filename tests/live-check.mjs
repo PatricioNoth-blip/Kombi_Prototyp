@@ -18,6 +18,36 @@ function ladeEnv() {
   return werte;
 }
 
+/** Beschreibt den Schlüssel, ohne ihn (oder Teile davon) auszugeben. */
+function schluesselDiagnose(url, key) {
+  const hinweise = [];
+  const ref = /^https:\/\/([a-z0-9]+)\.supabase\.co\/?$/.exec(url ?? '')?.[1];
+  if (!ref) hinweise.push('URL hat nicht die Form https://<projekt>.supabase.co');
+  if (!key) return { typ: 'fehlt', hinweise: [...hinweise, 'VITE_SUPABASE_KEY ist leer'] };
+  if (/\s/.test(key)) hinweise.push('Schlüssel enthält Leerzeichen oder Zeilenumbruch');
+  let typ;
+  if (key.startsWith('sb_publishable_')) {
+    typ = 'Publishable key';
+  } else if (key.startsWith('sb_secret_')) {
+    typ = 'Secret key';
+    hinweise.push('Secret key gehört nicht in die App – Publishable key verwenden und den Secret key in Supabase neu erzeugen');
+  } else if (key.split('.').length === 3) {
+    try {
+      const inhalt = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString());
+      typ = `JWT-Schlüssel (alt), role=${inhalt.role}`;
+      if (inhalt.role !== 'anon') hinweise.push(`role=${inhalt.role} – für die App den anon-Key verwenden`);
+      if (ref && inhalt.ref && inhalt.ref !== ref) hinweise.push('Schlüssel gehört zu einem anderen Projekt als die URL');
+    } catch {
+      typ = 'JWT, nicht lesbar';
+      hinweise.push('Schlüssel ist beschädigt – unvollständig kopiert?');
+    }
+  } else {
+    typ = 'unbekanntes Format';
+    hinweise.push('weder Publishable key (sb_publishable_…) noch anon-Key (eyJ…) – falscher Wert kopiert?');
+  }
+  return { typ: `${typ}, ${key.length} Zeichen`, hinweise };
+}
+
 const env = ladeEnv();
 const db = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY, {
   auth: { persistSession: false },
@@ -28,7 +58,8 @@ const HINWEISE = {
   PGRST205: 'Tabelle/View unbekannt – Migration „inventar“ ausgeführt?',
   PGRST202: 'Funktion unbekannt – Migration „inventar“ ausgeführt?',
 };
-const fehlerText = (f) => `${f.code}: ${f.message}${HINWEISE[f.code] ? ` (${HINWEISE[f.code]})` : ''}`;
+const fehlerText = (f) =>
+  `${f.code ? `${f.code}: ` : ''}${f.message}${HINWEISE[f.code] ? ` (${HINWEISE[f.code]})` : ''}`;
 
 let fehlgeschlagen = 0;
 async function pruefe(name, fn) {
@@ -54,12 +85,27 @@ async function ladeBestand() {
   return data;
 }
 
-// ───────── Datenbank ─────────
-console.log('Datenbank');
-let bestand = [];
+// ───────── Verbindung ─────────
+console.log('Verbindung');
+const diagnose = schluesselDiagnose(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY);
+await pruefe('Supabase-Werte in .env', async () => {
+  if (diagnose.hinweise.length) throw new Error(`${diagnose.typ}; ${diagnose.hinweise.join('; ')}`);
+  return diagnose.typ;
+});
 
+let bestand = [];
+let verbunden = false;
 await pruefe('Bestand lesen', async () => {
-  bestand = await ladeBestand();
+  try {
+    bestand = await ladeBestand();
+  } catch (e) {
+    if (/Invalid API key/i.test(e.message)) {
+      throw new Error(`Supabase lehnt den Schlüssel ab (${diagnose.typ}). ` +
+        'Publishable key aus Project Settings → API Keys desselben Projekts wie die URL in .env eintragen.');
+    }
+    throw e;
+  }
+  verbunden = true;
   if (bestand.length === 0) throw new Error('keine Sorten – seed.sql ausgeführt?');
   const namen = (liste) => liste.map((s) => s.name).join(', ') || '–';
   return `${bestand.length} Sorten, ${bestand.reduce((s, x) => s + x.anzahl, 0)} Blöcke; ` +
@@ -67,6 +113,13 @@ await pruefe('Bestand lesen', async () => {
     `Bald ablaufen: ${namen(bestand.filter((s) => s.bald_ablaufen))}`;
 });
 
+if (!verbunden) {
+  console.log('\nWeitere Prüfungen übersprungen: keine Verbindung zur Datenbank.');
+  console.log(`\n${fehlgeschlagen} Prüfung(en) fehlgeschlagen.`);
+  process.exit(1);
+}
+
+console.log('\nDatenbank');
 for (const tabelle of ['charge', 'bewegung']) {
   await pruefe(`${tabelle} lesen`, async () => {
     const { count, error } = await db.from(tabelle).select('id', { count: 'exact', head: true });
