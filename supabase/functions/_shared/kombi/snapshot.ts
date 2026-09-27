@@ -1,9 +1,9 @@
 // Baut den kontrollierten Daten-Snapshot, den die KI zu sehen bekommt.
 // Nur was hier steht, gilt als vorhanden. Unbekanntes bleibt null – es wird nichts ergänzt.
 import type {
-  Art, Einheit, Farbe, Herkunft, Lagerort, PreisInfo, Snapshot, SnapshotZutat,
+  Art, Einheit, Farbe, Gerichtstyp, Gewuerzrichtung, Herkunft, Lagerort, PreisInfo, Snapshot, SnapshotZutat,
 } from './typen.ts';
-import { ARTEN, EINHEITEN } from './typen.ts';
+import { ARTEN, EINHEITEN, GERICHTSTYPEN, GEWUERZRICHTUNGEN } from './typen.ts';
 import { bezugText } from './mengen.ts';
 import { normalisiere } from './text.ts';
 
@@ -32,7 +32,23 @@ export type BestandZeile = {
   geoeffnet?: number | null;
   /** Menge mit überschrittenem Ablaufdatum */
   abgelaufen?: number | null;
+  // ab Migration „planung_einkauf“:
+  gerichtstypen?: string[] | null;
+  richtung?: string | null;
+  /** aufgetaute Menge (Auftau-Status) */
+  aufgetaut?: number | null;
 };
+
+/** Nur bekannte Gerichtstypen; leer = nicht hinterlegt (null). */
+export function saubereGerichtstypen(liste: unknown): Gerichtstyp[] | null {
+  if (!Array.isArray(liste)) return null;
+  const typen = [...new Set(liste.filter((x): x is Gerichtstyp => GERICHTSTYPEN.includes(x as Gerichtstyp)))];
+  return typen.length ? typen : null;
+}
+
+export function saubereRichtung(wert: unknown): Gewuerzrichtung | null {
+  return GEWUERZRICHTUNGEN.find((r) => r === wert) ?? null;
+}
 
 /** Gilt immer als vorhanden und wird in der App sichtbar angezeigt. */
 export const GRUNDAUSSTATTUNG = ['Wasser', 'Salz', 'Pfeffer', 'Öl'] as const;
@@ -129,6 +145,9 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       geoeffnet,
       rest: verderblich && verwendbar < 2 * portionMenge,
       tage_bis_ablauf: z.naechster_ablauf ? tageZwischen(datum, z.naechster_ablauf) : null,
+      aufgetaut: (z.aufgetaut ?? 0) > 0,
+      gerichtstypen: saubereGerichtstypen(z.gerichtstypen),
+      richtung: saubereRichtung(z.richtung),
       block_typ_id: z.id,
     });
   }
@@ -155,6 +174,9 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       geoeffnet: false,
       rest: true,
       tage_bis_ablauf: null,
+      aufgetaut: false,
+      gerichtstypen: null,
+      richtung: null,
       block_typ_id: null,
     });
   });
@@ -180,6 +202,9 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       geoeffnet: false,
       rest: false,
       tage_bis_ablauf: null,
+      aufgetaut: false,
+      gerichtstypen: null,
+      richtung: null,
       block_typ_id: null,
     });
   }

@@ -11,6 +11,7 @@ import { aehnlichkeit, DUPLIKAT_SCHWELLE } from '../aehnlichkeit.ts';
 import { verletztAusschluss } from '../praeferenz.ts';
 import { verletztVielfalt, vielfaltSperre } from '../vielfalt.ts';
 import { kurzname, normalisiere, restName } from '../text.ts';
+import { katalogVorschlaege } from '../komponenten.ts';
 
 type Kandidat = { roh: RohGericht; kurz: GerichtKurz; punkte: number };
 
@@ -120,7 +121,7 @@ function schritteFuer(typ: Gerichtstyp, teile: string[], satt: SnapshotZutat | n
 const halbe = (personen: number) => Math.max(1, Math.ceil(personen / 2));
 
 /** Punkte für die Dringlichkeit: geöffnet > bald > Rest */
-const dringend = (z: SnapshotZutat) => (z.geoeffnet ? 4 : z.bald_verbrauchen ? 3 : z.rest ? 2 : 0);
+const dringend = (z: SnapshotZutat) => (z.geoeffnet || z.aufgetaut ? 4 : z.bald_verbrauchen ? 3 : z.rest ? 2 : 0);
 
 function komplettTyp(z: SnapshotZutat): Gerichtstyp {
   const n = normalisiere(z.name);
@@ -138,6 +139,9 @@ export function regelbasiert(): KiAnbieter {
   return {
     name: 'regelbasiert',
     async vorschlagen(a: KiAuftrag): Promise<RohAntwort> {
+      // Komponenten entdecken: klassische vorkochbare Bausteine, bevorzugt aus Vorhandenem.
+      if (a.aufgabe === 'komponenten') return { vorschlaege: [], komponenten: katalogVorschlaege(a.snapshot, 8) };
+
       const bestand = a.snapshot.zutaten.filter((z) => z.quelle === 'bestand');
       const kuehlschrank = a.snapshot.zutaten.filter((z) => z.quelle === 'kuehlschrank');
       const nach = (farbe: string) =>
@@ -242,6 +246,13 @@ export function regelbasiert(): KiAnbieter {
 
       // Auswählen: Leitplanken beachten, nichts wiederholen, untereinander verschieden.
       const l = a.leitplanken;
+      // Resteverwertung: nur Kombinationen, die etwas Dringendes verwenden.
+      if (a.modus.art === 'reste') {
+        const dringendeNamen = new Set(a.snapshot.zutaten.filter((z) => z.quelle !== 'grundausstattung' && dringend(z) > 0).map((z) => z.name));
+        for (let i = kandidaten.length - 1; i >= 0; i--) {
+          if (!kandidaten[i].kurz.zutaten.some((n) => dringendeNamen.has(n))) kandidaten.splice(i, 1);
+        }
+      }
       kandidaten.sort((x, y) => {
         const naeheX = l.anker ? 1 - Math.abs(aehnlichkeit(x.kurz, l.anker) - 0.5) * 2 : 0;
         const naeheY = l.anker ? 1 - Math.abs(aehnlichkeit(y.kurz, l.anker) - 0.5) * 2 : 0;
@@ -263,6 +274,8 @@ export function regelbasiert(): KiAnbieter {
       };
 
       // Ein Platz für ein Komplettgericht („heute einfach …“), wenn mehrere Vorschläge gefragt sind.
+      // Woche: mehr Kandidaten liefern – die Engine wählt gegen den restlichen Vorrat aus.
+      const ziel = a.aufgabe === 'woche' ? Math.min(20, a.anzahl * 3) : a.anzahl;
       if (a.anzahl >= 2 && !l.anker) {
         const komplett = kandidaten.find((k) => k.kurz.zutaten.some((n) => komplettNamen.has(n)) && erlaubt(k));
         if (komplett) nimm(komplett);
@@ -270,7 +283,7 @@ export function regelbasiert(): KiAnbieter {
       // Dann: 1. verschiedene Gerichtstypen UND Hauptzutaten, 2. verschiedene Typen, 3. nur nicht doppelt.
       for (const stufe of [2, 1, 0]) {
         for (const k of kandidaten) {
-          if (gewaehlt.length >= a.anzahl) break;
+          if (gewaehlt.length >= ziel) break;
           if (!erlaubt(k)) continue;
           const kollision = gewaehlt.some((g) =>
             stufe === 2 ? gleich(g, k, 'gerichtstyp') || gleich(g, k, 'hauptzutat')

@@ -2,7 +2,7 @@
 // Groq, Google Gemini, OpenRouter, Ollama (lokal) und weitere.
 // Läuft nur serverseitig (Edge Function) – der API-Key kommt aus der Umgebung, nie aus dem Client.
 import type { KiAnbieter, KiAuftrag, RohAntwort } from '../typen.ts';
-import { auftragAlsText, SYSTEM_PROMPT } from './prompt.ts';
+import { auftragAlsText, systemPromptFuer } from './prompt.ts';
 
 export type OpenAiKonfig = {
   /** Kurzname für Protokoll und Anzeige, z. B. „groq“ */
@@ -35,7 +35,8 @@ export function parseKiAntwort(text: string): RohAntwort {
   } catch {
     throw new KiFehler('Die Antwort der KI war kein gültiges JSON.');
   }
-  if (!daten || typeof daten !== 'object' || !Array.isArray((daten as RohAntwort).vorschlaege)) {
+  const d = daten as RohAntwort;
+  if (!d || typeof d !== 'object' || (!Array.isArray(d.vorschlaege) && !Array.isArray(d.komponenten))) {
     throw new KiFehler('Die Antwort der KI hatte nicht das erwartete Format.');
   }
   return daten as RohAntwort;
@@ -74,7 +75,7 @@ export function openAiKompatibel(konfig: OpenAiKonfig): KiAnbieter {
     name: `${konfig.name}:${konfig.modell}`,
     async vorschlagen(auftrag: KiAuftrag): Promise<RohAntwort> {
       const nachrichten = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPromptFuer(auftrag) },
         { role: 'user', content: auftragAlsText(auftrag) },
       ];
       let jsonModus = true;

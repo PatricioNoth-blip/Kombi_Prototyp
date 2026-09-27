@@ -50,6 +50,11 @@ export type SnapshotZutat = {
   rest: boolean;
   /** Tage bis zum bekannten Ablaufdatum; null = kein Datum bekannt */
   tage_bis_ablauf: number | null;
+  /** aus dem Gefrierfach genommen und aufgetaut – heute verbrauchen */
+  aufgetaut: boolean;
+  /** wofür sich die Sorte eignet (hinterlegt); null = nicht hinterlegt */
+  gerichtstypen: Gerichtstyp[] | null;
+  richtung: Gewuerzrichtung | null;
   block_typ_id: number | null;
 };
 
@@ -115,15 +120,27 @@ export type Eigenschaften = {
 
 // ───────── Rohantwort eines KI-Anbieters (ungeprüft!) ─────────
 
-/** portionen = Portionen dieses Eintrags für das ganze Essen; bloecke = ältere Schreibweise dafür */
-export type RohZutat = { id?: string | null; name?: string | null; portionen?: number | null; bloecke?: number | null };
+export type RohFehlt = { name?: string; menge?: number | null; einheit?: string | null };
+
+/**
+ * portionen = Portionen dieses Eintrags für das ganze Essen; bloecke = ältere Schreibweise dafür.
+ * menge/einheit nur für Zutaten, die eingekauft werden müssen (Komponenten-Vorschläge).
+ */
+export type RohZutat = {
+  id?: string | null;
+  name?: string | null;
+  portionen?: number | null;
+  bloecke?: number | null;
+  menge?: number | null;
+  einheit?: string | null;
+};
 
 export type RohGericht = {
   name?: string;
   emoji?: string;
   beschreibung?: string;
   zutaten?: RohZutat[];
-  fehlt?: { name?: string }[];
+  fehlt?: RohFehlt[];
   zeit_min?: number;
   schritte?: string[];
   begruendung?: string;
@@ -143,10 +160,26 @@ export type RohBaustein = {
   begruendung?: string;
 };
 
+export type RohKomponente = {
+  name?: string;
+  beschreibung?: string;
+  rolle?: string;
+  richtung?: string;
+  gerichtstypen?: string[];
+  verwendung?: string[];
+  zutaten?: RohZutat[];
+  portionen?: number;
+  portion_g?: number;
+  lagerort?: string;
+  zeit_min?: number;
+  schritte?: string[];
+};
+
 export type RohAntwort = {
   vorschlaege?: RohGericht[];
   einkauf?: RohEinkauf | null;
   baustein_idee?: RohBaustein | null;
+  komponenten?: RohKomponente[];
 };
 
 // ───────── Geprüfte Vorschläge ─────────
@@ -274,7 +307,11 @@ export type GerichtKurz = { name: string; eigenschaften: Eigenschaften; zutaten:
 
 export type FeedbackEintrag = GerichtKurz & { vorschlag_id: string; aktion: Aktion };
 
-export type Modus = { art: 'normal' } | { art: 'aehnlich'; zu: GerichtKurz };
+/** normal · ähnlich zu einem Gericht · Resteverwertung („Was sollte heute weg?“) */
+export type Modus = { art: 'normal' } | { art: 'aehnlich'; zu: GerichtKurz } | { art: 'reste' };
+
+/** gerichte = Abendessen-Vorschläge · komponenten = „Komponenten entdecken“ · woche = Planung */
+export type Aufgabe = 'gerichte' | 'komponenten' | 'woche';
 
 export type KiAnfrage = {
   snapshot: Snapshot;
@@ -287,6 +324,8 @@ export type KiAnfrage = {
   feedback: FeedbackEintrag[];
   modus: Modus;
   anzahl: number;
+  /** Standard: gerichte */
+  aufgabe?: Aufgabe;
 };
 
 export type Tendenz = {
@@ -330,6 +369,68 @@ export type Ergebnis = {
   notfall: boolean;
   leitplanken: Leitplanken;
   verworfen: { name: string; grund: string }[];
+  /** ehrlicher Hinweis, z. B. „Gerade muss nichts dringend weg.“ */
+  hinweis?: string | null;
+};
+
+// ───────── Komponenten entdecken ─────────
+
+export type KomponentenZutat = {
+  name: string;
+  block_typ_id: number | null;
+  /** Menge in `einheit`; null = unbekannt */
+  menge: number | null;
+  einheit: Einheit | null;
+  /** bestand = aus dem Vorrat, grund = immer da, kuehlschrank = Rest, einkauf = fehlt noch */
+  quelle: 'bestand' | 'grundausstattung' | 'kuehlschrank' | 'einkauf';
+  /** anteiliger Wert (Herstellungskosten), von der Software berechnet; null = unbekannt */
+  kosten_cent: number | null;
+  /** geöffnet, bald ablaufend, Rest – wird damit verwertet */
+  dringend: boolean;
+};
+
+export type Nutzbarkeit = {
+  /** 1–5, von der Software berechnet (nicht von der KI) */
+  sterne: number;
+  punkte: number;
+  gruende: string[];
+};
+
+export type KomponentenVorschlag = {
+  art: 'komponente';
+  id: string;
+  name: string;
+  beschreibung: string;
+  rolle: Farbe;
+  richtung: Gewuerzrichtung | null;
+  gerichtstypen: Gerichtstyp[];
+  /** konkrete Gerichtsideen der KI (Freitext, geprüft) */
+  verwendung: string[];
+  zutaten: KomponentenZutat[];
+  portionen: number;
+  portion_g: number | null;
+  lagerort: Lagerort;
+  /** Standardwert je Lagerort, im Formular änderbar */
+  haltbar_tage: number;
+  zeit_min: number;
+  schritte: string[];
+  nutzbarkeit: Nutzbarkeit;
+  /** Herstellungskosten gesamt; pro_portion_cent = je Portion der Komponente */
+  kosten: Kosten;
+  /** Einkauf fehlender Zutaten (Packungspreise, nur bekannte) */
+  einkauf: Kosten;
+  verwertet: string[];
+  partner: string[];
+  /** A = verwertet vorhandene Lebensmittel, B = neu (mit Einkauf) */
+  typ: 'verwerten' | 'neu';
+  vorteil: string;
+};
+
+export type KomponentenErgebnis = {
+  anbieter: string;
+  komponenten: KomponentenVorschlag[];
+  verworfen: { name: string; grund: string }[];
+  hinweis: string | null;
 };
 
 /** Schnittstelle für KI-Anbieter (Groq, Gemini, OpenRouter, Ollama, regelbasiert …). */
