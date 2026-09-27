@@ -49,6 +49,10 @@ Beides steht in Supabase unter **Project Settings → API Keys** bzw. über den 
 Der Publishable key ist öffentlich und steckt ohnehin in der fertigen App. **Niemals** den
 Secret key bzw. `service_role`-Key in die `.env` schreiben – das Repo ist öffentlich.
 
+**Am PC im Handy-Format ansehen:** In Chrome oder Edge mit `F12` die Entwicklertools öffnen und mit
+`Strg+Umschalt+M` die Gerätesymbolleiste einschalten. Oben ein Handy wählen, z. B. „iPhone 12 Pro“ (390 × 844).
+In Firefox öffnet `Strg+Umschalt+M` direkt die Handy-Ansicht.
+
 Zum Testen auf dem Handy im selben WLAN: `npm run dev -- --host` starten und die angezeigte `http://192.168…:5173`-Adresse öffnen.
 
 ### 3. Aufs Handy: GitHub Pages
