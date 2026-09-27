@@ -47,4 +47,4 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno check supabase/functions/was-essen/index.ts
+      - run: deno check supabase/functions/was-essen/index.ts supabase/functions/bon-lesen/index.ts
