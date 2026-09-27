@@ -67,13 +67,56 @@ async function hinweisAus(error: unknown): Promise<string> {
   return `KI gerade nicht verfügbar${text ? ` (${text})` : ''}.`;
 }
 
+/**
+ * Antworten einer noch nicht neu deployten Edge Function haben das alte Format
+ * (ohne Beschreibung, Gerichtsart, Kostenstatus …). Sie werden ins neue Format gebracht,
+ * damit nichts abstürzt – und die App bittet um ein Update.
+ */
+export function normalisiereErgebnis(e: Ergebnis): { ergebnis: Ergebnis; veraltet: boolean } {
+  const veraltet = e.gerichte.some((g) => !('gerichtsart' in g)) ||
+    (!!e.einkauf && !('gruende' in e.einkauf)) || (!!e.baustein_idee && !('kosten' in e.baustein_idee));
+  if (!veraltet) return { ergebnis: e, veraltet };
+  const unbekannt: Gericht['kosten'] = {
+    status: 'unbekannt', gesamt_cent: null, pro_portion_cent: null, personen: 1,
+    unbekannt: [], einkauf_cent: null, einkauf_unbekannt: [],
+  };
+  const b = e.baustein_idee as (Partial<NonNullable<Ergebnis['baustein_idee']>> & { name: string; id: string; farbe: NonNullable<Ergebnis['baustein_idee']>['farbe'] }) | null;
+  return {
+    veraltet,
+    ergebnis: {
+      ...e,
+      gerichte: e.gerichte.map(gespeichertesGericht),
+      einkauf: e.einkauf
+        ? { ...e.einkauf, preis_bezug: e.einkauf.preis_bezug ?? null, heute: e.einkauf.heute ?? null, gruende: e.einkauf.gruende ?? [] }
+        : null,
+      baustein_idee: b
+        ? {
+            art: 'baustein', id: b.id, name: b.name, farbe: b.farbe,
+            bestandsart: b.bestandsart ?? (b.farbe === 'blau' ? 'komplettgericht' : 'komponente'),
+            lagerort: b.lagerort ?? 'gefrierfach', portionen: b.portionen ?? 6, portion_g: b.portion_g ?? null,
+            zutaten: b.zutaten ?? [], verwendbar_fuer: b.verwendbar_fuer ?? [], kosten: b.kosten ?? unbekannt,
+            begruendung: b.begruendung ?? '',
+          }
+        : null,
+      leitplanken: { ...e.leitplanken, kurzfristig_meiden: e.leitplanken?.kurzfristig_meiden ?? [], vielfalt_sperre: e.leitplanken?.vielfalt_sperre ?? { gerichtstyp: [], sattmacher: [] } },
+    },
+  };
+}
+
 /** Fragt die KI; bei Problemen übernimmt der regelbasierte Anbieter lokal. */
 export async function holeVorschlaege(anfrage: KiAnfrage): Promise<Antwort> {
   let hinweis: string;
   try {
     const { data, error } = await supabase.functions.invoke('was-essen', { body: anfrage });
-    const ergebnis = data as Ergebnis | null;
-    if (!error && ergebnis && Array.isArray(ergebnis.gerichte)) return { ergebnis, quelle: 'ki', hinweis: null };
+    const roh = data as Ergebnis | null;
+    if (!error && roh && Array.isArray(roh.gerichte)) {
+      const { ergebnis, veraltet } = normalisiereErgebnis(roh);
+      return {
+        ergebnis,
+        quelle: 'ki',
+        hinweis: veraltet ? 'Die KI-Funktion auf Supabase ist noch die alte Version – bitte neu deployen (siehe README).' : null,
+      };
+    }
     hinweis = await hinweisAus(error);
   } catch {
     hinweis = 'KI nicht erreichbar.';
