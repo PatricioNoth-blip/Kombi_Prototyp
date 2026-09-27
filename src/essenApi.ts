@@ -5,12 +5,12 @@
 import { supabase } from './supabase';
 import { fehltMigration, ladeBestand, type Sorte } from './api';
 import { baueSnapshot, type BestandZeile } from '../supabase/functions/_shared/kombi/snapshot.ts';
-import { erzeugeVorschlaege } from '../supabase/functions/_shared/kombi/engine.ts';
+import { erzeugeKomponenten, erzeugeVorschlaege, erzeugeWoche } from '../supabase/functions/_shared/kombi/engine.ts';
 import { regelbasiert } from '../supabase/functions/_shared/kombi/anbieter/regelbasiert.ts';
 import { rezeptDatensatz } from '../supabase/functions/_shared/kombi/aktionen.ts';
 import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
 import type {
-  Aktion, Ergebnis, Gericht, GerichtKurz, KiAnfrage, Optionen, Snapshot, Vorschlag,
+  Aktion, Ergebnis, Gericht, GerichtKurz, KiAnfrage, KomponentenErgebnis, Optionen, Snapshot, Vorschlag,
 } from '../supabase/functions/_shared/kombi/typen.ts';
 
 export type Quelle = 'ki' | 'demo';
@@ -43,6 +43,9 @@ export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string): Snapsho
     naechster_ablauf: s.naechster_ablauf ?? null,
     geoeffnet: s.geoeffnet ?? null,
     abgelaufen: s.abgelaufen ?? null,
+    gerichtstypen: s.gerichtstypen ?? null,
+    richtung: s.richtung ?? null,
+    aufgetaut: s.aufgetaut ?? null,
   }));
   return baueSnapshot(zeilen, kuehlschrank, heute());
 }
@@ -103,25 +106,60 @@ export function normalisiereErgebnis(e: Ergebnis): { ergebnis: Ergebnis; veralte
   };
 }
 
-/** Fragt die KI; bei Problemen übernimmt der regelbasierte Anbieter lokal. */
-export async function holeVorschlaege(anfrage: KiAnfrage): Promise<Antwort> {
-  let hinweis: string;
+const ALTE_VERSION = 'Die KI-Funktion auf Supabase ist noch die alte Version – bitte neu deployen (siehe README).';
+
+/** Ruft die Edge Function; liefert die Antwort oder einen verständlichen Hinweis. */
+async function rufeKi(anfrage: KiAnfrage): Promise<{ daten: Record<string, unknown> } | { hinweis: string }> {
   try {
     const { data, error } = await supabase.functions.invoke('was-essen', { body: anfrage });
-    const roh = data as Ergebnis | null;
-    if (!error && roh && Array.isArray(roh.gerichte)) {
-      const { ergebnis, veraltet } = normalisiereErgebnis(roh);
-      return {
-        ergebnis,
-        quelle: 'ki',
-        hinweis: veraltet ? 'Die KI-Funktion auf Supabase ist noch die alte Version – bitte neu deployen (siehe README).' : null,
-      };
-    }
-    hinweis = await hinweisAus(error);
+    if (!error && data && typeof data === 'object') return { daten: data as Record<string, unknown> };
+    return { hinweis: await hinweisAus(error) };
   } catch {
-    hinweis = 'KI nicht erreichbar.';
+    return { hinweis: 'KI nicht erreichbar.' };
+  }
+}
+
+/** Fragt die KI; bei Problemen übernimmt der regelbasierte Anbieter lokal. */
+export async function holeVorschlaege(anfrage: KiAnfrage): Promise<Antwort> {
+  const r = await rufeKi(anfrage);
+  let hinweis: string;
+  if ('daten' in r && Array.isArray(r.daten.gerichte)) {
+    const { ergebnis, veraltet } = normalisiereErgebnis(r.daten as unknown as Ergebnis);
+    // Ältere Versionen (ohne Feld „aufgabe“) kennen den Reste-Modus nicht – dann lokal nach Kombi-Regeln.
+    const kenntReste = !veraltet && 'aufgabe' in r.daten;
+    if (anfrage.modus.art !== 'reste' || kenntReste) {
+      return { ergebnis, quelle: 'ki', hinweis: veraltet ? ALTE_VERSION : null };
+    }
+    hinweis = ALTE_VERSION;
+  } else {
+    hinweis = 'hinweis' in r ? r.hinweis : 'KI-Antwort unvollständig.';
   }
   return { ergebnis: await erzeugeVorschlaege(regelbasiert(), anfrage), quelle: 'demo', hinweis };
+}
+
+/**
+ * Mahlzeiten für mehrere Tage – gegen den FREIEN Vorrat, ohne eine Portion doppelt zu verplanen.
+ * Kennt die Edge Function die Wochenplanung noch nicht, plant Kombi lokal nach Regeln.
+ */
+export async function holeWoche(anfrage: KiAnfrage): Promise<Antwort> {
+  const r = await rufeKi({ ...anfrage, aufgabe: 'woche' });
+  if ('daten' in r && r.daten.aufgabe === 'woche' && Array.isArray(r.daten.gerichte)) {
+    return { ergebnis: r.daten as unknown as Ergebnis, quelle: 'ki', hinweis: null };
+  }
+  const hinweis = 'daten' in r ? ALTE_VERSION : r.hinweis;
+  return { ergebnis: await erzeugeWoche(regelbasiert(), { ...anfrage, aufgabe: 'woche' }), quelle: 'demo', hinweis };
+}
+
+export type KomponentenAntwort = { ergebnis: KomponentenErgebnis; quelle: Quelle; hinweis: string | null };
+
+/** „Komponenten entdecken“: Ideen der KI, geprüft von der Software. Speichert nichts. */
+export async function holeKomponenten(anfrage: KiAnfrage): Promise<KomponentenAntwort> {
+  const r = await rufeKi({ ...anfrage, aufgabe: 'komponenten' });
+  if ('daten' in r && Array.isArray(r.daten.komponenten)) {
+    return { ergebnis: r.daten as unknown as KomponentenErgebnis, quelle: 'ki', hinweis: null };
+  }
+  const hinweis = 'daten' in r ? ALTE_VERSION : r.hinweis;
+  return { ergebnis: await erzeugeKomponenten(regelbasiert(), { ...anfrage, aufgabe: 'komponenten' }), quelle: 'demo', hinweis };
 }
 
 export async function starteSession(id: string, optionen: Optionen, kuehlschrank: string): Promise<boolean> {

@@ -1,20 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as api from './api';
 import { fehlerText, ladeChargen, type Charge, type Sorte } from './api';
 import { Blatt, AnzahlWahl } from './Blatt';
-import { ARTEN_INFO, buchungsVerb, farbe, lagerort } from './farben';
+import { ARTEN_INFO, buchungsVerb, farbe as farbInfo, lagerort } from './farben';
 import { Icon } from './Icon';
 import {
   ablaufText, artVon, datum, einheitVon, mengeText, plusTage, portionMengeVon, portionspreisText, preisMitBezug, tageSeit,
 } from './format';
+import { GERICHT_EMOJI, GERICHT_NAME, gerichtstypenVon, partnerVon } from '../supabase/functions/_shared/kombi/rollen.ts';
+import { batchEmpfehlungen, type NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts';
+import { baueSnapshotAus } from './essenApi';
+import { auftauenVormerken } from './haushalt';
+import { fuellstand, plusTageIso } from './dashboard';
 
 type Props = {
   sorte: Sorte;
+  bestand: Sorte[];
   baukasten: boolean;
+  planung: boolean;
+  heute: string;
   laeuft: boolean;
+  /** für geplante Mahlzeiten/Komponenten reserviert */
+  reserviert: { menge: number; plaene: string[] } | null;
+  nutzung: NutzungZeile | null;
   onEntnehmen: (menge: number) => void;
   onEinfrieren: () => void;
   onBearbeiten: () => void;
+  onOeffnen: (s: Sorte) => void;
   onGeaendert: (text: string) => void;
   onFehler: (text: string) => void;
   onSchliessen: () => void;
@@ -32,16 +44,15 @@ function inEntnahmeReihenfolge(chargen: Charge[], haltbarTage: number): Charge[]
   );
 }
 
-function plusTageIso(iso: string, tage: number): string {
-  const [j, m, t] = iso.split('-').map(Number);
-  return new Date(Date.UTC(j, m - 1, t + tage)).toISOString().slice(0, 10);
-}
-
-/** Details einer Sorte: was ist es, wie viel, was kostet eine Portion, Chargen, entnehmen. */
-export function SorteBlatt({ sorte, baukasten, laeuft, onEntnehmen, onEinfrieren, onBearbeiten, onGeaendert, onFehler, onSchliessen }: Props) {
+/** Details einer Sorte: Funktion im Baukasten, Bestand, Kosten, wofür sie taugt, was dazu passt, Chargen. */
+export function SorteBlatt({
+  sorte, bestand, baukasten, planung, heute, laeuft, reserviert, nutzung,
+  onEntnehmen, onEinfrieren, onBearbeiten, onOeffnen, onGeaendert, onFehler, onSchliessen,
+}: Props) {
   const [chargen, setChargen] = useState<Charge[] | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [neuLaden, setNeuLaden] = useState(0);
+  const [auftauMenge, setAuftauMenge] = useState(1);
 
   useEffect(() => {
     let aktiv = true;
@@ -61,8 +72,20 @@ export function SorteBlatt({ sorte, baukasten, laeuft, onEntnehmen, onEinfrieren
   const pm = portionMengeVon(sorte);
   const art = ARTEN_INFO.find((a) => a.id === artVon(sorte))!;
   const lager = lagerort(sorte.lagerort);
+  const rolle = art.id === 'komplettgericht' ? 'Komplettgericht' : farbInfo(sorte.farbe).bedeutung;
   const warnAb = sorte.haltbar_tage - 14;
   const preis = preisMitBezug(sorte);
+  const fuell = fuellstand(sorte);
+  const gerichte = gerichtstypenVon(sorte);
+  const partner = useMemo(
+    () => partnerVon({ name: sorte.name, farbe: sorte.farbe, gerichtstypen: sorte.gerichtstypen, richtung: sorte.richtung }, baueSnapshotAus(bestand, '').zutaten, 6),
+    [sorte, bestand],
+  );
+  const batch = nutzung
+    ? batchEmpfehlungen([{ id: sorte.id, name: sorte.name, art: art.id, herkunft: sorte.herkunft ?? null, einheit, haltbar_tage: sorte.haltbar_tage, lagerort: sorte.lagerort ?? 'gefrierfach' }], [nutzung])[0]
+    : undefined;
+  const frei = Math.max(0, sorte.anzahl - (reserviert?.menge ?? 0));
+  const kannAuftauen = planung && (sorte.lagerort ?? 'gefrierfach') === 'gefrierfach' && art.id !== 'zutat' && frei > 0;
 
   const werte = einheit === 'portion'
     ? [1, 2, 3, 4, 5, 6].filter((n) => n <= sorte.anzahl)
@@ -78,41 +101,77 @@ export function SorteBlatt({ sorte, baukasten, laeuft, onEntnehmen, onEinfrieren
     }
   }
 
+  async function auftauen(sofort: boolean) {
+    const menge = Math.min(frei, auftauMenge * pm);
+    try {
+      await auftauenVormerken(sorte.id, menge, sofort ? heute : plusTageIso(heute, 1), null, sofort);
+      onGeaendert(sofort
+        ? `${mengeText(menge, einheit)} ${sorte.name} tauen auf – bald verbrauchen.`
+        : `${sorte.name}: morgen ${mengeText(menge, einheit)} herausnehmen (vorgemerkt).`);
+    } catch (e) {
+      onFehler(fehlerText(e));
+    }
+  }
+
   return (
-    <Blatt
-      titel={sorte.name}
-      untertitel={[art.name, lager.name, sorte.herkunft].filter(Boolean).join(' · ')}
-      onSchliessen={onSchliessen}
-    >
-      <div className={`kennzahlen f-${sorte.farbe}`}>
-        <div>
-          <small>Da</small>
-          <strong>{mengeText(sorte.anzahl, einheit)}</strong>
-          {einheit !== 'portion' && <span>≈ {Math.floor((sorte.anzahl / pm) * 10) / 10} Portionen</span>}
+    <Blatt titel={sorte.name} onSchliessen={onSchliessen}>
+      <p className="pillen">
+        <span className={`pille-rolle f-${sorte.farbe}`}><span className="farbpunkt" aria-hidden="true" />{rolle}</span>
+        <span className="pille-grau">{art.name}</span>
+        <span className="pille-grau"><Icon name={lager.icon} groesse={13} /> {lager.name}</span>
+        {sorte.herkunft && <span className="pille-grau">{sorte.herkunft}</span>}
+        {sorte.richtung && <span className="pille-grau">{sorte.richtung}</span>}
+      </p>
+
+      <div className={`bestand-karte f-${sorte.farbe}`}>
+        <div className="bk-zahl">
+          <strong>{mengeText(sorte.anzahl, einheit).split(' ')[0]}</strong>
+          <span>{mengeText(sorte.anzahl, einheit).split(' ').slice(1).join(' ')}</span>
+          {einheit !== 'portion' && sorte.anzahl > 0 && <small>≈ {Math.floor((sorte.anzahl / pm) * 10) / 10} Portionen</small>}
         </div>
+        {fuell && (
+          <div className="bk-fuell">
+            <span className="vk-balken"><span style={{ width: `${Math.round(fuell.anteil * 100)}%` }} /></span>
+            <small>Bestand {fuell.text}</small>
+          </div>
+        )}
+        {reserviert && reserviert.menge > 0 && (
+          <p className="bk-reserviert">
+            <Icon name="kalender" groesse={14} /> {mengeText(Math.min(reserviert.menge, sorte.anzahl), einheit)} eingeplant für „{reserviert.plaene.join('“, „')}“ · {mengeText(frei, einheit)} frei
+          </p>
+        )}
+      </div>
+
+      <div className="kennzahlen">
         <div>
           <small>Portion</small>
           <strong>{einheit === 'portion' ? `${sorte.groesse_g} g` : mengeText(pm, einheit)}</strong>
-          <span><span className="farbpunkt" aria-hidden="true" /> {farbe(sorte.farbe).bedeutung}</span>
+          <span>{einheit === 'portion' ? 'pro Portion' : 'gilt als Portion'}</span>
         </div>
         <div>
           <small>Pro Portion</small>
           <strong>{portionspreisText(sorte).replace(' / Portion', '')}</strong>
-          <span>{preis ? preis : 'nicht hinterlegt'}</span>
+          <span>{preis ?? 'nicht hinterlegt'}</span>
+        </div>
+        <div>
+          <small>Haltbar</small>
+          <strong>{sorte.naechster_ablauf ? datum(sorte.naechster_ablauf).slice(0, 6) : `${sorte.haltbar_tage} Tage`}</strong>
+          <span>{sorte.naechster_ablauf ? ablaufText(sorte.naechster_ablauf) : sorte.aelteste ? `bis ca. ${plusTage(sorte.aelteste, sorte.haltbar_tage)}` : 'ab Einbuchen'}</span>
         </div>
       </div>
 
-      {(sorte.nachkochen || sorte.bald_ablaufen || (sorte.abgelaufen ?? 0) > 0) && (
+      {(sorte.nachkochen || sorte.bald_ablaufen || (sorte.abgelaufen ?? 0) > 0 || (sorte.aufgetaut ?? 0) > 0) && (
         <p className="sorte-hinweise">
           {(sorte.abgelaufen ?? 0) > 0 && <span className="status status-warn">{mengeText(sorte.abgelaufen!, einheit)} abgelaufen</span>}
+          {(sorte.aufgetaut ?? 0) > 0 && <span className="status status-offen">{mengeText(sorte.aufgetaut!, einheit)} aufgetaut</span>}
           {sorte.bald_ablaufen && <span className="status status-bald">bald verbrauchen</span>}
-          {sorte.nachkochen && <span className="status status-nach">nachkochen (min. {sorte.mindestbestand})</span>}
+          {sorte.nachkochen && <span className="status status-nach">{art.id === 'zutat' ? 'nachkaufen' : 'nachkochen'} (min. {sorte.mindestbestand})</span>}
         </p>
       )}
 
       {art.id !== 'zutat' && (
         <section className="abschnitt">
-          <h3>Zusammensetzung</h3>
+          <h3>Enthält</h3>
           {sorte.zusammensetzung?.length ? (
             <p className="chips">{sorte.zusammensetzung.map((z) => <span key={z} className="chip-statisch">{z}</span>)}</p>
           ) : (
@@ -123,6 +182,52 @@ export function SorteBlatt({ sorte, baukasten, laeuft, onEntnehmen, onEinfrieren
           )}
         </section>
       )}
+
+      {gerichte.typen.length > 0 && (
+        <section className="abschnitt">
+          <h3>Damit möglich</h3>
+          <p className="gericht-chips">
+            {gerichte.typen.map((t) => <span key={t}><span aria-hidden="true">{GERICHT_EMOJI[t]}</span> {GERICHT_NAME[t]}</span>)}
+          </p>
+          <p className="leise klein">
+            {gerichte.typen.length >= 6 ? `Verwendbar für ${gerichte.typen.length}+ Gerichtsarten. ` : ''}
+            {gerichte.quelle === 'typisch' ? `Typisch für ${rolle} – eigene Auswahl unter „Bearbeiten“.` : 'Von euch hinterlegt.'}
+          </p>
+        </section>
+      )}
+
+      {partner.length > 0 && (
+        <section className="abschnitt">
+          <h3>Passt dazu aus dem Vorrat</h3>
+          <p className="chips">
+            {partner.map((p) => {
+              const s = bestand.find((b) => b.id === p.block_typ_id);
+              return (
+                <button key={p.id} type="button" className={`chip-knopf f-${p.farbe}`} onClick={() => s && onOeffnen(s)} disabled={!s}>
+                  <span className="farbpunkt" aria-hidden="true" /> {p.name}
+                </button>
+              );
+            })}
+          </p>
+        </section>
+      )}
+
+      {nutzung && nutzung.verbrauch_28 > 0 && (
+        <section className="abschnitt">
+          <h3>Nutzung</h3>
+          <p className="klein">
+            In den letzten 4 Wochen {mengeText(nutzung.verbrauch_28, einheit)} verbraucht
+            {nutzung.herstellungen_56 > 0 && ` · in 8 Wochen ${nutzung.herstellungen_56}× hergestellt, im Schnitt ${mengeText(nutzung.mittlere_menge, einheit)}`}.
+          </p>
+          {batch && (
+            <div className="batch-hinweis">
+              <strong>Nächstes Mal {mengeText(batch.neu, einheit)} statt {mengeText(batch.bisher, einheit)} vorkochen?</strong>
+              <ul className="gruende">{batch.gruende.map((g) => <li key={g}>{g}</li>)}</ul>
+            </div>
+          )}
+        </section>
+      )}
+
       {sorte.notiz && <p className="notiz">{sorte.notiz}</p>}
 
       {sorte.anzahl > 0 && (
@@ -136,6 +241,27 @@ export function SorteBlatt({ sorte, baukasten, laeuft, onEntnehmen, onEinfrieren
             platzhalter={einheit === 'portion' ? 'Andere Anzahl' : `Andere Menge (${einheit === 'stueck' ? 'Stück' : einheit})`}
             onWahl={onEntnehmen}
           />
+        </section>
+      )}
+
+      {kannAuftauen && (
+        <section className="abschnitt">
+          <h3>Auftauen</h3>
+          <div className="auftau-wahl">
+            <div className="stepper">
+              <button type="button" className="icon-knopf klein" aria-label="Weniger auftauen" disabled={auftauMenge <= 1}
+                onClick={() => setAuftauMenge((n) => n - 1)}><Icon name="minus" groesse={16} /></button>
+              <strong>{auftauMenge}</strong>
+              <button type="button" className="icon-knopf klein" aria-label="Mehr auftauen" disabled={(auftauMenge + 1) * pm > frei}
+                onClick={() => setAuftauMenge((n) => n + 1)}><Icon name="plus" groesse={16} /></button>
+            </div>
+            <span className="leise klein">{auftauMenge === 1 ? 'Portion' : 'Portionen'}</span>
+          </div>
+          <div className="knopf-reihe">
+            <button type="button" className="knopf" onClick={() => void auftauen(true)}><Icon name="schneeflocke" groesse={18} /> Heute herausgenommen</button>
+            <button type="button" className="knopf" onClick={() => void auftauen(false)}><Icon name="kalender" groesse={18} /> Morgen auftauen</button>
+          </div>
+          <p className="leise klein">Ändert den Bestand nicht – entnommen wird erst beim Kochen.</p>
         </section>
       )}
 

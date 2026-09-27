@@ -268,7 +268,7 @@ p { margin: 0; }
 }
 .tabbar {
   flex: 1 1 auto;
-  max-width: 340px;
+  max-width: 372px;
   height: var(--tabbar-h);
   display: flex;
   padding: 6px;
@@ -294,6 +294,24 @@ p { margin: 0; }
   transition: color 0.2s, background 0.2s;
 }
 .tabbar button.aktiv { color: var(--akzent); background: var(--akzent-weich); }
+.tabbar button > span:last-child { font-size: 10.5px; letter-spacing: 0; }
+.tab-icon { position: relative; display: grid; }
+.tab-zahl {
+  position: absolute;
+  top: -5px;
+  right: -11px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--akzent);
+  color: var(--akzent-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--flaeche);
+}
 
 /* Hauptaktion als runder Knopf neben der Tab-Leiste (wie ein eigenes Glas-Element) */
 .aktion-knopf {
@@ -442,39 +460,6 @@ p { margin: 0; }
 }
 .minus:disabled { opacity: 0.3; }
 .pfeil { color: var(--text-3); }
-
-.wichtig ul {
-  list-style: none;
-  margin: 0;
-  padding: 4px 0;
-  border-radius: var(--r-liste);
-  background: var(--flaeche);
-  box-shadow: var(--schatten-1);
-}
-.wichtig li { position: relative; }
-.wichtig li + li::before { content: ''; position: absolute; top: 0; left: 34px; right: 0; border-top: 0.5px solid var(--trenn); }
-.wichtig button, .wichtig-nach {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  width: 100%;
-  padding: 11px 16px;
-  border: 0;
-  background: none;
-  text-align: left;
-  font-size: 15px;
-}
-.wichtig-punkt { flex: none; width: 8px; height: 8px; border-radius: 50%; align-self: center; background: var(--text-3); }
-.wichtig-warn .wichtig-punkt { background: var(--warn); }
-.wichtig-offen .wichtig-punkt { background: var(--offen); }
-.wichtig-bald .wichtig-punkt { background: var(--bald); }
-.wichtig-name { font-weight: 600; }
-.wichtig-text { margin-left: auto; color: var(--text-2); text-align: right; }
-.wichtig-warn .wichtig-text { color: var(--warn); }
-.wichtig-offen .wichtig-text { color: var(--offen); }
-.wichtig-bald .wichtig-text { color: var(--bald); }
-.wichtig-nach .wichtig-text { margin-left: 0; text-align: left; }
-.wichtig-nach .wichtig-punkt { background: var(--text-3); }
 
 /* ───────── Blätter & Formulare ───────── */
 .blatt-hintergrund {
@@ -671,7 +656,7 @@ details.mehr > * + * { margin-top: 14px; }
 .koch-anzahl { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; font-size: 16px; }
 
 /* ───────── Essen ───────── */
-.essen { display: grid; gap: 14px; }
+.essen { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .essen-start { display: grid; gap: 14px; }
 .karte-flach { padding: 6px 16px; border-radius: var(--r-liste); background: var(--flaeche); box-shadow: var(--schatten-1); }
 label.karte-flach { padding: 14px 16px; }
@@ -895,6 +880,601 @@ label.karte-flach textarea { box-shadow: none; background: var(--flaeche-2); }
 .danach .haupt .kreis { background: var(--akzent); color: var(--akzent-text); }
 .danach .haupt { color: var(--akzent); }
 
+/* ───────── Kleine Bausteine ───────── */
+.abstand-oben { margin-top: 12px; }
+.link.breit { display: block; width: 100%; text-align: center; }
+.link.links { text-align: left; justify-self: start; padding: 4px; }
+.knopf.klein-knopf { min-height: 38px; padding: 0 12px; border-radius: 12px; font-size: 14px; gap: 5px; }
+.knopf.haupt-klein { background: var(--akzent); color: var(--akzent-text); box-shadow: 0 4px 12px color-mix(in srgb, var(--akzent) 28%, transparent); }
+.knopf.gefahr { color: var(--warn); }
+.abschnitt.erstes { margin-top: 4px; }
+.abschnitt-zeile { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.abschnitt-zeile .link { font-size: 14px; min-height: 0; padding: 0 4px; }
+.abschnitt-titel.mit-punkt { display: flex; align-items: center; gap: 7px; }
+.abschnitt-titel .icon { display: inline-block; vertical-align: -2px; }
+.farbpunkt.inline-punkt { display: inline-block; vertical-align: 0; margin-right: 2px; width: 8px; height: 8px; }
+
+.pille {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--flaeche-2);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.pille-abgelaufen { background: var(--warn-weich); color: var(--warn); }
+.pille-aufgetaut, .pille-geoeffnet { background: var(--offen-weich); color: var(--offen); }
+.pille-bald { background: var(--bald-weich); color: var(--bald); }
+.pille-niedrig { background: var(--flaeche-2); color: var(--text-2); white-space: normal; }
+.pille-geplant { background: var(--akzent-weich); color: var(--akzent); }
+.pille-verwerten { background: var(--gruen-weich); color: var(--gruen); }
+.pille-neu { background: var(--akzent-weich); color: var(--akzent); }
+
+.pillen { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 14px; }
+.pille-rolle, .pille-grau {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.pille-rolle { background: color-mix(in srgb, var(--f) 16%, var(--flaeche)); color: var(--text); }
+.f-weiss.pille-rolle { background: var(--flaeche); box-shadow: inset 0 0 0 1px var(--trenn); }
+.pille-grau { background: var(--flaeche); color: var(--text-2); font-weight: 500; }
+.pille-grau .icon { color: var(--text-2); }
+
+.filter-chips, .auswahl-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.filter-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px 6px; }
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-chips button, .auswahl-chips button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--flaeche);
+  box-shadow: var(--schatten-1);
+  font-size: 14px;
+  font-weight: 500;
+}
+.filter-chips button small { color: var(--text-2); font-size: 12px; }
+.filter-chips button.gewaehlt, .auswahl-chips button.gewaehlt { background: var(--text); color: var(--bg); }
+.filter-chips button.gewaehlt small { color: inherit; opacity: 0.7; }
+.auswahl-chips button { min-height: 34px; padding: 0 12px; font-size: 14px; }
+
+select {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--flaeche);
+  box-shadow: var(--schatten-1);
+  font-size: 17px;
+}
+
+.suchfeld {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  margin-bottom: 4px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-2);
+}
+.suchfeld input {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  font-size: 17px;
+  color: var(--text);
+}
+.suchfeld input:focus { outline: none; }
+.suchfeld input::-webkit-search-cancel-button { display: none; }
+.such-leeren { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 50%; background: var(--text-3); color: var(--bg); padding: 0; }
+
+/* ───────── Vorrat: Übersicht ───────── */
+.wichtig-leiste {
+  display: flex;
+  gap: 10px;
+  margin: 0 -16px;
+  padding: 2px 16px 10px;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 0 16px;
+  scrollbar-width: none;
+}
+.wichtig-leiste::-webkit-scrollbar { display: none; }
+.wichtig-leiste li { flex: none; scroll-snap-align: start; }
+.wichtig-karte {
+  --ton: var(--text-2);
+  --ton-weich: var(--flaeche-2);
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  width: 164px;
+  height: 100%;
+  min-height: 128px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 20px;
+  background: linear-gradient(165deg, var(--ton-weich), var(--flaeche) 70%);
+  box-shadow: var(--schatten-1);
+  text-align: left;
+}
+.wichtig-karte:active { transform: scale(0.98); }
+.w-abgelaufen { --ton: var(--warn); --ton-weich: var(--warn-weich); }
+.w-aufgetaut, .w-geoeffnet { --ton: var(--offen); --ton-weich: var(--offen-weich); }
+.w-bald { --ton: var(--bald); --ton-weich: var(--bald-weich); }
+.wk-art { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ton); }
+.wk-name { margin-top: 4px; font-size: 17px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
+.wk-text { font-size: 14px; color: var(--text-2); line-height: 1.3; }
+.wk-ort { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 6px; font-size: 12px; color: var(--text-2); }
+.alles-gut { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-radius: var(--r-liste); background: var(--gruen-weich); color: var(--gruen); font-weight: 600; font-size: 15px; }
+
+.ort-kacheln { display: grid; gap: 10px; }
+.ort-kachel {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 10px;
+  padding: 14px 16px 14px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--flaeche);
+  box-shadow: var(--schatten-1);
+  text-align: left;
+}
+.ort-kachel:active { transform: scale(0.99); }
+.ok-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--ort-weich, var(--flaeche-2));
+  color: var(--ort, var(--text));
+}
+.ort-gefrierfach { --ort: #2f7fd8; --ort-weich: rgb(47 127 216 / 0.12); }
+.ort-kuehlschrank { --ort: #0f9b8e; --ort-weich: rgb(15 155 142 / 0.12); }
+.ort-vorrat { --ort: #b7791f; --ort-weich: rgb(183 121 31 / 0.13); }
+.ort-alle { --ort: var(--akzent); --ort-weich: var(--akzent-weich); }
+.ok-text { display: grid; gap: 1px; min-width: 0; }
+.ok-text strong { font-size: 18px; font-weight: 600; }
+.ok-text small { font-size: 14px; color: var(--text-2); }
+.ok-achtung { color: var(--bald); font-weight: 600; }
+.ok-zahl { display: grid; justify-items: end; line-height: 1.05; }
+.ok-zahl strong { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ok-zahl small { font-size: 12px; color: var(--text-2); }
+.ok-balken { grid-column: 1 / -1; display: flex; gap: 2px; height: 6px; border-radius: 3px; overflow: hidden; background: var(--flaeche-2); }
+.ok-balken span { background: var(--f); min-width: 4px; }
+.ok-balken .f-weiss { background: var(--text-3); }
+
+.kennzahl-reihe { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.kennzahl-karte {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--flaeche);
+  box-shadow: var(--schatten-1);
+  text-align: left;
+}
+.kennzahl-karte small { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-2); }
+.kennzahl-karte strong { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kennzahl-karte span { font-size: 13px; color: var(--text-2); }
+button.kennzahl-karte strong { color: var(--akzent); }
+.alle-knopf { margin-top: 12px; }
+
+/* ───────── Vorrat: Lagerort ───────── */
+.zurueck-knopf {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 40px;
+  margin-left: -6px;
+  padding: 0 8px 0 2px;
+  border: 0;
+  background: none;
+  color: var(--akzent);
+  font-size: 17px;
+  font-weight: 500;
+}
+.ort-titel { display: flex; align-items: center; gap: 12px; margin: 4px 0 14px; }
+.ort-titel h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.ort-ansicht .filter-chips { margin-top: 10px; }
+
+.karten-raster { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.vorrat-karte {
+  position: relative;
+  border-radius: 20px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--f) 11%, var(--flaeche)), var(--flaeche) 58%);
+  box-shadow: var(--schatten-1);
+}
+.f-weiss.vorrat-karte, .f-schwarz.vorrat-karte { background: var(--flaeche); }
+.vk-oeffnen {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  width: 100%;
+  min-height: 150px;
+  padding: 12px 12px 12px 14px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.vk-rolle { display: flex; align-items: center; gap: 6px; padding-right: 36px; font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vk-rolle .farbpunkt { flex: none; }
+.vk-rolle .farbpunkt { width: 8px; height: 8px; }
+.vk-name { font-size: 16px; font-weight: 600; line-height: 1.22; overflow-wrap: anywhere; }
+.vk-menge { margin-top: auto; padding-top: 6px; }
+.vk-menge strong { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.vk-menge small { font-size: 13px; color: var(--text-2); }
+.vk-balken { display: block; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--text) 8%, transparent); overflow: hidden; }
+.vk-balken span { display: block; height: 100%; border-radius: 3px; background: var(--f, var(--akzent)); }
+.f-weiss .vk-balken span { background: var(--text-3); }
+.vk-fuss { min-height: 20px; display: flex; align-items: center; margin-top: 4px; }
+.vk-ort { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-2); }
+.vorrat-karte .minus { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; background: color-mix(in srgb, var(--text) 7%, transparent); }
+.vorrat-karte.leer .vk-name, .vorrat-karte.leer .vk-menge { opacity: 0.45; }
+
+/* ───────── Auftauen ───────── */
+.auftau-liste { list-style: none; margin: 0; padding: 4px 0; border-radius: var(--r-liste); background: linear-gradient(160deg, rgb(47 127 216 / 0.1), var(--flaeche) 60%), var(--flaeche); box-shadow: var(--schatten-1); }
+.auftau-liste li { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; }
+.auftau-liste li + li { border-top: 0.5px solid var(--trenn); }
+.auftau-text { flex: 1; display: grid; gap: 1px; min-width: 0; font-size: 15px; }
+.auftau-text small { color: var(--text-2); font-size: 13px; }
+.auftau-aufgetaut .auftau-text strong { color: var(--offen); }
+.auftau-fuss { margin: 6px 4px 0; }
+.auftau-wahl { display: flex; align-items: center; gap: 12px; }
+
+/* ───────── Sorte im Detail ───────── */
+.bestand-karte {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border-radius: 20px;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--f) 14%, var(--flaeche)), var(--flaeche) 65%);
+  box-shadow: var(--schatten-1);
+}
+.f-weiss.bestand-karte { background: var(--flaeche); }
+.bk-zahl { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.bk-zahl strong { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.bk-zahl span { font-size: 17px; color: var(--text-2); }
+.bk-zahl small { flex-basis: 100%; color: var(--text-2); font-size: 14px; }
+.bk-fuell { display: grid; gap: 5px; }
+.bk-fuell .vk-balken { height: 7px; }
+.bk-fuell small { font-size: 13px; color: var(--text-2); }
+.bk-reserviert { display: flex; gap: 6px; align-items: flex-start; font-size: 14px; color: var(--akzent); }
+.bk-reserviert .icon { margin-top: 2px; }
+.gericht-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.gericht-chips > span { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 999px; background: var(--flaeche); box-shadow: var(--schatten-1); font-size: 14px; font-weight: 500; }
+.chip-knopf { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 0; border-radius: 999px; background: var(--flaeche); box-shadow: var(--schatten-1); font-size: 14px; }
+.batch-hinweis { display: grid; gap: 6px; margin-top: 8px; padding: 12px 14px; border-radius: 14px; background: var(--akzent-weich); font-size: 15px; }
+
+/* ───────── Heute kochen ───────── */
+.koch-ansicht {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg);
+  animation: hochfahren 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.koch-kopf {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
+  background: var(--glas);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  font-weight: 600;
+  font-size: 16px;
+}
+.koch-kopf-platz { width: 40px; }
+.koch-inhalt { max-width: 560px; margin: 0 auto; padding: 4px 16px calc(130px + var(--sicher-unten)); display: grid; gap: 14px; }
+.koch-hero {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 150px;
+  border-radius: 26px;
+  background:
+    radial-gradient(120% 90% at 20% 0%, rgb(255 255 255 / 0.35), transparent 60%),
+    linear-gradient(135deg, var(--a, var(--tint-neutral)), var(--b, var(--tint-neutral)));
+  font-size: 84px;
+  line-height: 1;
+}
+.koch-hero > span:first-child { filter: drop-shadow(0 12px 20px rgb(0 0 0 / 0.2)); }
+.koch-hero .badge { position: absolute; top: 14px; left: 14px; font-size: 12px; }
+.koch-name { font-size: 32px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; }
+.koch-beschreibung { color: var(--text-2); font-size: 17px; line-height: 1.45; margin-top: -6px; }
+.koch-fakten { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.koch-fakten > div { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 8px; padding: 10px 12px; border-radius: 16px; background: var(--flaeche); box-shadow: var(--schatten-1); }
+.koch-fakten small { grid-column: 2; }
+.koch-fakten .icon { color: var(--akzent); grid-row: span 2; }
+.koch-fakten strong { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.koch-fakten small { font-size: 12px; color: var(--text-2); }
+.koch-hinweise { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.koch-hinweise li { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: var(--gruen-weich); font-size: 15px; }
+.koch-hinweise .icon { color: var(--gruen); margin-top: 2px; flex: none; }
+.koch-hinweise li.grau { background: var(--flaeche); color: var(--text-2); font-size: 14px; }
+.koch-hinweise li.grau .icon { color: var(--text-2); }
+.koch-abschnitt { display: grid; gap: 8px; }
+.koch-abschnitt h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.015em; margin: 6px 2px 0; }
+.koch-zutaten { list-style: none; margin: 0; padding: 0; border-radius: var(--r-liste); background: var(--flaeche); box-shadow: var(--schatten-1); overflow: hidden; }
+.koch-zutat { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 14px 10px 16px; }
+.koch-zutat + .koch-zutat { border-top: 0.5px solid var(--trenn); }
+.koch-zutat .farbpunkt { width: 12px; height: 12px; }
+.koch-zutat-text { flex: 1; display: grid; gap: 1px; min-width: 0; }
+.koch-zutat-text strong { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.koch-zutat-text small { font-size: 14px; color: var(--text-2); }
+.koch-zutat-zeichen { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-weight: 800; font-size: 15px; }
+.z-ok .koch-zutat-zeichen { background: var(--gruen-weich); color: var(--gruen); }
+.z-zu_wenig .koch-zutat-zeichen, .z-leer .koch-zutat-zeichen, .z-unbekannt .koch-zutat-zeichen { background: var(--warn-weich); color: var(--warn); }
+.z-zu_wenig small, .z-leer small, .z-unbekannt small { color: var(--warn); }
+.z-fehlt .icon { color: var(--text-2); }
+.koch-grund { padding: 0 4px; }
+.koch-danach { list-style: none; margin: 0; padding: 0; border-radius: var(--r-liste); background: var(--flaeche); box-shadow: var(--schatten-1); }
+.koch-danach li { display: flex; justify-content: space-between; gap: 12px; padding: 12px 16px; font-size: 16px; }
+.koch-danach li + li { border-top: 0.5px solid var(--trenn); }
+.koch-danach strong { font-weight: 600; color: var(--text-2); }
+.koch-schritte { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.koch-schritte button {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--flaeche);
+  box-shadow: var(--schatten-1);
+  text-align: left;
+  font-size: 17px;
+  line-height: 1.45;
+}
+.stufe-kochen .koch-schritte button { font-size: 19px; padding: 18px; }
+.schritt-nr { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--akzent-weich); color: var(--akzent); font-weight: 700; font-size: 15px; }
+.koch-schritte .erledigt button { color: var(--text-2); }
+.koch-schritte .erledigt button > span:last-child { text-decoration: line-through; text-decoration-color: var(--text-3); }
+.koch-schritte .erledigt .schritt-nr { background: var(--gruen); color: #fff; }
+.koch-erfolg { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-radius: 18px; background: var(--gruen-weich); }
+.koch-erfolg > span:nth-child(2) { flex: 1; display: grid; gap: 1px; font-size: 15px; }
+.koch-erfolg small { color: var(--text-2); font-size: 14px; }
+.koch-erfolg-haken { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--gruen); color: #fff; }
+.koch-erfolg .link { font-size: 15px; }
+.koch-unten {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: min(560px, 100%);
+  display: grid;
+  gap: 6px;
+  padding: 12px 16px calc(14px + var(--sicher-unten));
+  background: linear-gradient(to top, var(--bg) 60%, transparent);
+}
+.koch-unten-text { text-align: center; }
+.knopf.haupt.gross { min-height: 60px; font-size: 19px; border-radius: 20px; }
+
+/* ───────── Komponenten ───────── */
+.komponenten, .einkauf, .woche { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.bereich-einleitung { color: var(--text-2); font-size: 15px; margin: 0 4px 12px; }
+.rollen-raster { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.rollen-kachel {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  padding: 12px 14px;
+  border: 1.5px solid transparent;
+  border-radius: 18px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--f) 13%, var(--flaeche)), var(--flaeche) 70%);
+  box-shadow: var(--schatten-1);
+  text-align: left;
+}
+.rollen-kachel strong { font-size: 15px; }
+.rollen-kachel small { grid-column: 2; font-size: 13px; color: var(--text-2); }
+.rollen-kachel.fehlt small { color: var(--bald); font-weight: 600; }
+.rollen-kachel.gewaehlt { border-color: var(--akzent); }
+.emoji-reihe { display: inline-flex; align-items: center; gap: 2px; font-size: 17px; }
+.emoji-reihe small { font-size: 12px; color: var(--text-2); margin-left: 3px; }
+
+.plan-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.plan-karte {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 20px;
+  background: var(--flaeche);
+  box-shadow: var(--schatten-1);
+}
+.plan-karte[class*='f-'] { border-left: 4px solid var(--f); }
+.plan-kopf { display: flex; align-items: center; gap: 12px; }
+.plan-emoji { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: var(--flaeche-2); font-size: 28px; }
+.plan-emoji.klein { width: 36px; height: 36px; font-size: 22px; border-radius: 11px; }
+.plan-titel { flex: 1; display: grid; gap: 1px; min-width: 0; }
+.plan-titel strong { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.plan-titel small { font-size: 13px; color: var(--text-2); }
+.plan-tag { justify-self: start; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-2); }
+.plan-tag.heute { color: var(--akzent); }
+.plan-tag.vorbei { color: var(--warn); }
+.plan-status { display: flex; gap: 6px; align-items: flex-start; font-size: 14px; }
+.plan-status .icon { margin-top: 2px; flex: none; }
+.plan-status.ok { color: var(--gruen); }
+.plan-status.fehlt { color: var(--text-2); }
+.plan-status.tk { color: #2f7fd8; }
+.plan-aktionen { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plan-aktionen .link { font-size: 15px; min-height: 38px; padding: 0 6px; margin-left: auto; }
+.plan-aktionen .mini-knopf { width: 38px; height: 38px; border-radius: 12px; }
+
+.entdecken-start {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 22px 18px 18px;
+  border-radius: var(--r-karte);
+  background:
+    radial-gradient(90% 80% at 10% 0%, color-mix(in srgb, var(--rot) 14%, transparent), transparent 60%),
+    radial-gradient(90% 80% at 100% 100%, color-mix(in srgb, var(--gruen-k) 14%, transparent), transparent 60%),
+    var(--flaeche);
+  box-shadow: var(--schatten-1);
+  text-align: center;
+  font-size: 15px;
+}
+.entdecken-emoji { font-size: 44px; }
+.ideen-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.idee-karte {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 22px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--f) 12%, var(--flaeche)), var(--flaeche) 60%);
+  box-shadow: var(--schatten-1);
+  text-align: left;
+}
+.idee-karte:active { transform: scale(0.99); }
+.idee-kopf { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.idee-name { font-size: 20px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+.idee-rolle { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-2); }
+.idee-nutzen { display: flex; align-items: center; gap: 8px; }
+.idee-nutzen small { font-size: 13px; color: var(--text-2); }
+.idee-fehlt { font-size: 14px; }
+.idee-fehlt.ja { color: var(--akzent); }
+.idee-fehlt.nein { color: var(--gruen); font-weight: 600; }
+.idee-status { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--gruen); }
+.sterne { display: inline-flex; gap: 1px; font-size: 15px; color: var(--text-3); letter-spacing: 0; }
+.sterne .an { color: #f2a900; }
+.nutzbarkeit-karte { display: grid; gap: 8px; padding: 14px 16px; border-radius: 18px; background: var(--flaeche); box-shadow: var(--schatten-1); margin-top: 12px; }
+.nutzbarkeit-karte > div { display: flex; align-items: center; justify-content: space-between; }
+.nutzbarkeit-karte small { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-2); }
+.nutzbarkeit-karte .sterne { font-size: 22px; }
+.zutat-zeichen { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: 13px; font-weight: 800; }
+.zutat-zeichen.ja { background: var(--gruen-weich); color: var(--gruen); }
+.zutat-zeichen.nein { background: var(--warn-weich); color: var(--warn); }
+.fehlt-hinweis { display: flex; gap: 8px; align-items: center; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--akzent-weich); font-size: 15px; }
+.vorteil { display: flex; gap: 8px; align-items: flex-start; margin-top: 14px; font-size: 15px; color: var(--text-2); }
+.vorteil .icon { color: var(--akzent); margin-top: 2px; }
+.erfolg-zeile { display: flex; gap: 8px; align-items: center; justify-content: center; min-height: 54px; border-radius: 16px; background: var(--gruen-weich); color: var(--gruen); font-weight: 600; }
+
+/* ───────── Einkauf ───────── */
+.einkauf-kopf {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  background: linear-gradient(150deg, var(--akzent-weich), var(--flaeche) 70%), var(--flaeche);
+  box-shadow: var(--schatten-1);
+}
+.einkauf-kopf > div { display: grid; gap: 2px; }
+.einkauf-kopf strong { font-size: 19px; font-weight: 700; }
+.einkauf-kopf span { font-size: 13px; color: var(--text-2); }
+.einkauf-summe { justify-items: end; text-align: right; }
+.einkauf-summe strong { font-variant-numeric: tabular-nums; }
+.einkauf-eingabe { display: flex; gap: 8px; margin: 12px 0 8px; }
+.einkauf-eingabe input { flex: 1; min-width: 0; }
+.einkauf-eingabe .icon-knopf { width: 48px; height: 48px; background: var(--akzent); color: var(--akzent-text); }
+.einkauf-werkzeug { display: flex; align-items: center; gap: 4px; }
+.einkauf-werkzeug .filter-chips { flex: 1; min-width: 0; margin-right: 0; padding-right: 20px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.sortier-knopf { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 10px; margin-bottom: 4px; border: 0; border-radius: 999px; background: none; color: var(--akzent); font-size: 14px; font-weight: 600; }
+.einkauf-liste { list-style: none; margin: 0; padding: 0; border-radius: var(--r-liste); background: var(--flaeche); box-shadow: var(--schatten-1); overflow: hidden; }
+.einkauf-zeile { display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 12px; padding: 8px 14px 8px 12px; position: relative; }
+.einkauf-zeile + .einkauf-zeile::before { content: ''; position: absolute; top: 0; left: 52px; right: 0; border-top: 0.5px solid var(--trenn); }
+.haken-knopf {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 2px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--f, var(--text-3)) 70%, var(--text-3));
+  background: none;
+  color: #fff;
+  padding: 0;
+}
+.f-weiss .haken-knopf { border-color: var(--text-3); }
+.gekauft .haken-knopf { background: var(--gruen); border-color: var(--gruen); }
+.ez-info { display: grid; gap: 1px; padding: 6px 0; border: 0; background: none; text-align: left; min-width: 0; }
+.ez-kopf { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ez-name { font-size: 17px; font-weight: 500; overflow-wrap: anywhere; }
+.ez-menge { font-size: 15px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ez-grund, .ez-netto { font-size: 13px; color: var(--text-2); }
+.ez-netto { color: var(--gruen); }
+.ez-preis { display: grid; justify-items: end; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.ez-preis strong { font-size: 15px; font-weight: 600; }
+.ez-preis small { font-size: 12px; color: var(--text-2); }
+.gekauft .ez-name { text-decoration: line-through; text-decoration-color: var(--text-3); color: var(--text-2); }
+.ez-vorrat { grid-column: 2 / -1; justify-self: start; margin: 2px 0 6px; background: var(--gruen-weich); color: var(--gruen); box-shadow: none; }
+
+/* ───────── Essen: Heute / Woche ───────── */
+.essen-umschalter { margin-bottom: 2px; }
+.heute-geplant { display: grid; gap: 8px; }
+.heute-plan { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-radius: 20px; background: linear-gradient(150deg, var(--akzent-weich), var(--flaeche) 70%), var(--flaeche); box-shadow: var(--schatten-1); }
+.essen-reserviert { display: flex; gap: 6px; align-items: flex-start; padding: 0 4px; }
+.essen-reserviert .icon { margin-top: 2px; flex: none; }
+.modus-marke { color: var(--gruen); font-weight: 600; }
+.essen-hinweis { display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; border-radius: var(--r-liste); background: var(--flaeche); box-shadow: var(--schatten-1); font-size: 16px; }
+.essen-hinweis .icon { color: var(--akzent); margin-top: 2px; flex: none; }
+.woche-planen { display: grid; gap: 12px; padding: 16px; margin-top: 18px; }
+.woche-planen h3 { font-size: 19px; font-weight: 700; }
+.vorschau-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.vorschau-liste li { display: grid; grid-template-columns: 64px auto 1fr auto; align-items: center; gap: 10px; }
+.tag-raster { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.tag-raster .zahl { font-size: 17px; }
+.zahl.gewaehlt { background: var(--akzent); color: var(--akzent-text); }
+.tausch-liste { display: grid; gap: 18px; }
+.tausch-eintrag { display: grid; gap: 10px; }
+
+/* ───────── Einbuchen ───────── */
+.neue-sorte-knopf {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 6px;
+  border: 1.5px dashed color-mix(in srgb, var(--akzent) 45%, transparent);
+  border-radius: 16px;
+  background: var(--akzent-weich);
+  text-align: left;
+}
+.neue-sorte-knopf > span:last-child { display: grid; gap: 1px; }
+.neue-sorte-knopf small { color: var(--text-2); font-size: 13px; }
+.kreis-klein { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--akzent); color: var(--akzent-text); }
+
 /* ───────── Bewegung ───────── */
 .karten-buehne { animation: auftauchen 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .karten-buehne.abgang-links { transform: translateX(-115%) rotate(-7deg); opacity: 0; transition: transform 0.22s ease-in, opacity 0.22s ease-in; }
@@ -919,6 +1499,9 @@ label.karte-flach textarea { box-shadow: none; background: var(--flaeche-2); }
 /* ───────── Kleine Bildschirme ───────── */
 @media (max-width: 360px) {
   .kopf h1 { font-size: 30px; }
+  .karten-raster, .rollen-raster, .kennzahl-reihe { grid-template-columns: 1fr; }
+  .koch-fakten { grid-template-columns: 1fr; }
+  .tabbar button > span:last-child { font-size: 9.5px; }
   .farbwahl, .sorten-raster { grid-template-columns: 1fr; }
   .kreis { width: 46px; height: 46px; }
   .kennzahlen { grid-template-columns: 1fr; }
@@ -926,3 +1509,5 @@ label.karte-flach textarea { box-shadow: none; background: var(--flaeche-2); }
   .option-zeile .segment { flex-basis: 100%; }
 }
 .f-weiss .farbpunkt, .farbpunkt.f-weiss { box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.blatt .chip-statisch, .koch-ansicht .chip-statisch { background: var(--flaeche); box-shadow: var(--schatten-1); }
+.komp-karte .vk-rolle { padding-right: 0; }

@@ -7,7 +7,7 @@ import { auftragAlsText } from '../../supabase/functions/_shared/kombi/anbieter/
 import { berechneLeitplanken } from '../../supabase/functions/_shared/kombi/praeferenz.ts';
 import { pruefeGericht } from '../../supabase/functions/_shared/kombi/validierung.ts';
 import {
-  auftauVorschlaege, bedarfAusGericht, heuteAuftauen, reservierungVon, restSnapshot, type AuftauEintrag,
+  auftauVorschlaege, bedarfAusGericht, heuteAuftauen, mussAuftauen, reservierungVon, restSnapshot, type AuftauEintrag,
 } from '../../supabase/functions/_shared/kombi/planung.ts';
 import { verteile, type VorratSorte } from '../../supabase/functions/_shared/kombi/einkaufsliste.ts';
 import { batchEmpfehlungen, oftVerwendet, type BatchSorte } from '../../supabase/functions/_shared/kombi/batch.ts';
@@ -111,6 +111,23 @@ describe('Auftauen', () => {
   test('für morgen geplant → heute 2 Portionen Lasagne zum Auftauen vorschlagen (nur Gefrierfach)', () => {
     const v = auftauVorschlaege([plan('p1', '2026-09-29')], vorrat(), [], '2026-09-28');
     assert.deepEqual(v.map((x) => [x.name, x.menge, x.auftauen_am]), [['Lasagne-Portion', 2, '2026-09-28']]);
+  });
+
+  test('aufgetaut wird nur Vorgekochtes – keine TK-Zutaten, kein Brot, keine Booster, nichts Gekauftes', () => {
+    const s = (art: VorratSorte['art'], farbe: VorratSorte['farbe'], herkunft: VorratSorte['herkunft'] = null, lagerort: VorratSorte['lagerort'] = 'gefrierfach') =>
+      mussAuftauen({ art, farbe, herkunft, lagerort });
+    assert.equal(s('komplettgericht', 'blau'), true, 'Lasagne-Portion');
+    assert.equal(s('komponente', 'rot'), true, 'Tomaten-Basis');
+    assert.equal(s('komponente', 'braun', 'selbstgemacht'), true, 'Linsen-Bolognese');
+    assert.equal(s('komponente', 'gruen'), true, 'Ofengemüse');
+    assert.equal(s('zutat', 'gruen'), false, 'TK-Spinat wird gefroren verarbeitet');
+    assert.equal(s('komponente', 'gelb'), false, 'Brötchen/Wraps: direkt aufbacken');
+    assert.equal(s('komponente', 'weiss'), false, 'Gewürz-Booster');
+    assert.equal(s('komplettgericht', 'blau', 'gekauft'), false, 'TK-Pizza: nach Packung');
+    assert.equal(s('komplettgericht', 'blau', null, 'kuehlschrank'), false, 'nicht im Gefrierfach');
+    const tk: VorratSorte = { ...vorrat()[0], id: 31, name: 'TK-Spinat', farbe: 'gruen', art: 'zutat' };
+    const p = { ...plan('p1', '2026-09-29'), bedarf: [...plan('p1', '2026-09-29').bedarf, { name: 'TK-Spinat', block_typ_id: 31, menge: 1, einheit: 'portion' as const }] };
+    assert.deepEqual(auftauVorschlaege([p], [...vorrat(), tk], [], '2026-09-28').map((x) => x.name), ['Lasagne-Portion']);
   });
 
   test('schon vorgemerkt oder erst nächste Woche → kein Vorschlag', () => {

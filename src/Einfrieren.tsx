@@ -3,12 +3,15 @@ import type { Einheit, Sorte } from './api';
 import { Blatt, AnzahlWahl } from './Blatt';
 import { ARTEN_INFO, buchungsVerb } from './farben';
 import { artVon, einheitVon, heuteIso, mengeKurz, mengeText } from './format';
+import { Icon } from './Icon';
 
 type Props = {
   bestand: Sorte[];
   baukasten: boolean;
   startSorte: Sorte | null;
   onEinfrieren: (sorte: Sorte, menge: number, ablaufAm: string | null) => void;
+  /** Sorte fehlt noch → anlegen */
+  onNeueSorte: () => void;
   onSchliessen: () => void;
 };
 
@@ -21,7 +24,7 @@ const MENGEN: Record<Einheit, number[]> = {
 };
 
 /** Einbuchen in 3 Taps: „Einbuchen“ → Sorte → Menge (bucht sofort). Ablaufdatum optional. */
-export function Einfrieren({ bestand, baukasten, startSorte, onEinfrieren, onSchliessen }: Props) {
+export function Einfrieren({ bestand, baukasten, startSorte, onEinfrieren, onNeueSorte, onSchliessen }: Props) {
   const [sorte, setSorte] = useState<Sorte | null>(startSorte);
   const [ablauf, setAblauf] = useState('');
 
@@ -52,6 +55,13 @@ export function Einfrieren({ bestand, baukasten, startSorte, onEinfrieren, onSch
 
   return (
     <Blatt titel="Was buchst du ein?" onSchliessen={onSchliessen}>
+      <button type="button" className="neue-sorte-knopf" onClick={onNeueSorte}>
+        <span className="kreis-klein"><Icon name="plus" groesse={18} /></span>
+        <span>
+          <strong>Neue Sorte anlegen</strong>
+          <small>Zutat, Komponente oder Komplettgericht, das es noch nicht gibt</small>
+        </span>
+      </button>
       {ARTEN_INFO.map((art) => {
         const sorten = bestand
           .filter((s) => artVon(s) === art.id)

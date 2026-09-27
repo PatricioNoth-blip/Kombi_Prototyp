@@ -6,10 +6,10 @@
 // einen Hinweis statt eines Fehlers.
 import { supabase } from './supabase';
 import type { Farbe, LagerortId } from './farben';
-import type { Art, Einheit, Herkunft } from '../supabase/functions/_shared/kombi/typen.ts';
+import type { Art, Einheit, Gerichtstyp, Gewuerzrichtung, Herkunft } from '../supabase/functions/_shared/kombi/typen.ts';
 
 export type Lagerort = LagerortId;
-export type { Art, Einheit, Herkunft };
+export type { Art, Einheit, Gerichtstyp, Gewuerzrichtung, Herkunft };
 
 /** Eine Zeile der View „bestand“ */
 export type Sorte = {
@@ -38,12 +38,20 @@ export type Sorte = {
   geoeffnet?: number;
   geoeffnet_seit?: string | null;
   abgelaufen?: number;
+  // ab Migration „planung_einkauf“:
+  gerichtstypen?: Gerichtstyp[] | null;
+  richtung?: Gewuerzrichtung | null;
+  /** Startmenge der Chargen, die noch etwas enthalten (für „6 / 8 Portionen“) */
+  start_menge?: number;
+  aufgetaut?: number;
+  auftauen_geplant?: number;
 };
 
 export type SorteDaten = Pick<
   Sorte,
   | 'name' | 'farbe' | 'groesse_g' | 'mindestbestand' | 'haltbar_tage' | 'kosten_cent' | 'lagerort'
   | 'art' | 'herkunft' | 'einheit' | 'portion_menge' | 'kosten_menge' | 'zusammensetzung' | 'notiz'
+  | 'gerichtstypen' | 'richtung'
 >;
 
 export type Charge = {
@@ -143,10 +151,14 @@ export async function setzeAblauf(chargeId: number, ablaufAm: string | null): Pr
   if (error) throw new Error(meldung(error));
 }
 
-export async function speichereSorte(id: number | null, daten: SorteDaten): Promise<void> {
-  const { error } =
-    id === null
-      ? await supabase.from('block_typ').insert(daten)
-      : await supabase.from('block_typ').update(daten).eq('id', id);
+/** Speichert eine Sorte und gibt ihre ID zurück. */
+export async function speichereSorte(id: number | null, daten: SorteDaten): Promise<number> {
+  if (id !== null) {
+    const { error } = await supabase.from('block_typ').update(daten).eq('id', id);
+    if (error) throw new Error(meldung(error));
+    return id;
+  }
+  const { data, error } = await supabase.from('block_typ').insert(daten).select('id').single();
   if (error) throw new Error(meldung(error));
+  return (data as { id: number }).id;
 }

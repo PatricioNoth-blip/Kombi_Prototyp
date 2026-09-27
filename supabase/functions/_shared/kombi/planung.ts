@@ -81,6 +81,18 @@ export type AuftauVorschlag = {
   auftauen_am: string;
 };
 
+/**
+ * Muss das vor dem Kochen aufgetaut werden? Kombi-Regel, keine Schätzung:
+ *   ja   – Vorgekochtes aus dem Gefrierfach: Komplettgerichte sowie Basis/Soße, Protein und Gemüse als Komponente
+ *   nein – TK-Zutaten (werden gefroren verarbeitet), Sattmacher wie Brot, Reis, Wraps (direkt aufbacken/erhitzen),
+ *          Gewürz-Booster und Toppings (kleine Mengen) und Gekauftes (nach Packungsangabe)
+ */
+export function mussAuftauen(s: Pick<VorratSorte, 'lagerort' | 'art' | 'farbe' | 'herkunft'>): boolean {
+  if (s.lagerort !== 'gefrierfach' || s.herkunft === 'gekauft') return false;
+  if (s.art === 'komplettgericht') return true;
+  return s.art === 'komponente' && (s.farbe === 'rot' || s.farbe === 'braun' || s.farbe === 'gruen' || s.farbe === 'blau');
+}
+
 const tagDavor = (iso: string) => {
   const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - 1);
@@ -89,8 +101,9 @@ const tagDavor = (iso: string) => {
 
 /**
  * Welche Gefrierfach-Portionen sollten für geplante Mahlzeiten heute herausgenommen werden?
- * Regel: einen Tag vorher auftauen. Nur Pläne mit Datum heute oder morgen, nur Reserviertes aus dem
- * Gefrierfach, nur wenn dafür noch keine Auftau-Vormerkung existiert. Vorschläge ändern nichts.
+ * Regel: einen Tag vorher auftauen. Nur Pläne mit Datum heute oder morgen, nur Reserviertes, das
+ * aufgetaut werden muss (mussAuftauen), nur wenn dafür noch keine Auftau-Vormerkung existiert.
+ * Vorschläge ändern nichts.
  */
 export function auftauVorschlaege(
   plaene: PlanBedarf[],
@@ -109,7 +122,7 @@ export function auftauVorschlaege(
     if (!p.datum || p.datum < heute || p.datum > morgen) continue;
     for (const s of v.pro_plan.get(p.id) ?? []) {
       const sorte = sorten.find((x) => x.id === s.block_typ_id);
-      if (!sorte || sorte.lagerort !== 'gefrierfach' || s.reserviert <= 0) continue;
+      if (!sorte || !mussAuftauen(sorte) || s.reserviert <= 0) continue;
       const schon = auftauen.some((a) => a.plan_id === p.id && a.block_typ_id === sorte.id && (a.status === 'geplant' || a.status === 'aufgetaut'));
       if (schon) continue;
       vorschlaege.push({
@@ -124,4 +137,25 @@ export function auftauVorschlaege(
 /** Was heute aus dem Gefrierfach genommen werden sollte (vorgemerkt und fällig). */
 export function heuteAuftauen(auftauen: AuftauEintrag[], heute: string): AuftauEintrag[] {
   return auftauen.filter((a) => a.status === 'geplant' && a.auftauen_am <= heute);
+}
+
+/**
+ * Was ANDERE Pläne von jeder Sorte reserviert haben (für die Kochansicht: „2 davon sind für
+ * „Lasagne“ eingeplant“). Der Plan, der gerade gekocht wird, zählt nicht mit.
+ */
+export function reserviertAusser(
+  proPlan: Map<string, { block_typ_id: number | null; reserviert: number }[]>,
+  plaene: { id: string; titel: string }[],
+  ausser: string | null,
+): Map<number, { menge: number; plaene: string[] }> {
+  const m = new Map<number, { menge: number; plaene: string[] }>();
+  for (const p of plaene) {
+    if (p.id === ausser) continue;
+    for (const s of proPlan.get(p.id) ?? []) {
+      if (s.block_typ_id === null || s.reserviert <= 0) continue;
+      const alt = m.get(s.block_typ_id) ?? { menge: 0, plaene: [] };
+      m.set(s.block_typ_id, { menge: alt.menge + s.reserviert, plaene: [...new Set([...alt.plaene, p.titel])] });
+    }
+  }
+  return m;
 }

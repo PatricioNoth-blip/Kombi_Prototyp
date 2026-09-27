@@ -3,20 +3,31 @@ import { Icon } from './Icon';
 
 type BlattProps = { titel: string; untertitel?: string; onSchliessen: () => void; children: ReactNode };
 
+let offeneFenster = 0;
+
+/** Seite hinter offenen Fenstern nicht scrollen – gezählt, weil Fenster übereinander liegen können. */
+export function useScrollSperre() {
+  useEffect(() => {
+    offeneFenster++;
+    document.body.classList.add('blatt-offen');
+    return () => {
+      offeneFenster = Math.max(0, offeneFenster - 1);
+      if (offeneFenster === 0) document.body.classList.remove('blatt-offen');
+    };
+  }, []);
+}
+
 /** Von unten einfahrendes Fenster (gut mit dem Daumen erreichbar). */
 export function Blatt({ titel, untertitel, onSchliessen, children }: BlattProps) {
   const titelId = useId();
+  useScrollSperre();
 
   useEffect(() => {
     const beiTaste = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onSchliessen();
     };
     window.addEventListener('keydown', beiTaste);
-    document.body.classList.add('blatt-offen');
-    return () => {
-      window.removeEventListener('keydown', beiTaste);
-      document.body.classList.remove('blatt-offen');
-    };
+    return () => window.removeEventListener('keydown', beiTaste);
   }, [onSchliessen]);
 
   return (

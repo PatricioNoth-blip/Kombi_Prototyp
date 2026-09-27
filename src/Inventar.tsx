@@ -1,39 +1,43 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+// Rahmen der App: vier Bereiche (Essen, Vorrat, Komponenten, Einkauf), die beim Wechsel ihren
+// Zustand behalten, plus die gemeinsamen Daten. Einkaufsliste, Reservierungen und Auftau-Hinweise
+// werden hier EINMAL aus Vorrat und Plänen berechnet und an alle Bereiche weitergegeben –
+// so rechnen alle mit denselben Zahlen.
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import * as api from './api';
 import { fehlerText, type Sorte } from './api';
-import { Uebersicht } from './Uebersicht';
+import { Vorrat } from './Vorrat';
 import { SorteBlatt } from './SorteBlatt';
 import { Einfrieren } from './Einfrieren';
-import { Sorten, SorteFormular } from './Sorten';
+import { SorteFormular } from './Sorten';
 import { Essen } from './Essen';
-import { Icon, type IconName } from './Icon';
+import { Komponenten } from './Komponenten';
+import { Einkauf, kostenText as einkaufKosten } from './Einkauf';
+import { Auftauen } from './Auftauen';
+import { Icon } from './Icon';
 import { buchungsVerb } from './farben';
-import { mengeText } from './format';
+import { artVon, heuteIso, mengeText } from './format';
+import { alsVorratSorte, ladeHaushalt, LEER, planBedarf, type Haushaltsdaten } from './haushalt';
+import { berechneEinkaufsliste } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
+import { auftauVorschlaege, reserviertAusser } from '../supabase/functions/_shared/kombi/planung.ts';
+import { BEREICHE, ladeNav, navigiere, speichereNav, type Bereich } from './navigation';
 
-type Meldung = { text: string; fehler?: boolean; rueckgaengig?: number[] };
-type Ansicht = 'bestand' | 'essen' | 'sorten';
-
-const REITER: { id: Ansicht; name: string; titel: string; icon: IconName }[] = [
-  { id: 'bestand', name: 'Vorrat', titel: 'Vorrat', icon: 'vorrat' },
-  { id: 'essen', name: 'Essen', titel: 'Heute essen', icon: 'essen' },
-  { id: 'sorten', name: 'Sorten', titel: 'Sorten', icon: 'sorten' },
-];
+type Meldung = { text: string; fehler?: boolean; rueckgaengig?: () => Promise<unknown> };
 const SPEICHER = 'kombi-ansicht';
 
-function letzteAnsicht(): Ansicht {
+function gemerkteNavigation() {
   try {
-    const a = localStorage.getItem(SPEICHER);
-    return a === 'essen' || a === 'sorten' ? a : 'bestand';
+    return ladeNav(localStorage.getItem(SPEICHER));
   } catch {
-    return 'bestand';
+    return ladeNav(null);
   }
 }
 
 export function Inventar() {
   const [bestand, setBestand] = useState<Sorte[] | null>(null);
   const [baukasten, setBaukasten] = useState(true);
+  const [haushalt, setHaushalt] = useState<Haushaltsdaten | null>(null);
   const [ladefehler, setLadefehler] = useState<string | null>(null);
-  const [ansicht, setAnsicht] = useState<Ansicht>(letzteAnsicht);
+  const [nav, dispatch] = useReducer(navigiere, undefined, gemerkteNavigation);
   const [offeneSorteId, setOffeneSorteId] = useState<number | null>(null);
   const [bearbeiteSorteId, setBearbeiteSorteId] = useState<number | null>(null);
   const [neueSorte, setNeueSorte] = useState(false);
@@ -46,8 +50,9 @@ export function Inventar() {
 
   const laden = useCallback(async () => {
     try {
-      const b = await api.ladeBestand();
+      const [b, h] = await Promise.all([api.ladeBestand(), ladeHaushalt()]);
       setBestand(b);
+      setHaushalt(h);
       setBaukasten(await api.hatBaukasten(b));
       setLadefehler(null);
     } catch (e) {
@@ -78,27 +83,36 @@ export function Inventar() {
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  function wechsle(a: Ansicht) {
-    setAnsicht(a);
-    window.scrollTo({ top: 0 });
+  // Bereich, Filter und geöffneter Lagerort bleiben für den nächsten Start gemerkt.
+  useEffect(() => {
     try {
-      localStorage.setItem(SPEICHER, a);
+      localStorage.setItem(SPEICHER, speichereNav(nav));
     } catch {
       // nur Komfort
     }
+  }, [nav]);
+
+  // Jeder Bereich kommt an der Stelle zurück, an der man ihn verlassen hat.
+  useEffect(() => {
+    window.scrollTo({ top: nav.scroll[nav.bereich] });
+  }, [nav.bereich, nav.scroll]);
+
+  function wechsle(b: Bereich) {
+    dispatch({ typ: 'wechsle', bereich: b, scroll: window.scrollY });
   }
 
   function zeige(m: Meldung) {
     window.clearTimeout(timer.current);
     setMeldung(m);
-    timer.current = window.setTimeout(() => setMeldung(null), m.fehler ? 7000 : 5000);
+    timer.current = window.setTimeout(() => setMeldung(null), m.fehler ? 7000 : m.rueckgaengig ? 6000 : 4000);
   }
+  const melde = (text: string, rueckgaengig?: () => Promise<unknown>) => zeige({ text, rueckgaengig });
 
   async function buchen(sorte: Sorte, aktion: () => Promise<number[]>, text: string) {
     setLaeuft((l) => new Set(l).add(sorte.id));
     try {
       const ids = await aktion();
-      zeige({ text, rueckgaengig: ids });
+      zeige({ text, rueckgaengig: () => api.rueckgaengig(ids) });
     } catch (e) {
       zeige({ text: fehlerText(e), fehler: true });
     } finally {
@@ -111,11 +125,11 @@ export function Inventar() {
     }
   }
 
-  async function rueckgaengigMachen(ids: number[]) {
+  async function rueckgaengigMachen(f: () => Promise<unknown>) {
     window.clearTimeout(timer.current);
     setMeldung(null);
     try {
-      await api.rueckgaengig(ids);
+      await f();
       zeige({ text: 'Rückgängig gemacht.' });
     } catch (e) {
       zeige({ text: fehlerText(e), fehler: true });
@@ -139,26 +153,45 @@ export function Inventar() {
     );
   }
 
+  // ───────── Gemeinsame Berechnungen ─────────
+  const heute = heuteIso();
+  const h = haushalt ?? LEER;
+  const sorten = useMemo(() => (bestand ?? []).map(alsVorratSorte), [bestand]);
+  const planBedarfe = useMemo(() => h.plaene.map(planBedarf), [h.plaene]);
+  const liste = useMemo(
+    () => berechneEinkaufsliste({ sorten, plaene: planBedarfe, eintraege: h.eintraege, status: h.status }),
+    [sorten, planBedarfe, h.eintraege, h.status],
+  );
+  const reserviertMitPlan = useMemo(() => reserviertAusser(liste.verteilung.pro_plan, h.plaene, null), [liste, h.plaene]);
+  const auftauHinweise = useMemo(() => auftauVorschlaege(planBedarfe, sorten, h.auftauen, heute), [planBedarfe, sorten, h.auftauen, heute]);
+  const offeneEinkaeufe = liste.zeilen.filter((z) => z.status === 'offen').length;
+
   const finde = (id: number | null) => bestand?.find((s) => s.id === id) ?? null;
   const offeneSorte = finde(offeneSorteId);
   const bearbeiteSorte = finde(bearbeiteSorteId);
-  const reiter = REITER.find((r) => r.id === ansicht)!;
+  const bereich = BEREICHE.find((b) => b.id === nav.bereich)!;
 
-  const untertitel =
-    bestand && ansicht === 'bestand'
+  const auftauenBereich = h.planung && bestand ? (
+    <Auftauen bestand={bestand} plaene={h.plaene} vorschlaege={auftauHinweise} eintraege={h.auftauen} heute={heute}
+      onMeldung={(t) => zeige({ text: t })} onGeaendert={() => void laden()} />
+  ) : null;
+
+  const untertitel = !bestand
+    ? ''
+    : nav.bereich === 'vorrat'
       ? `${bestand.filter((s) => s.anzahl > 0).length} von ${bestand.length} Sorten da`
-      : ansicht === 'essen'
-        ? 'Was machen wir aus dem, was da ist?'
-        : bestand
-          ? `${bestand.length} Sorten im Baukasten`
-          : '';
+      : nav.bereich === 'essen'
+        ? nav.essen.ansicht === 'woche' ? 'Flexibel planen – entnommen wird erst beim Kochen' : 'Was machen wir aus dem, was da ist?'
+        : nav.bereich === 'komponenten'
+          ? `${bestand.filter((s) => artVon(s) === 'komponente').length} Komponenten im Baukasten`
+          : h.planung ? `${offeneEinkaeufe} offen · verrechnet mit dem Vorrat` : '';
 
   return (
-    <div className={`app ansicht-${ansicht}`}>
+    <div className={`app ansicht-${nav.bereich}`}>
       <header className={`kopf${gescrollt ? ' gescrollt' : ''}`}>
         <div className="kopf-zeile">
           <div>
-            <h1>{reiter.titel}</h1>
+            <h1>{bereich.titel}</h1>
             {untertitel && <p className="kopf-unter">{untertitel}</p>}
           </div>
           <button type="button" className="icon-knopf" onClick={() => void laden()} aria-label="Neu laden">
@@ -176,64 +209,115 @@ export function Inventar() {
             </button>
           </p>
         )}
-        {!baukasten && ansicht !== 'essen' && bestand && (
+        {!baukasten && bestand && nav.bereich !== 'essen' && (
           <p className="hinweisbox">
             Neu: Art, Einheit, Zusammensetzung, Ablaufdatum und „geöffnet“. Dafür in Supabase die Migration „baukasten“
             einspielen (siehe README). Bis dahin läuft alles wie bisher.
           </p>
         )}
+        {baukasten && haushalt && !haushalt.planung && bestand && (nav.bereich === 'vorrat' || nav.bereich === 'komponenten') && (
+          <p className="hinweisbox">
+            Neu: Einkaufsliste, Wochenplanung, Auftauen und Herstellen. Dafür in Supabase die Migration „planung_einkauf“
+            einspielen (siehe README). Alles andere läuft schon.
+          </p>
+        )}
         {bestand === null ? (
           !ladefehler && <p className="leise laden">Lade Vorrat …</p>
-        ) : ansicht === 'bestand' ? (
-          <Uebersicht
-            bestand={bestand}
-            laeuft={laeuft}
-            onEntnehmen={entnehmen}
-            onOeffnen={(s) => setOffeneSorteId(s.id)}
-          />
-        ) : ansicht === 'sorten' ? (
-          <Sorten
-            bestand={bestand}
-            baukasten={baukasten}
-            onGespeichert={(text) => {
-              zeige({ text });
-              void laden();
-            }}
-          />
-        ) : null}
+        ) : (
+          <>
+            <div hidden={nav.bereich !== 'vorrat'}>
+              <Vorrat
+                bestand={bestand}
+                heute={heute}
+                nav={nav.vorrat}
+                onNav={(teil) => dispatch({ typ: 'vorrat', teil })}
+                laeuft={laeuft}
+                reserviert={liste.verteilung.reserviert}
+                einkauf={h.planung ? { offen: offeneEinkaeufe, kosten: einkaufKosten(liste.kosten) } : null}
+                auftauen={auftauenBereich}
+                onOeffnen={(s) => setOffeneSorteId(s.id)}
+                onEntnehmen={entnehmen}
+                onZumEinkauf={() => wechsle('einkauf')}
+              />
+            </div>
+            <div hidden={nav.bereich !== 'komponenten'}>
+              <Komponenten
+                bestand={bestand}
+                sorten={sorten}
+                baukasten={baukasten}
+                planung={h.planung}
+                plaene={h.plaene}
+                proPlan={liste.verteilung.pro_plan}
+                nutzung={h.nutzung}
+                reserviert={liste.verteilung.reserviert}
+                nav={nav.komponenten}
+                onNav={(teil) => dispatch({ typ: 'komponenten', teil })}
+                onOeffnen={(s) => setOffeneSorteId(s.id)}
+                onMeldung={melde}
+                onGeaendert={() => void laden()}
+              />
+            </div>
+            <div hidden={nav.bereich !== 'einkauf'}>
+              <Einkauf
+                liste={liste}
+                sorten={sorten}
+                bestand={bestand}
+                baukasten={baukasten}
+                planung={h.planung}
+                nav={nav.einkauf}
+                onNav={(teil) => dispatch({ typ: 'einkauf', teil })}
+                onMeldung={melde}
+                onGeaendert={() => void laden()}
+              />
+            </div>
+          </>
+        )}
         {/* bleibt beim Reiterwechsel erhalten, damit die Session nicht verloren geht */}
-        <div hidden={ansicht !== 'essen'}>
+        <div hidden={nav.bereich !== 'essen'}>
           <Essen
             bestand={bestand ?? []}
             baukasten={baukasten}
-            onMeldung={(text, ids) => zeige({ text, rueckgaengig: ids && ids.length ? ids : undefined })}
-            onBestandGeaendert={() => void laden()}
+            planung={h.planung}
+            heute={heute}
+            plaene={h.plaene}
+            proPlan={liste.verteilung.pro_plan}
+            reserviert={liste.verteilung.reserviert}
+            auftauEintraege={h.auftauen}
+            auftauen={auftauenBereich}
+            nav={nav.essen}
+            onNav={(teil) => dispatch({ typ: 'essen', teil })}
+            onMeldung={melde}
+            onGeaendert={() => void laden()}
           />
         </div>
       </main>
 
       <div className="unten">
         <nav className="tabbar" aria-label="Bereiche">
-          {REITER.map((r) => (
+          {BEREICHE.map((b) => (
             <button
-              key={r.id}
+              key={b.id}
               type="button"
-              className={ansicht === r.id ? 'aktiv' : ''}
-              aria-current={ansicht === r.id ? 'page' : undefined}
-              onClick={() => wechsle(r.id)}
+              className={nav.bereich === b.id ? 'aktiv' : ''}
+              aria-current={nav.bereich === b.id ? 'page' : undefined}
+              onClick={() => wechsle(b.id)}
             >
-              <Icon name={r.icon} groesse={24} />
-              <span>{r.name}</span>
+              <span className="tab-icon">
+                <Icon name={b.icon} groesse={24} />
+                {b.id === 'einkauf' && offeneEinkaeufe > 0 && <span className="tab-zahl" aria-label={`${offeneEinkaeufe} offen`}>{offeneEinkaeufe}</span>}
+              </span>
+              <span>{b.name}</span>
             </button>
           ))}
         </nav>
-        {ansicht === 'bestand' && bestand && bestand.length > 0 && (
-          <button type="button" className="aktion-knopf" onClick={() => setEinfrierenDialog({ sorteId: null })} aria-label="Einbuchen" title="Einbuchen">
-            <Icon name="plus" groesse={28} />
-          </button>
-        )}
-        {ansicht === 'sorten' && bestand && (
-          <button type="button" className="aktion-knopf" onClick={() => setNeueSorte(true)} aria-label="Neue Sorte" title="Neue Sorte">
+        {nav.bereich === 'vorrat' && bestand && (
+          <button
+            type="button"
+            className="aktion-knopf"
+            onClick={() => (bestand.length ? setEinfrierenDialog({ sorteId: null }) : setNeueSorte(true))}
+            aria-label={bestand.length ? 'Einbuchen' : 'Neue Sorte'}
+            title={bestand.length ? 'Einbuchen' : 'Neue Sorte'}
+          >
             <Icon name="plus" groesse={28} />
           </button>
         )}
@@ -243,6 +327,7 @@ export function Inventar() {
         <SorteFormular
           sorte={null}
           baukasten={baukasten}
+          planung={h.planung}
           onFertig={(text) => {
             setNeueSorte(false);
             zeige({ text });
@@ -255,8 +340,13 @@ export function Inventar() {
       {offeneSorte && (
         <SorteBlatt
           sorte={offeneSorte}
+          bestand={bestand ?? []}
           baukasten={baukasten}
+          planung={h.planung}
+          heute={heute}
           laeuft={laeuft.has(offeneSorte.id)}
+          reserviert={reserviertMitPlan.get(offeneSorte.id) ?? null}
+          nutzung={h.nutzung.find((n) => n.block_typ_id === offeneSorte.id) ?? null}
           onEntnehmen={(n) => entnehmen(offeneSorte, n)}
           onEinfrieren={() => {
             setOffeneSorteId(null);
@@ -266,6 +356,7 @@ export function Inventar() {
             setOffeneSorteId(null);
             setBearbeiteSorteId(offeneSorte.id);
           }}
+          onOeffnen={(s) => setOffeneSorteId(s.id)}
           onGeaendert={(text) => {
             zeige({ text });
             void laden();
@@ -279,6 +370,7 @@ export function Inventar() {
         <SorteFormular
           sorte={bearbeiteSorte}
           baukasten={baukasten}
+          planung={h.planung}
           onFertig={(text) => {
             setBearbeiteSorteId(null);
             zeige({ text });
@@ -294,6 +386,10 @@ export function Inventar() {
           baukasten={baukasten}
           startSorte={finde(einfrierenDialog.sorteId)}
           onEinfrieren={einfrieren}
+          onNeueSorte={() => {
+            setEinfrierenDialog(null);
+            setNeueSorte(true);
+          }}
           onSchliessen={() => setEinfrierenDialog(null)}
         />
       )}

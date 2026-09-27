@@ -1,75 +1,15 @@
+// Eine Sorte anlegen oder bearbeiten – mit schrittweise aufklappbaren Details.
 import { useState, type FormEvent } from 'react';
 import {
-  fehlerText, speichereSorte, type Art, type Einheit, type Herkunft, type Lagerort, type Sorte, type SorteDaten,
+  fehlerText, speichereSorte, type Art, type Einheit, type Gerichtstyp, type Gewuerzrichtung, type Herkunft, type Lagerort,
+  type Sorte, type SorteDaten,
 } from './api';
 import { Blatt } from './Blatt';
-import { ARTEN_INFO, EINHEITEN_INFO, FARBEN, LAGERORTE, lagerort as lagerInfo, type Farbe } from './farben';
+import { ARTEN_INFO, EINHEITEN_INFO, FARBEN, LAGERORTE, type Farbe } from './farben';
 import { Icon } from './Icon';
-import { artVon, einheitVon, mengeText, portionMengeVon, portionspreisText, euroZuCent } from './format';
-
-type Props = {
-  bestand: Sorte[];
-  baukasten: boolean;
-  onGespeichert: (text: string) => void;
-};
-
-function details(s: Sorte): string {
-  const teile: string[] = [lagerInfo(s.lagerort).name];
-  const einheit = einheitVon(s);
-  teile.push(einheit === 'portion' ? `Portion ${s.groesse_g} g` : `Portion ${mengeText(portionMengeVon(s), einheit)}`);
-  teile.push(portionspreisText(s));
-  return teile.join(' · ');
-}
-
-export function Sorten({ bestand, baukasten, onGespeichert }: Props) {
-  // null = kein Formular offen (neue Sorten legt der Knopf in der unteren Leiste an)
-  const [bearbeiten, setBearbeiten] = useState<Sorte | null>(null);
-
-  return (
-    <>
-      {ARTEN_INFO.map((art) => {
-        const sorten = bestand
-          .filter((s) => artVon(s) === art.id)
-          .sort((a, b) => a.name.localeCompare(b.name, 'de'));
-        return (
-          <section key={art.id} className="gruppe">
-            <h2 className="abschnitt-titel">{art.mehrzahl}</h2>
-            {sorten.length === 0 ? (
-              <p className="leise klein gruppe-leer">Noch keine – {art.erklaerung}.</p>
-            ) : (
-              <ul className="liste">
-                {sorten.map((s) => (
-                  <li key={s.id} className={`zeile f-${s.farbe}`}>
-                    <span className="farbpunkt" aria-hidden="true" />
-                    <button type="button" className="zeile-info" onClick={() => setBearbeiten(s)}>
-                      <span className="zeile-name">{s.name}</span>
-                      <span className="zeile-details">{details(s)}</span>
-                    </button>
-                    <span className="pfeil" aria-hidden="true">
-                      <Icon name="pfeil" groesse={18} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        );
-      })}
-
-      {bearbeiten && (
-        <SorteFormular
-          sorte={bearbeiten}
-          baukasten={baukasten}
-          onFertig={(text) => {
-            setBearbeiten(null);
-            onGespeichert(text);
-          }}
-          onSchliessen={() => setBearbeiten(null)}
-        />
-      )}
-    </>
-  );
-}
+import { artVon, portionspreisText, euroZuCent } from './format';
+import { GERICHTSTYPEN, GEWUERZRICHTUNGEN } from '../supabase/functions/_shared/kombi/typen.ts';
+import { GERICHT_EMOJI, GERICHT_NAME, TYPISCHE_GERICHTE } from '../supabase/functions/_shared/kombi/rollen.ts';
 
 /** Ganze Zahl ≥ min, sonst null */
 function ganzeZahl(text: string, min: number): number | null {
@@ -85,16 +25,22 @@ const MEHRDEUTIG = /^(tk[- ]?)?(pizza|suppe|bolognese|sosse|soße|sauce|curry|ei
 /** Vorschläge für die Portionsgröße je Einheit */
 const PORTION_VORSCHLAG: Record<Einheit, string> = { portion: '1', stueck: '1', g: '125', ml: '250' };
 
+/** Gerichtsarten, die man einer Sorte zuordnen kann (ohne „aufwärmen“/„sonstiges“) */
+const WAEHLBAR = GERICHTSTYPEN.filter((t) => t !== 'aufwaermen' && t !== 'sonstiges');
+
 type FormularProps = {
   sorte: Sorte | null;
   baukasten: boolean;
-  /** Vorbelegung für eine neue Sorte, z. B. aus einer Baustein-Idee */
+  /** Migration „planung_einkauf“: Gerichtsarten und Richtung speicherbar */
+  planung?: boolean;
+  /** Vorbelegung für eine neue Sorte, z. B. aus einer Komponenten-Idee */
   vorlage?: Partial<SorteDaten>;
-  onFertig: (text: string) => void;
+  titel?: string;
+  onFertig: (text: string, id: number) => void;
   onSchliessen: () => void;
 };
 
-export function SorteFormular({ sorte, baukasten, vorlage, onFertig, onSchliessen }: FormularProps) {
+export function SorteFormular({ sorte, baukasten, planung = false, vorlage, titel, onFertig, onSchliessen }: FormularProps) {
   const start = { ...vorlage, ...(sorte ?? {}) } as Partial<Sorte>;
   const [name, setName] = useState(start.name ?? '');
   const [art, setArt] = useState<Art>(sorte ? artVon(sorte) : vorlage?.art ?? 'komponente');
@@ -111,6 +57,8 @@ export function SorteFormular({ sorte, baukasten, vorlage, onFertig, onSchliesse
   const [notiz, setNotiz] = useState(start.notiz ?? '');
   const [mindest, setMindest] = useState(String(start.mindestbestand ?? 0));
   const [haltbar, setHaltbar] = useState(String(start.haltbar_tage ?? 90));
+  const [gerichtstypen, setGerichtstypen] = useState<Gerichtstyp[]>(start.gerichtstypen ?? []);
+  const [richtung, setRichtung] = useState<Gewuerzrichtung | null>(start.richtung ?? null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [speichert, setSpeichert] = useState(false);
 
@@ -160,6 +108,11 @@ export function SorteFormular({ sorte, baukasten, vorlage, onFertig, onSchliesse
     if (kosten_menge === null) return 'Preis gilt für: bitte eine ganze Zahl ab 1 eingeben.';
     if (teile.length > 30) return 'Zusammensetzung: höchstens 30 Bestandteile.';
     if (notiz.length > 500) return 'Rezept/Notiz: höchstens 500 Zeichen.';
+    // erst ab Migration „planung_einkauf“ – sonst würde das Speichern an unbekannten Spalten scheitern
+    if (planung) {
+      daten.gerichtstypen = gerichtstypen.length ? gerichtstypen : null;
+      daten.richtung = richtung;
+    }
     return {
       ...daten,
       art,
@@ -182,18 +135,21 @@ export function SorteFormular({ sorte, baukasten, vorlage, onFertig, onSchliesse
     setFehler(null);
     setSpeichert(true);
     try {
-      await speichereSorte(sorte?.id ?? null, daten);
-      onFertig(sorte ? `${daten.name} gespeichert.` : `${daten.name} angelegt.`);
+      const id = await speichereSorte(sorte?.id ?? null, daten);
+      onFertig(sorte ? `${daten.name} gespeichert.` : `${daten.name} angelegt.`, id);
     } catch (err) {
       setFehler(fehlerText(err));
       setSpeichert(false);
     }
   }
 
-  const detailsOffen = !!sorte && (!!sorte.herkunft || !!sorte.zusammensetzung?.length || !!sorte.notiz);
+  const detailsOffen = !!vorlage || (!!sorte && (!!sorte.herkunft || !!sorte.zusammensetzung?.length || !!sorte.notiz || !!sorte.gerichtstypen?.length));
+  const typisch = farbe ? TYPISCHE_GERICHTE[farbe] : [];
+  const umschalten = (t: Gerichtstyp) =>
+    setGerichtstypen((alt) => (alt.includes(t) ? alt.filter((x) => x !== t) : [...alt, t]));
 
   return (
-    <Blatt titel={sorte ? 'Sorte bearbeiten' : 'Neue Sorte'} onSchliessen={onSchliessen}>
+    <Blatt titel={titel ?? (sorte ? 'Sorte bearbeiten' : 'Neue Sorte')} onSchliessen={onSchliessen}>
       <form className="formular" onSubmit={speichern} noValidate>
         <label className="feld">
           <span>Name</span>
@@ -314,6 +270,39 @@ export function SorteFormular({ sorte, baukasten, vorlage, onFertig, onSchliesse
                   placeholder="z. B. Tomatensoße, Mozzarella, Basilikum" />
                 <small>Mit Komma trennen. Leer = unbekannt.</small>
               </label>
+              {planung && (
+                <fieldset className="feld">
+                  <legend>Passt in</legend>
+                  <div className="auswahl-chips">
+                    {WAEHLBAR.map((t) => (
+                      <button key={t} type="button" className={gerichtstypen.includes(t) ? 'gewaehlt' : ''}
+                        aria-pressed={gerichtstypen.includes(t)} onClick={() => umschalten(t)}>
+                        <span aria-hidden="true">{GERICHT_EMOJI[t]}</span> {GERICHT_NAME[t]}
+                      </button>
+                    ))}
+                  </div>
+                  <small>
+                    {gerichtstypen.length
+                      ? `${gerichtstypen.length} gewählt – danach richtet sich „Damit möglich“.`
+                      : typisch.length
+                        ? `Leer = typisch für die Kategorie: ${typisch.map((t) => GERICHT_NAME[t]).join(', ')}.`
+                        : 'Leer = keine Angabe.'}
+                  </small>
+                </fieldset>
+              )}
+              {planung && (
+                <fieldset className="feld">
+                  <legend>Geschmacksrichtung</legend>
+                  <div className="auswahl-chips">
+                    {([null, ...GEWUERZRICHTUNGEN] as (Gewuerzrichtung | null)[]).map((r) => (
+                      <button key={String(r)} type="button" className={richtung === r ? 'gewaehlt' : ''}
+                        aria-pressed={richtung === r} onClick={() => setRichtung(r)}>
+                        {r ?? 'offen'}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
               <label className="feld">
                 <span>Rezept / Notiz</span>
                 <textarea rows={2} maxLength={500} value={notiz} onChange={(e) => setNotiz(e.target.value)}

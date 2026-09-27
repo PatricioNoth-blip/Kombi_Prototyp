@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   Aktion, BausteinIdee, Einkaufsvorschlag, FeedbackEintrag, Gericht, GerichtKurz, Modus, Optionen, Snapshot,
 } from '../supabase/functions/_shared/kombi/typen.ts';
@@ -6,27 +6,42 @@ import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
 import { aehnlichkeit } from '../supabase/functions/_shared/kombi/aehnlichkeit.ts';
 import { berechneLeitplanken, verletztAusschluss } from '../supabase/functions/_shared/kombi/praeferenz.ts';
 import { GRUNDAUSSTATTUNG, kuehlschrankEintraege } from '../supabase/functions/_shared/kombi/snapshot.ts';
-import { kochenBestaetigen, postenText, type EntnahmePosten } from '../supabase/functions/_shared/kombi/aktionen.ts';
 import { kostenText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { uuid } from '../supabase/functions/_shared/kombi/id.ts';
-import * as api from './api';
+import { kategorieFuer, type PlanStand } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
+import { reserviertAusser, restSnapshot, type AuftauEintrag } from '../supabase/functions/_shared/kombi/planung.ts';
 import { fehlerText, type Sorte } from './api';
 import {
   favoritenAus, holeVorschlaege, ladeRezepte, ladeSnapshot, protokolliereFeedback, protokolliereVorschlaege,
   speichereRezept, starteSession, type Quelle, type Rezept,
 } from './essenApi';
 import { GerichtKarte } from './GerichtKarte';
-import { KochenBlatt } from './KochenBlatt';
+import { KochAnsicht } from './KochAnsicht';
+import { Woche, TagWahl } from './Woche';
+import { eintragHinzufuegen, planeGericht, type Plan } from './haushalt';
 import { Blatt } from './Blatt';
 import { SorteFormular } from './Sorten';
 import { Icon, type IconName } from './Icon';
 import { ARTEN_INFO, farbe as farbInfo, lagerort as lagerInfo } from './farben';
+import { tagName } from './dashboard';
+import type { NavZustand } from './navigation';
 
 type Props = {
   bestand: Sorte[];
   baukasten: boolean;
-  onMeldung: (text: string, rueckgaengig?: number[]) => void;
-  onBestandGeaendert: () => void;
+  /** Migration „planung_einkauf“ eingespielt */
+  planung: boolean;
+  heute: string;
+  plaene: Plan[];
+  proPlan: Map<string, PlanStand[]>;
+  /** für Pläne reserviert – wird nicht noch einmal vorgeschlagen */
+  reserviert: Map<number, number>;
+  auftauEintraege: AuftauEintrag[];
+  auftauen: ReactNode;
+  nav: NavZustand['essen'];
+  onNav: (teil: Partial<NavZustand['essen']>) => void;
+  onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void;
+  onGeaendert: () => void;
 };
 
 /** Veränderlicher Kontext einer „Was essen wir?“-Session. */
@@ -42,6 +57,8 @@ type Session = {
   protokolliert: Set<string>;
   /** Protokoll-Schreibvorgänge nacheinander – Feedback nie vor seinem Vorschlag */
   warteschlange: Promise<void>;
+  /** normal oder Resteverwertung – gilt für alle weiteren Vorschläge der Session */
+  grundmodus: Modus;
 };
 
 type Entscheidung = 'like' | 'dislike' | 'similar' | 'skip';
@@ -69,7 +86,9 @@ function ladeVorlieben(): { optionen: Optionen; kuehlschrank: string } {
 
 const wenigBewegung = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Props) {
+export function Essen({
+  bestand, baukasten, planung, heute, plaene, proPlan, reserviert, auftauEintraege, auftauen, nav, onNav, onMeldung, onGeaendert,
+}: Props) {
   const [optionen, setOptionen] = useState<Optionen>(() => ladeVorlieben().optionen);
   const [kuehlschrank, setKuehlschrank] = useState(() => ladeVorlieben().kuehlschrank);
   const session = useRef<Session | null>(null);
@@ -84,7 +103,9 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
   const [laedt, setLaedt] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [gemocht, setGemocht] = useState(false);
-  const [kochen, setKochen] = useState<Gericht | null>(null);
+  const [kochen, setKochen] = useState<{ g: Gericht; planId: string | null } | null>(null);
+  const [einplanen, setEinplanen] = useState<Gericht | null>(null);
+  const [ergebnisHinweis, setErgebnisHinweis] = useState<string | null>(null);
   const [bausteinFormular, setBausteinFormular] = useState<BausteinIdee | null>(null);
   const [rezepte, setRezepte] = useState<Rezept[]>([]);
   const [rezeptOffen, setRezeptOffen] = useState<Rezept | null>(null);
@@ -132,6 +153,7 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
       setEinkauf(e.einkauf);
       setNotfall(e.notfall);
       setBaustein(e.baustein_idee);
+      setErgebnisHinweis(e.hinweis ?? null);
       s.puffer = [...e.gerichte];
       if (s.gespeichert) {
         const alle = [...e.gerichte, ...(e.einkauf ? [e.einkauf] : []), ...(e.baustein_idee ? [e.baustein_idee] : [])];
@@ -148,20 +170,21 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
     }
   }
 
-  async function starten() {
+  async function starten(grundmodus: Modus = { art: 'normal' }) {
     setLaedt(true);
     setFehler(null);
     try {
-      const snapshot = await ladeSnapshot(kuehlschrank);
+      // Nur der freie Vorrat: was für geplante Mahlzeiten reserviert ist, wird nicht noch einmal verplant.
+      const snapshot = restSnapshot(await ladeSnapshot(kuehlschrank), reserviert);
       const id = uuid();
       const gespeichert = await starteSession(id, optionen, kuehlschrank).catch(() => false);
       const s: Session = {
-        id, gespeichert, snapshot, optionen, kuehlschrank,
+        id, gespeichert, snapshot, optionen, kuehlschrank, grundmodus,
         gesehen: [], feedback: [], puffer: [], protokolliert: new Set(), warteschlange: Promise.resolve(),
       };
       session.current = s;
       setOptionenOffen(false);
-      await anfordern(s, { art: 'normal' });
+      await anfordern(s, grundmodus);
     } catch (err) {
       setFehler(fehlerText(err));
       setLaedt(false);
@@ -178,6 +201,7 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
     setQuelle(null);
     setGemocht(false);
     setOptionenOffen(false);
+    setErgebnisHinweis(null);
   }
 
   function merkeFeedback(g: Gericht, aktion: Aktion) {
@@ -208,7 +232,7 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
       }
       if (aktion === 'dislike') {
         // Vorgemerkte Vorschläge, die dem abgelehnten zu sehr ähneln oder jetzt ausgeschlossen sind, fallen weg.
-        const l = berechneLeitplanken(s.feedback, { art: 'normal' });
+        const l = berechneLeitplanken(s.feedback, s.grundmodus);
         s.puffer = s.puffer.filter((p) => aehnlichkeit(kurz(p), kurz(g)) < 0.6 && !verletztAusschluss(kurz(p), l));
         setMuster(l.muster);
       }
@@ -216,7 +240,7 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
         // „Gerade etwas anderes“: sehr Ähnliches aus dem Puffer zurückstellen – ohne etwas zu lernen.
         s.puffer = s.puffer.filter((p) => aehnlichkeit(kurz(p), kurz(g)) < 0.5);
       }
-      if (!zeigeNaechstes(s)) void anfordern(s, { art: 'normal' });
+      if (!zeigeNaechstes(s)) void anfordern(s, s.grundmodus);
     };
     if (wenigBewegung()) weiterMachen();
     else {
@@ -228,7 +252,7 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
   function weiter() {
     const s = session.current;
     if (!s) return;
-    if (!zeigeNaechstes(s)) void anfordern(s, { art: 'normal' });
+    if (!zeigeNaechstes(s)) void anfordern(s, s.grundmodus);
   }
 
   async function rezeptSpeichern(g: Gericht) {
@@ -245,20 +269,43 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
     }
   }
 
-  async function gekocht(g: Gericht, posten: EntnahmePosten[]) {
-    const ergebnis = await kochenBestaetigen(posten, { entnehmen: api.entnehmen });
-    setKochen(null);
-    setRezeptOffen(null);
+  function gekocht(g: Gericht) {
     if (session.current && aktuell?.id === g.id) merkeFeedback(g, 'cook');
-    if (ergebnis.fehler.length) {
-      onMeldung(`Nicht alles entnommen: ${ergebnis.fehler.map((f) => `${f.name} – ${f.meldung}`).join(' ')}`, ergebnis.bewegungIds);
-    } else {
-      onMeldung(`Guten Appetit! Entnommen: ${posten.map(postenText).join(', ')}.`, ergebnis.bewegungIds);
+    onGeaendert();
+  }
+
+  async function fehlendesMerken(g: Gericht) {
+    for (const f of g.fehlt) {
+      await eintragHinzufuegen({
+        name: f.name, menge: f.menge, einheit: f.einheit, kategorie: kategorieFuer(f.name), quelle: 'rezept', grund: `für ${g.name}`,
+      });
     }
-    onBestandGeaendert();
+    onGeaendert();
+  }
+
+  async function planen(g: Gericht, datum: string | null) {
+    setEinplanen(null);
+    try {
+      await planeGericht(g, datum);
+      const s = session.current;
+      if (s && aktuell?.id === g.id) {
+        // reserviert → aus dem Snapshot dieser Session nehmen, damit es nicht noch einmal vorgeschlagen wird
+        s.snapshot = restSnapshot(s.snapshot, new Map(g.zutaten.filter((z) => z.quelle === 'bestand' && z.block_typ_id !== null && z.menge !== null)
+          .map((z) => [z.block_typ_id as number, z.menge as number])));
+      }
+      onMeldung(`${g.name}: ${datum ? tagName(heute, datum) : 'flexibel'} eingeplant.${g.fehlt.length ? ' Fehlendes steht auf der Einkaufsliste.' : ''}`);
+      onGeaendert();
+    } catch (err) {
+      onMeldung(fehlerText(err));
+    }
   }
 
   const reste = kuehlschrankEintraege(kuehlschrank).length;
+  const heuteGeplant = plaene
+    .filter((p) => p.art === 'mahlzeit' && p.daten.gericht && p.datum !== null && p.datum <= heute)
+    .sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? ''));
+  const reserviertSorten = [...reserviert.values()].filter((m) => m > 0).length;
+  const favoriten = favoritenAus(rezepte);
   const optionenAendern = (neu: Partial<Optionen>) => {
     const o = { ...optionen, ...neu };
     setOptionen(o);
@@ -295,8 +342,25 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
     </div>
   );
 
-  return (
-    <section className="essen">
+  const heuteAnsicht = (
+    <>
+      {planung && heuteGeplant.length > 0 && (
+        <section className="heute-geplant" aria-label="Heute geplant">
+          {heuteGeplant.map((p) => (
+            <div key={p.id} className="heute-plan">
+              <span className="plan-emoji" aria-hidden="true">{p.daten.gericht!.emoji}</span>
+              <span className="plan-titel">
+                <span className={`plan-tag${p.datum! < heute ? ' vorbei' : ' heute'}`}>{p.datum === heute ? 'Heute geplant' : `Geplant: ${tagName(heute, p.datum!)}`}</span>
+                <strong>{p.titel}</strong>
+              </span>
+              <button type="button" className="knopf klein-knopf haupt-klein" onClick={() => setKochen({ g: p.daten.gericht!, planId: p.id })}>
+                <Icon name="pfanne" groesse={16} /> Kochen
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
       {!gestartet && (
         <div className="essen-start">
           <div className="karte-flach">{optionenFelder}</div>
@@ -314,12 +378,21 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
           <button type="button" className="knopf haupt" onClick={() => void starten()} disabled={laedt}>
             <Icon name="funken" /> {laedt ? 'Kombi überlegt …' : 'Vorschläge holen'}
           </button>
+          <button type="button" className="knopf breit" onClick={() => void starten({ art: 'reste' })} disabled={laedt}>
+            <Icon name="blatt" /> Reste zuerst verwerten
+          </button>
+          {reserviertSorten > 0 && (
+            <p className="leise klein essen-reserviert">
+              <Icon name="kalender" groesse={14} /> {reserviertSorten} {reserviertSorten === 1 ? 'Sorte ist' : 'Sorten sind'} ganz oder teilweise für geplante Mahlzeiten reserviert – das wird nicht noch einmal vorgeschlagen.
+            </p>
+          )}
         </div>
       )}
 
       {gestartet && (
         <div className="essen-leiste">
           <p className="essen-kurz">
+            {session.current?.grundmodus.art === 'reste' && <strong className="modus-marke">Reste verwerten · </strong>}
             {optionen.personen} {optionen.personen === 1 ? 'Person' : 'Personen'} · {optionen.max_minuten ? `${optionen.max_minuten} Min.` : 'Zeit egal'}
             {optionen.guenstig && ' · günstig'}{reste > 0 && ` · ${reste} ${reste === 1 ? 'Rest' : 'Reste'}`}
           </p>
@@ -357,6 +430,10 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
             </p>
           )}
         </div>
+      )}
+
+      {!laedt && gestartet && ergebnisHinweis && (
+        <p className="essen-hinweis"><Icon name="info" groesse={18} /> {ergebnisHinweis}</p>
       )}
 
       {!laedt && gestartet && !aktuell && einkauf && (
@@ -435,9 +512,14 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
           <button type="button" onClick={() => void rezeptSpeichern(aktuell)} aria-label="Rezept speichern">
             <span className="kreis"><Icon name="stern" /></span>Speichern
           </button>
-          <button type="button" className="haupt" onClick={() => setKochen(aktuell)} aria-label="Heute kochen">
+          <button type="button" className="haupt" onClick={() => setKochen({ g: aktuell, planId: null })} aria-label="Heute kochen">
             <span className="kreis"><Icon name="pfanne" /></span>Heute kochen
           </button>
+          {planung && (
+            <button type="button" onClick={() => setEinplanen(aktuell)} aria-label="Für einen Tag einplanen">
+              <span className="kreis"><Icon name="kalender" /></span>Einplanen
+            </button>
+          )}
           <button type="button" onClick={weiter} aria-label="Weitere Vorschläge">
             <span className="kreis"><Icon name="weiter" /></span>Weiter
           </button>
@@ -455,8 +537,56 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
         </div>
       )}
 
+    </>
+  );
+
+  return (
+    <section className="essen">
+      {planung && (
+        <div className="segment essen-umschalter" role="tablist" aria-label="Essen">
+          <button type="button" role="tab" aria-selected={nav.ansicht === 'heute'} className={nav.ansicht === 'heute' ? 'gewaehlt' : ''} onClick={() => onNav({ ansicht: 'heute' })}>
+            Heute
+          </button>
+          <button type="button" role="tab" aria-selected={nav.ansicht === 'woche'} className={nav.ansicht === 'woche' ? 'gewaehlt' : ''} onClick={() => onNav({ ansicht: 'woche' })}>
+            Woche{plaene.filter((p) => p.art === 'mahlzeit').length > 0 ? ` · ${plaene.filter((p) => p.art === 'mahlzeit').length}` : ''}
+          </button>
+        </div>
+      )}
+
+      {planung && nav.ansicht === 'woche' ? (
+        <Woche
+          bestand={bestand}
+          plaene={plaene}
+          proPlan={proPlan}
+          reserviert={reserviert}
+          auftauEintraege={auftauEintraege}
+          auftauen={auftauen}
+          optionen={optionen}
+          favoriten={favoriten}
+          planung={planung}
+          heute={heute}
+          onKochen={(g, planId) => setKochen({ g, planId })}
+          onMeldung={onMeldung}
+          onGeaendert={onGeaendert}
+        />
+      ) : heuteAnsicht}
+
       {kochen && (
-        <KochenBlatt gericht={kochen} bestand={bestand} onBestaetigen={(p) => gekocht(kochen, p)} onSchliessen={() => setKochen(null)} />
+        <KochAnsicht
+          gericht={kochen.g}
+          planId={kochen.planId}
+          bestand={bestand}
+          reserviert={reserviertAusser(proPlan, plaene, kochen.planId)}
+          planung={planung}
+          onGekocht={() => gekocht(kochen.g)}
+          onMeldung={onMeldung}
+          onFehlendesMerken={planung ? () => fehlendesMerken(kochen.g) : undefined}
+          onSchliessen={() => setKochen(null)}
+        />
+      )}
+
+      {einplanen && (
+        <TagWahl heute={heute} titel={`${einplanen.name} einplanen`} untertitel="Für welchen Tag?" onWahl={(d) => void planen(einplanen, d)} onSchliessen={() => setEinplanen(null)} />
       )}
 
       {rezeptOffen && (
@@ -467,7 +597,7 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
             type="button"
             className="knopf haupt"
             onClick={() => {
-              setKochen(rezeptOffen.daten);
+              setKochen({ g: rezeptOffen.daten, planId: null });
               setRezeptOffen(null);
             }}
           >
@@ -497,7 +627,7 @@ export function Essen({ bestand, baukasten, onMeldung, onBestandGeaendert }: Pro
             setBausteinFormular(null);
             setBaustein(null);
             onMeldung(`${text} Jetzt vorkochen und einbuchen.`);
-            onBestandGeaendert();
+            onGeaendert();
           }}
           onSchliessen={() => setBausteinFormular(null)}
         />

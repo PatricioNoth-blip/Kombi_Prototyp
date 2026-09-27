@@ -178,6 +178,39 @@ if (baukasten) {
   console.log('ℹ Migration „baukasten“ noch nicht eingespielt – die App läuft wie bisher, neue Felder sind ausgeblendet.');
 }
 
+// Migration „planung_einkauf“ ist ebenfalls optional: Ohne sie fehlen Einkaufsliste, Wochenplan, Auftauen, Herstellen.
+const planung = !(await db.from('plan').select('id', { head: true })).error;
+if (planung) {
+  for (const tabelle of ['plan', 'einkauf_eintrag', 'einkauf_status', 'einkauf_buchung', 'auftauen', 'nutzung']) {
+    await pruefe(`${tabelle} lesen`, async () => {
+      const { data, error } = await db.from(tabelle).select('*').limit(1000);
+      if (error) throw new Error(fehlerText(error));
+      return `${data.length} Zeilen`;
+    });
+  }
+  await pruefe('Bestand kennt Startmenge und Auftau-Status', async () => {
+    if (!('start_menge' in bestand[0]) || !('aufgetaut' in bestand[0])) throw new Error('Spalten fehlen in der View „bestand“');
+  });
+  await pruefe('kochen() erreichbar', async () =>
+    erwarteFehler(await db.rpc('kochen', { p_posten: [], p_plan_id: null }), 'P0001', 'Nichts zu entnehmen'));
+  await pruefe('herstellen() erreichbar', async () =>
+    erwarteFehler(await db.rpc('herstellen', { p_posten: [], p_block_typ_id: sorteId, p_menge: 0, p_ablauf_am: null, p_plan_id: null }), 'P0001', 'mindestens 1'));
+  await pruefe('kochen_rueckgaengig() erreichbar', async () =>
+    erwarteFehler(await db.rpc('kochen_rueckgaengig', { p_bewegung_ids: [], p_plan_id: null }), 'P0001', 'Nichts zum'));
+  await pruefe('einkauf_buchen() bucht nur Abgehaktes', async () =>
+    erwarteFehler(await db.rpc('einkauf_buchen', {
+      p_schluessel: '__live_check__', p_einheit: 'g', p_block_typ_id: sorteId, p_menge: 1, p_ablauf_am: null, p_preis_cent: null,
+    }), 'P0001', 'nicht als gekauft markiert'));
+  await pruefe('einkauf_rueckgaengig() erreichbar', async () =>
+    erwarteFehler(await db.rpc('einkauf_rueckgaengig', { p_buchung_id: -1 }), 'P0001', 'nicht gefunden'));
+  await pruefe('Einkaufsverlauf nicht direkt beschreibbar', async () =>
+    erwarteFehler(await db.from('einkauf_buchung').insert({ schluessel: 'x', einheit: 'g', block_typ_id: -1, menge: 1, bewegung_ids: [] }), '42501'));
+  await pruefe('Einkaufseinträge nicht löschbar (nur als gelöscht markierbar)', async () =>
+    erwarteFehler(await db.from('einkauf_eintrag').delete().eq('id', -1), '42501'));
+} else {
+  console.log('ℹ Migration „planung_einkauf“ noch nicht eingespielt – Einkaufsliste, Wochenplan, Auftauen und Herstellen sind ausgeblendet.');
+}
+
 // ───────── App im Browser ─────────
 const APP_URL = process.env.APP_URL;
 if (!APP_URL) {
@@ -194,22 +227,31 @@ if (!APP_URL) {
     if (m.type() === 'error' && !m.text().startsWith('Failed to load resource')) jsFehler.push(m.text());
   });
 
-  await pruefe('App startet mit der Übersicht', async () => {
+  await pruefe('App startet mit dem Vorrat', async () => {
     await page.goto(APP_URL);
-    await page.waitForSelector('.zeile, .fehlerbox, .karte', { timeout: 20000 });
+    await page.waitForSelector('.ort-kachel, .fehlerbox, .karte', { timeout: 20000 });
     if (await page.isVisible('.karte')) throw new Error('„Supabase ist noch nicht eingerichtet“ – .env fehlt beim Build');
     if (await page.isVisible('.fehlerbox')) throw new Error(await page.textContent('.fehlerbox'));
-    const zeilen = await page.locator('.zeile:visible').count();
-    if (zeilen !== bestand.length) throw new Error(`${zeilen} Zeilen statt ${bestand.length}`);
-    const wichtig = await page.locator('.wichtig li').allTextContents();
-    return `${zeilen} Sorten${wichtig.length ? `; Heute wichtig: ${wichtig.join(' | ')}` : ''}`;
+    const kacheln = await page.locator('.ort-kachel').allInnerTexts();
+    const wichtig = await page.locator('.wichtig-karte .wk-name').allTextContents();
+    const hinweis = await page.locator('main > .hinweisbox').allTextContents();
+    return `Lagerorte: ${kacheln.map((k) => k.replace(/\s+/g, ' ')).join(' | ')}; Heute wichtig: ${wichtig.join(', ') || '–'}` +
+      (hinweis.length ? `; Hinweis: ${hinweis.join(' ')}` : '');
   });
   await page.screenshot({ path: 'live-check-uebersicht.png', fullPage: true });
+
+  await pruefe('Alle Sorten als Karten', async () => {
+    await page.click('.alle-knopf');
+    await page.waitForSelector('.ort-ansicht .vorrat-karte');
+    const karten = await page.locator('.ort-ansicht .vorrat-karte').count();
+    if (karten !== bestand.length) throw new Error(`${karten} Karten statt ${bestand.length}`);
+    return `${karten} Sorten`;
+  });
 
   if (sorte && sorte.anzahl > 0) {
     await pruefe(`Detail ${sorte.name}: Chargen werden geladen`, async () => {
       const exakt = new RegExp(`^${sorte.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
-      await page.locator('.zeile-name', { hasText: exakt }).click();
+      await page.locator('.ort-ansicht .vorrat-karte').filter({ has: page.locator('.vk-name', { hasText: exakt }) }).locator('.vk-oeffnen').click();
       await page.waitForSelector('.chargen li', { timeout: 10000 });
       return `${await page.locator('.chargen li').count()} Charge(n)`;
     });
@@ -234,15 +276,55 @@ if (!APP_URL) {
     return `${sorten} Sorten zur Auswahl, ${zahlen} Mengenknöpfe`;
   });
 
-  await pruefe('Sorten-Ansicht und Formular-Prüfung', async () => {
-    await page.click('.tabbar button:has-text("Sorten")');
-    await page.waitForSelector('.zeile-details');
+  await pruefe('Neue Sorte: leeres Formular wird abgelehnt', async () => {
     await page.click('.aktion-knopf');
+    await page.click('.neue-sorte-knopf');
     await page.click('.formular button[type=submit]');
     const text = await page.textContent('.fehlertext');
     await page.keyboard.press('Escape');
     if (text !== 'Bitte einen Namen eingeben.') throw new Error(`Meldung: ${text}`);
-    return `${await page.locator('.zeile:visible').count()} Sorten, leeres Formular abgelehnt`;
+    return 'nichts gespeichert';
+  });
+
+  await pruefe('Zustand bleibt beim Wechsel zwischen Essen, Vorrat, Komponenten, Einkauf', async () => {
+    // Vorrat: „Alle Sorten“ ist noch offen; Essen: Text im Feld „Was muss weg?“ (nur im Browser, nicht in der DB)
+    await page.click('.tabbar button:has-text("Essen")');
+    await page.fill('.essen-start textarea', 'Live-Check Rest');
+    for (const b of ['Komponenten', 'Einkauf', 'Vorrat', 'Essen']) await page.click(`.tabbar button:has-text("${b}")`);
+    const text = await page.inputValue('.essen-start textarea');
+    await page.fill('.essen-start textarea', '');
+    await page.click('.tabbar button:has-text("Vorrat")');
+    const offen = await page.isVisible('.ort-ansicht');
+    if (text !== 'Live-Check Rest') throw new Error(`Essen-Feld: „${text}“`);
+    if (!offen) throw new Error('Vorrat: „Alle Sorten“ wurde geschlossen');
+    await page.click('.zurueck-knopf');
+    return 'Essen-Feld und geöffnete Vorratsansicht erhalten';
+  });
+
+  await pruefe('Komponenten: Funktionen und eigene Komponenten', async () => {
+    await page.click('.tabbar button:has-text("Komponenten")');
+    const rollen = await page.locator('.rollen-kachel').allInnerTexts();
+    if (rollen.length !== 4) throw new Error(`${rollen.length} Funktionen statt 4`);
+    return rollen.map((r) => r.replace(/\s+/g, ' ')).join(' | ');
+  });
+
+  await pruefe('Komponenten entdecken (KI oder Demo, speichert nichts)', async () => {
+    const vorher = (await ladeBestand()).length;
+    await page.click('.entdecken-start .knopf.haupt');
+    await page.waitForSelector('.idee-karte, .komponenten p.leise:not(.laden)', { timeout: 60000 });
+    const ideen = await page.locator('.idee-karte .idee-name').allTextContents();
+    const quelle = await page.locator('.komponenten .abstand-oben.leise').first().textContent().catch(() => '');
+    if ((await ladeBestand()).length !== vorher) throw new Error('Sorten wurden angelegt!');
+    return `${ideen.join(', ') || 'keine'} – ${quelle}`;
+  });
+
+  await pruefe('Einkauf', async () => {
+    await page.click('.tabbar button:has-text("Einkauf")');
+    if (planung) {
+      await page.waitForSelector('.einkauf-kopf');
+      return (await page.textContent('.einkauf-kopf')).replace(/\s+/g, ' ');
+    }
+    return (await page.textContent('main > div:not([hidden]) .leer-zustand p')) ?? '';
   });
 
   await pruefe('Keine JavaScript-Fehler', async () => {

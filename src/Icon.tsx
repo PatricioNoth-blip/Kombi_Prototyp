@@ -27,6 +27,14 @@ const PFADE = {
   korb: 'M3 9h18l-2 11H5L3 9Z M8 9l4-6 4 6',
   funken: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z',
   offen: 'M5 10h14v10H5z M8 10V7a4 4 0 0 1 7.5-2',
+  baustein: 'M4 8h3.5a2 2 0 1 1 4 0H15v3.5a2 2 0 1 1 0 4V19h-3.5a2 2 0 1 0-4 0H4v-3.5a2 2 0 1 0 0-4V8Z',
+  wagen: 'M3 4h2l2.3 10.5h10.4L20 7.5H6.1 M9 19.5h.01 M17 19.5h.01',
+  kalender: 'M4 6h16v14H4z M4 10h16 M8 3v4 M16 3v4',
+  haken: 'M5 12.5l4.5 4.5L19 7.5',
+  suche: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z M20 20l-4.2-4.2',
+  zurueck: 'M15 6l-6 6 6 6',
+  muell: 'M4 7h16 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3',
+  tauschen: 'M7 4 3 8l4 4 M3 8h14 M17 20l4-4-4-4 M21 16H7',
 } as const;
 
 export type IconName = keyof typeof PFADE;

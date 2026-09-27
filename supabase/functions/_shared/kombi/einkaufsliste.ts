@@ -12,7 +12,7 @@
 //   • Preise nur aus bekannten Daten: gespeicherter Preis „X € für N“ = eine Packung.
 //     Gekauft werden ganze Packungen – es wird kein Preis für genau 450 g erfunden.
 //   • Hier wird nichts gebucht. Einkauf → Vorrat läuft über einkauf_buchen() in der Datenbank.
-import type { Art, Einheit, Farbe, Lagerort } from './typen.ts';
+import type { Art, Einheit, Farbe, Herkunft, Lagerort } from './typen.ts';
 import { mengeText } from './mengen.ts';
 import { summiereKosten } from './kosten.ts';
 import { normalisiere } from './text.ts';
@@ -31,6 +31,8 @@ export type VorratSorte = {
   kosten_menge: number;
   mindestbestand: number;
   lagerort: Lagerort;
+  /** gekauft/selbstgemacht – unbekannt, wenn nicht angegeben */
+  herkunft?: Herkunft | null;
 };
 
 /** Eine benötigte Menge. menge null = Menge unbekannt („Menge offen“). */
@@ -322,4 +324,26 @@ export function mangelVorschlaege(sorten: VorratSorte[], zeilen: Einkaufszeile[]
   return sorten
     .filter((s) => s.mindestbestand > 0 && s.anzahl < s.mindestbestand && !aufListe.has(produktSchluessel(s.name)))
     .map((s) => ({ sorte: s, menge: s.mindestbestand - s.anzahl, aktion: s.art === 'zutat' ? 'kaufen' as const : 'nachkochen' as const }));
+}
+
+// ───────── Eingabe von Hand ─────────
+
+/**
+ * „500 g Zwiebeln“, „2 Paprika“, „1,5 kg Kartoffeln“, „Basilikum“ → Name, Menge, Einheit.
+ * kg/l werden in g/ml umgerechnet. Ohne Zahl bleibt die Menge offen (null).
+ */
+export function leseEingabe(text: string): { name: string; menge: number | null; einheit: Einheit | null } {
+  const t = text.trim().replace(/\s+/g, ' ');
+  const m = /^(\d+(?:[.,]\d+)?)\s*(kg|g|gramm|l|liter|ml|stk\.?|stück|stueck|x|×|portionen|portion|port\.?)?\s+(.+)$/i.exec(t);
+  if (!m) return { name: t.slice(0, 80), menge: null, einheit: null };
+  const zahl = Number(m[1].replace(',', '.'));
+  const e = (m[2] ?? '').toLowerCase().replace('.', '');
+  const name = m[3].trim().slice(0, 80);
+  const ganz = (n: number) => Math.max(1, Math.round(n));
+  if (e === 'kg') return { name, menge: ganz(zahl * 1000), einheit: 'g' };
+  if (e === 'g' || e === 'gramm') return { name, menge: ganz(zahl), einheit: 'g' };
+  if (e === 'l' || e === 'liter') return { name, menge: ganz(zahl * 1000), einheit: 'ml' };
+  if (e === 'ml') return { name, menge: ganz(zahl), einheit: 'ml' };
+  if (e.startsWith('port')) return { name, menge: ganz(zahl), einheit: 'portion' };
+  return { name, menge: ganz(zahl), einheit: 'stueck' };
 }
