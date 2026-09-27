@@ -278,6 +278,57 @@ reset role;
 \echo 'ok  Rechte mit Login (für später): dieselben Rechte'
 
 
+-- ─── „Was essen wir?“: Lagerort ───
+do $$
+declare v_id bigint;
+begin
+  assert (select count(*) from block_typ where lagerort = 'gefrierfach') >= 17,
+    'bestehende Sorten liegen im Gefrierfach';
+  insert into block_typ (name, farbe, lagerort, kosten_cent) values ('Test Pasta', 'gelb', 'vorrat', 12)
+  returning id into v_id;
+  perform einfrieren(v_id, 4);
+  assert (select lagerort from bestand where id = v_id) = 'vorrat', 'View bestand liefert lagerort';
+  assert (select anzahl from bestand where id = v_id) = 4, 'Vorrat wird wie Gefrierblöcke gezählt';
+  assert pg_temp.fehler($sql$insert into block_typ (name, farbe, lagerort) values ('x', 'rot', 'keller')$sql$)
+    like '%violates check constraint%', 'unbekannter Lagerort wird abgelehnt';
+end $$;
+\echo 'ok  Lagerort: Standard Gefrierfach, Vorrat wird normal gebucht, View liefert lagerort'
+
+
+-- ─── „Was essen wir?“: Sessions, Vorschläge, Feedback, Rezepte (ohne Login) ───
+set local role anon;
+do $$
+declare
+  v_session   uuid := gen_random_uuid();
+  v_vorschlag uuid := gen_random_uuid();
+  v_bestand   bigint := (select sum(anzahl) from bestand);
+  v_bew       bigint := (select count(*) from bewegung);
+begin
+  insert into koch_session (id, personen, max_minuten, kuehlschrank)
+  values (v_session, 2, 15, 'halbe Paprika, Frischkäse');
+  insert into vorschlag (id, session_id, art, name, daten, anbieter)
+  values (v_vorschlag, v_session, 'gericht', 'Linsen-Paprika-Pasta', '{"zutaten": []}', 'regelbasiert');
+  insert into vorschlag_feedback (vorschlag_id, aktion) values (v_vorschlag, 'like');
+  insert into rezept (name, daten, vorschlag_id) values ('Linsen-Paprika-Pasta', '{"zutaten": []}', v_vorschlag);
+
+  assert (select count(*) from vorschlag_feedback where vorschlag_id = v_vorschlag) = 1, 'Feedback lesbar';
+  assert (select count(*) from rezept where vorschlag_id = v_vorschlag) = 1, 'Rezept lesbar';
+
+  assert pg_temp.fehler(format('insert into vorschlag_feedback (vorschlag_id, aktion) values (%L, %L)', v_vorschlag, 'liebe'))
+    like '%violates check constraint%', 'unbekannte Aktion wird abgelehnt';
+  assert pg_temp.fehler(format('update vorschlag set name = %L where id = %L', 'x', v_vorschlag))
+    like 'permission denied%', 'Vorschläge sind nicht änderbar';
+  assert pg_temp.fehler(format('delete from vorschlag_feedback where vorschlag_id = %L', v_vorschlag))
+    like 'permission denied%', 'Feedback ist nicht löschbar';
+  assert pg_temp.fehler('delete from rezept') like 'permission denied%', 'Rezepte nicht löschbar (v1)';
+
+  assert (select sum(anzahl) from bestand) = v_bestand, 'Vorschläge und Feedback ändern den Bestand nicht';
+  assert (select count(*) from bewegung) = v_bew, 'keine Bewegungen durch Vorschläge';
+end $$;
+reset role;
+\echo 'ok  Was essen wir?: Session, Vorschlag, Feedback, Rezept anlegen und lesen – nichts änderbar, Bestand unberührt'
+
+
 rollback;
 \echo ''
 \echo 'Alle Tests bestanden.'

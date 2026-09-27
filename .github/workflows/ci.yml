@@ -36,4 +36,15 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - run: npm run test:ki
       - run: npm run build
+
+  edge-function:
+    name: Edge Function prüfen (Deno)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/was-essen/index.ts

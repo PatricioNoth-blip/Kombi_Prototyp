@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "bash scripts/test.sh"
+    "test": "npm run test:ki && npm run test:db",
+    "test:ki": "node --test \"tests/ki/*.test.ts\"",
+    "test:db": "bash scripts/test.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
@@ -21,6 +23,6 @@
     "vite": "^7.0.0"
   },
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.18"
   }
 }
