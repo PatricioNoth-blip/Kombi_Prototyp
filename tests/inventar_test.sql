@@ -242,19 +242,21 @@ set constraints all deferred;
 \echo 'ok  Nachvollziehbarkeit: Bestand = Summe der Bewegungen, Änderung ohne Bewegung scheitert'
 
 
--- ─── Zugriffsrechte: mit WG-Login ───
-set local role authenticated;
-do $$
+-- ─── Zugriffsrechte der App ───
+-- v0.1 läuft ohne Login (Rolle anon). Die Rolle authenticated behält dieselben Rechte,
+-- damit ein Login später ohne Umbau wieder eingeschaltet werden kann.
+create function pg_temp.pruefe_app_rechte(p_sorte text) returns void
+language plpgsql as $$
 declare v_id bigint;
 begin
-  assert (select count(*) from bestand) > 17, 'angemeldet: Bestand sichtbar';
-  assert (select count(*) from bewegung) > 0, 'angemeldet: Bewegungen sichtbar';
+  assert (select count(*) from bestand) > 17, 'Bestand sichtbar';
+  assert (select count(*) from bewegung) > 0, 'Bewegungen sichtbar';
 
-  insert into block_typ (name, farbe) values ('Test Rechte', 'schwarz') returning id into v_id;
+  insert into block_typ (name, farbe) values (p_sorte, 'schwarz') returning id into v_id;
   update block_typ set mindestbestand = 2, kosten_cent = 15 where id = v_id;
   perform einfrieren(v_id, 3);
   perform entnehmen(v_id, 1);
-  assert (select anzahl from bestand where id = v_id) = 2, 'angemeldet: buchen geht';
+  assert (select anzahl from bestand where id = v_id) = 2, 'buchen geht';
 
   assert pg_temp.fehler(format('update charge set menge_aktuell = 99 where block_typ_id = %s', v_id))
     like 'permission denied%', 'charge nicht direkt änderbar';
@@ -264,23 +266,16 @@ begin
   assert pg_temp.fehler(format('delete from block_typ where id = %s', v_id))
     like 'permission denied%', 'Sorten nicht löschbar';
 end $$;
-reset role;
-\echo 'ok  Rechte (angemeldet): lesen, Sorten pflegen, buchen – aber nichts direkt an Chargen/Bewegungen'
 
-
--- ─── Zugriffsrechte: ohne Login ───
 set local role anon;
-do $$
-begin
-  assert pg_temp.fehler('select * from bestand') like 'permission denied%', 'anon: kein Bestand';
-  assert pg_temp.fehler('select * from block_typ') like 'permission denied%', 'anon: keine Sorten';
-  assert pg_temp.fehler('select entnehmen(1, 1)') like 'permission denied%', 'anon: keine Entnahme';
-  assert pg_temp.fehler('select einfrieren(1, 1)') like 'permission denied%', 'anon: kein Einfrieren';
-  assert pg_temp.fehler($sql$insert into block_typ (name, farbe) values ('x', 'rot')$sql$)
-    like 'permission denied%', 'anon: keine neuen Sorten';
-end $$;
+do $$ begin perform pg_temp.pruefe_app_rechte('Test Rechte ohne Login'); end $$;
 reset role;
-\echo 'ok  Rechte (ohne Login): kein Zugriff'
+\echo 'ok  Rechte ohne Login: lesen, Sorten pflegen, buchen – aber nichts direkt an Chargen/Bewegungen'
+
+set local role authenticated;
+do $$ begin perform pg_temp.pruefe_app_rechte('Test Rechte mit Login'); end $$;
+reset role;
+\echo 'ok  Rechte mit Login (für später): dieselben Rechte'
 
 
 rollback;

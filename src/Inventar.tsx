@@ -8,7 +8,7 @@ import { Sorten } from './Sorten';
 
 type Meldung = { text: string; fehler?: boolean; rueckgaengig?: number[] };
 
-export function Inventar({ onAbmelden }: { onAbmelden: () => void }) {
+export function Inventar() {
   const [bestand, setBestand] = useState<Sorte[] | null>(null);
   const [ladefehler, setLadefehler] = useState<string | null>(null);
   const [ansicht, setAnsicht] = useState<'bestand' | 'sorten'>('bestand');
@@ -146,7 +146,6 @@ export function Inventar({ onAbmelden }: { onAbmelden: () => void }) {
               zeige({ text });
               void laden();
             }}
-            onAbmelden={onAbmelden}
           />
         )}
       </main>

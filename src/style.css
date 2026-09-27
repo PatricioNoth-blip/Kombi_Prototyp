@@ -282,8 +282,6 @@ h1, h2, h3 { line-height: 1.2; }
 
 .pfeil { font-size: 24px; color: var(--text-2); padding: 0 6px; }
 
-.abmelden { text-align: center; margin-top: 28px; }
-
 /* ───────── Leiste unten & Meldungen ───────── */
 .unten-leiste {
   position: fixed;
@@ -473,8 +471,6 @@ h1, h2, h3 { line-height: 1.2; }
 .feld small { color: var(--text-2); font-weight: 400; font-size: 13px; }
 
 input[type='text'],
-input[type='email'],
-input[type='password'],
 input[type='number'] {
   width: 100%;
   min-height: 52px;
@@ -518,7 +514,7 @@ input[type='number'] {
 }
 .chip.gewaehlt { border-color: var(--text); background: var(--text); color: var(--bg); }
 
-/* ───────── Login & Hinweise ───────── */
+/* ───────── Hinweis „nicht eingerichtet“ ───────── */
 .mitte {
   min-height: 100vh;
   min-height: 100dvh;

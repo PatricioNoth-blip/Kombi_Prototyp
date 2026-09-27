@@ -1,6 +1,7 @@
 node_modules/
 dist/
-.env
+# .env liegt bewusst im Repo (nur öffentliche Supabase-Werte).
+# Private Abweichungen gehören in .env.local – die wird nicht committet.
 .env.local
 *.log
 .DS_Store

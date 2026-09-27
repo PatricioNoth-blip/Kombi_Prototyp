@@ -2,7 +2,8 @@
 
 Minimales Inventar für das Kombi-Kochsystem: An Kochtagen werden Portionsblöcke eingefroren,
 abends entnommen. Die App zeigt den Bestand nach Farben und warnt bei **Nachkochen** und
-**Bald ablaufen**. Zwei Personen teilen sich über einen gemeinsamen WG-Login denselben Bestand.
+**Bald ablaufen**. Beide in der WG öffnen dieselbe Adresse und sehen denselben Bestand –
+einen Login gibt es in v0.1 bewusst nicht.
 
 **Stack:** Supabase (Postgres) · React + Vite (TypeScript) · GitHub Pages
 
@@ -14,49 +15,50 @@ abends entnommen. Die App zeigt den Bestand nach Farben und warnt bei **Nachkoch
 - **Rückgängig:** Nach jeder Buchung erscheint 5 Sekunden lang „Rückgängig“. Das bucht eine Korrektur, ohne etwas zu löschen.
 - **Sorten verwalten:** Name, Farbe, Größe, Mindestbestand, Haltbarkeit, Kosten.
 
+> **Ohne Login:** Wer die App-Adresse kennt, kann den Bestand ansehen und ändern. Die Adresse also
+> nur in der WG teilen. Löschen lässt sich trotzdem nichts: Jede Buchung bleibt in `bewegung`
+> nachvollziehbar, Sorten können nicht gelöscht werden.
+
 ## Einrichtung (einmalig, ca. 15 Minuten)
 
 ### 1. Supabase-Datenbank
 
 1. Auf [supabase.com](https://supabase.com) ein kostenloses Projekt anlegen. Als Region „Central EU (Frankfurt)“ wählen.
-2. Links **SQL Editor** öffnen, den Inhalt von
-   [`supabase/migrations/20260927120000_inventar.sql`](supabase/migrations/20260927120000_inventar.sql)
-   einfügen und **Run** klicken.
-3. Dasselbe mit [`supabase/seed.sql`](supabase/seed.sql) machen. Das legt die Beispieldaten an: 17 Sorten vom Kochtag 27.09.2026.
+2. Links **SQL Editor** öffnen und nacheinander diese drei Dateien einfügen und mit **Run** ausführen:
+   1. [`supabase/migrations/20260927120000_inventar.sql`](supabase/migrations/20260927120000_inventar.sql): Tabellen, Buchungsfunktionen, Rechte
+   2. [`supabase/migrations/20260927180000_ohne_login.sql`](supabase/migrations/20260927180000_ohne_login.sql): gibt der App ohne Login Zugriff
+   3. [`supabase/seed.sql`](supabase/seed.sql): Beispieldaten, 17 Sorten vom Kochtag 27.09.2026
 
-### 2. WG-Login anlegen
+   Wer die erste Datei schon ausgeführt hat, führt nur noch die zweite aus.
 
-1. **Authentication → Users → Add user → Create new user**: E-Mail und Passwort für die WG eintragen und „Auto Confirm User“ anhaken.
-2. **Wichtig:** Unter **Authentication → Sign In / Providers** die Option
-   **„Allow new users to sign up“ ausschalten**. Sonst könnte sich jeder, der die App-Adresse kennt, ein eigenes Konto anlegen.
-
-### 3. App lokal starten
+### 2. App lokal starten
 
 Voraussetzung: [Node.js](https://nodejs.org) 22 oder neuer.
 
 ```bash
 npm install
-cp .env.example .env     # dann ausfüllen, siehe unten
 npm run dev              # → http://localhost:5173
 ```
 
-In die `.env` gehören zwei Werte:
+Die Supabase-Werte stehen in der [`.env`](.env) im Repo:
 
 - `VITE_SUPABASE_URL`: die Project URL
 - `VITE_SUPABASE_KEY`: der **Publishable key** (bei älteren Projekten heißt er „anon public“)
 
-Beides steht in Supabase unter **Project Settings → API Keys** bzw. über den Knopf **Connect**. Der Schlüssel darf öffentlich sein: Die Daten schützen der Login und die Datenbankrechte.
+Beides steht in Supabase unter **Project Settings → API Keys** bzw. über den Knopf **Connect**.
+Der Publishable key ist öffentlich und steckt ohnehin in der fertigen App. **Niemals** den
+Secret key bzw. `service_role`-Key in die `.env` schreiben – das Repo ist öffentlich.
 
 Zum Testen auf dem Handy im selben WLAN: `npm run dev -- --host` starten und die angezeigte `http://192.168…:5173`-Adresse öffnen.
 
-### 4. Aufs Handy: GitHub Pages
+### 3. Aufs Handy: GitHub Pages
 
 1. Im GitHub-Repo unter **Settings → Pages → Source** „GitHub Actions“ wählen.
-2. Unter **Settings → Secrets and variables → Actions → Variables** zwei Variablen anlegen:
-   `SUPABASE_URL` und `SUPABASE_KEY` (dieselben Werte wie in der `.env`).
-3. Auf den Branch `main` pushen. Du kannst den Workflow „Veröffentlichen (GitHub Pages)“ auch von Hand starten.
+2. Auf den Branch `main` pushen. Du kannst den Workflow „Veröffentlichen (GitHub Pages)“ auch von Hand starten.
+   Er nimmt die Werte aus der `.env`. Sind unter **Settings → Secrets and variables → Actions → Variables**
+   `SUPABASE_URL` und `SUPABASE_KEY` gesetzt, haben diese Vorrang.
    Die App liegt dann unter `https://patricionoth-blip.github.io/Kombi_Prototyp/`.
-4. Auf beiden Handys öffnen, einmal einloggen und **„Zum Home-Bildschirm“** hinzufügen.
+3. Auf beiden Handys öffnen und **„Zum Home-Bildschirm“** hinzufügen.
 
 > Hinweis: Kostenlose Supabase-Projekte pausieren nach etwa einer Woche ohne Nutzung. Im Supabase-Dashboard lassen sie sich mit einem Klick wieder starten.
 
@@ -69,7 +71,7 @@ Die Tests prüfen die Akzeptanzkriterien direkt in der Datenbank:
 - „Nachkochen“ und „Bald ablaufen“ erscheinen richtig.
 - Jede Bestandsänderung steht in `bewegung`.
 - Rückgängig funktioniert.
-- Die Zugriffsrechte stimmen (ohne Login kein Zugriff).
+- Die Zugriffsrechte stimmen: Die App darf lesen, Sorten pflegen und buchen, aber Chargen und Bewegungen nicht direkt ändern.
 
 ```bash
 npm test
@@ -92,7 +94,7 @@ Bei jedem Push laufen die Tests und der App-Build außerdem automatisch in GitHu
 **Regeln in der Datenbank** (nicht in der App):
 
 - Bestände ändern sich nur über die Funktionen `einfrieren()`, `entnehmen()` und `rueckgaengig()`. Jede davon schreibt `charge` und `bewegung` in **einer** Transaktion.
-- Mit dem Login darf die App Chargen und Bewegungen nur **lesen**. Ein Wächter-Trigger prüft zusätzlich, dass der Bestand jeder Charge immer der Summe ihrer Bewegungen entspricht. Das gilt auch bei Änderungen von Hand im Supabase-Dashboard.
+- Die App darf Chargen und Bewegungen nur **lesen**. Ein Wächter-Trigger prüft zusätzlich, dass der Bestand jeder Charge immer der Summe ihrer Bewegungen entspricht. Das gilt auch bei Änderungen von Hand im Supabase-Dashboard.
 - `entnehmen()` sperrt die Sorte kurz. Drücken zwei Personen gleichzeitig „−1“, wird nacheinander gebucht, und nichts geht verloren.
 - „Bald ablaufen“ bedeutet: Die älteste nicht leere Charge ist älter als (Haltbarkeit − 14) Tage.
 - Das Datum gilt nach deutscher Zeit (Europe/Berlin).
@@ -103,6 +105,7 @@ Bei jedem Push laufen die Tests und der App-Build außerdem automatisch in GitHu
 
 ```
 supabase/migrations/…_inventar.sql   Tabellen, View, Buchungsfunktionen, Rechte
+supabase/migrations/…_ohne_login.sql Zugriff für die App ohne Login (v0.1)
 supabase/seed.sql                    Beispieldaten
 tests/inventar_test.sql              Tests der Akzeptanzkriterien
 tests/supabase_rollen.sql            bildet die Supabase-Rollen für lokale Tests nach
@@ -119,5 +122,6 @@ src/farben.ts, src/format.ts         Farbsystem, Datums- und Euro-Formatierung
 
 ## Bewusst nicht in v0.1
 
-Rezepte, Wochenplanung, Einkaufslisten, Rollen, Statistiken, KI und Push-Benachrichtigungen gibt es noch nicht.
+Login, Rezepte, Wochenplanung, Einkaufslisten, Rollen, Statistiken, KI und Push-Benachrichtigungen gibt es noch nicht.
+Ein Login lässt sich später ohne Umbau der Datenbank wieder einschalten, siehe Kommentar in der Migration „ohne_login“.
 Das Datenmodell lässt sie später zu: Kosten pro Block und die vollständige Bewegungshistorie sind schon vorhanden.

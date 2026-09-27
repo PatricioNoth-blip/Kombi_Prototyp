@@ -22,20 +22,25 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Supabase-Variablen prüfen
+      # Supabase-Werte kommen aus der .env im Repo. Sind die Repository-Variablen
+      # SUPABASE_URL/SUPABASE_KEY gesetzt, haben sie Vorrang. (Nur setzen, wenn nicht
+      # leer – eine leere Umgebungsvariable würde die .env sonst überdecken.)
+      - name: Supabase-Werte prüfen
         run: |
-          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_KEY" ]; then
-            echo "::error::Repository-Variablen SUPABASE_URL und SUPABASE_KEY fehlen (Settings → Secrets and variables → Actions → Variables)."
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_KEY" ]; then
+            echo "VITE_SUPABASE_URL=$SUPABASE_URL" >> "$GITHUB_ENV"
+            echo "VITE_SUPABASE_KEY=$SUPABASE_KEY" >> "$GITHUB_ENV"
+          elif ! grep -Eq '^VITE_SUPABASE_URL=https://' .env 2>/dev/null \
+            || grep -q 'DEIN-PROJEKT' .env \
+            || ! grep -Eq '^VITE_SUPABASE_KEY=.+' .env; then
+            echo "::error::Supabase-Werte fehlen: .env ausfüllen oder Repository-Variablen SUPABASE_URL und SUPABASE_KEY anlegen."
             exit 1
           fi
         env:
-          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          VITE_SUPABASE_KEY: ${{ vars.SUPABASE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ vars.SUPABASE_KEY }}
       - run: npm install
       - run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          VITE_SUPABASE_KEY: ${{ vars.SUPABASE_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

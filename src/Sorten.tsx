@@ -7,10 +7,9 @@ import { euro, euroZuCent } from './format';
 type Props = {
   bestand: Sorte[];
   onGespeichert: (text: string) => void;
-  onAbmelden: () => void;
 };
 
-export function Sorten({ bestand, onGespeichert, onAbmelden }: Props) {
+export function Sorten({ bestand, onGespeichert }: Props) {
   // null = kein Formular offen, 'neu' = neue Sorte anlegen
   const [bearbeiten, setBearbeiten] = useState<Sorte | 'neu' | null>(null);
 
@@ -50,12 +49,6 @@ export function Sorten({ bestand, onGespeichert, onAbmelden }: Props) {
           </section>
         );
       })}
-
-      <p className="abmelden">
-        <button type="button" className="link" onClick={onAbmelden}>
-          Abmelden
-        </button>
-      </p>
 
       <div className="unten-leiste">
         <button type="button" className="knopf haupt" onClick={() => setBearbeiten('neu')}>

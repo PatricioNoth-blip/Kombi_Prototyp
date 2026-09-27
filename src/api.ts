@@ -34,7 +34,9 @@ type DbFehler = { message: string; code?: string };
 
 function meldung(fehler: DbFehler): string {
   if (fehler.code === '23505') return 'Eine Sorte mit diesem Namen gibt es schon.';
-  if (fehler.code === '42501') return 'Keine Berechtigung – bitte ab- und wieder anmelden.';
+  if (fehler.code === '42501') {
+    return 'Keine Berechtigung – sind beide Migrationen in Supabase eingespielt? (siehe README)';
+  }
   if (/failed to fetch|networkerror|load failed/i.test(fehler.message)) {
     return 'Keine Verbindung zur Datenbank. Bist du online?';
   }
