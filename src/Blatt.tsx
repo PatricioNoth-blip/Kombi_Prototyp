@@ -1,9 +1,10 @@
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { Icon } from './Icon';
 
-type BlattProps = { titel: string; onSchliessen: () => void; children: ReactNode };
+type BlattProps = { titel: string; untertitel?: string; onSchliessen: () => void; children: ReactNode };
 
 /** Von unten einfahrendes Fenster (gut mit dem Daumen erreichbar). */
-export function Blatt({ titel, onSchliessen, children }: BlattProps) {
+export function Blatt({ titel, untertitel, onSchliessen, children }: BlattProps) {
   const titelId = useId();
 
   useEffect(() => {
@@ -27,10 +28,14 @@ export function Blatt({ titel, onSchliessen, children }: BlattProps) {
         aria-labelledby={titelId}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="blatt-griff" aria-hidden="true" />
         <div className="blatt-kopf">
-          <h2 id={titelId}>{titel}</h2>
-          <button type="button" className="rund" onClick={onSchliessen} aria-label="Schließen">
-            ✕
+          <div>
+            <h2 id={titelId}>{titel}</h2>
+            {untertitel && <p className="blatt-unter">{untertitel}</p>}
+          </div>
+          <button type="button" className="icon-knopf klein" onClick={onSchliessen} aria-label="Schließen">
+            <Icon name="schliessen" groesse={18} />
           </button>
         </div>
         {children}
@@ -43,11 +48,15 @@ type AnzahlProps = {
   werte: number[];
   aktion: string;
   deaktiviert?: boolean;
+  /** Beschriftung der Knöpfe, z. B. „250 g“ (sonst nur die Zahl) */
+  beschriftung?: (n: number) => string;
+  /** Platzhalter für das freie Feld, z. B. „Andere Menge in g“ */
+  platzhalter?: string;
   onWahl: (anzahl: number) => void;
 };
 
 /** Große Zahlenknöpfe (ein Tap = Buchung) plus Feld für andere Anzahlen. */
-export function AnzahlWahl({ werte, aktion, deaktiviert, onWahl }: AnzahlProps) {
+export function AnzahlWahl({ werte, aktion, deaktiviert, beschriftung, platzhalter, onWahl }: AnzahlProps) {
   const [eigene, setEigene] = useState('');
   const zahl = Number(eigene);
   const gueltig = Number.isInteger(zahl) && zahl >= 1;
@@ -59,7 +68,7 @@ export function AnzahlWahl({ werte, aktion, deaktiviert, onWahl }: AnzahlProps) 
 
   return (
     <>
-      <div className="zahlen">
+      <div className={`zahlen${beschriftung ? ' mit-einheit' : ''}`}>
         {werte.map((n) => (
           <button
             key={n}
@@ -67,9 +76,9 @@ export function AnzahlWahl({ werte, aktion, deaktiviert, onWahl }: AnzahlProps) 
             className="zahl"
             disabled={deaktiviert}
             onClick={() => onWahl(n)}
-            aria-label={`${n} ${aktion}`}
+            aria-label={`${beschriftung ? beschriftung(n) : n} ${aktion}`}
           >
-            {n}
+            {beschriftung ? beschriftung(n) : n}
           </button>
         ))}
       </div>
@@ -79,7 +88,7 @@ export function AnzahlWahl({ werte, aktion, deaktiviert, onWahl }: AnzahlProps) 
           inputMode="numeric"
           min={1}
           step={1}
-          placeholder="Andere Anzahl"
+          placeholder={platzhalter ?? 'Andere Anzahl'}
           aria-label="Andere Anzahl"
           value={eigene}
           onChange={(e) => setEigene(e.target.value)}

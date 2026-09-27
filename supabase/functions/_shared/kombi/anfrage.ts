@@ -2,16 +2,20 @@
 // feste Struktur, begrenzte Größen, nur erwartete Felder. So kann die Funktion nicht als
 // allgemeiner KI-Zugang missbraucht werden.
 import type {
-  Aktion, FeedbackEintrag, GerichtKurz, KiAnfrage, Modus, Optionen, Snapshot, SnapshotZutat,
+  Aktion, FeedbackEintrag, GerichtKurz, KiAnfrage, Modus, Optionen, PreisInfo, Snapshot, SnapshotZutat,
 } from './typen.ts';
+import { ARTEN, EINHEITEN } from './typen.ts';
 import { normalisiereEigenschaften } from './validierung.ts';
+import { saubereZusammensetzung } from './snapshot.ts';
 import { kuerze } from './text.ts';
 
-const GRENZEN = { zutaten: 300, preise: 300, gesehen: 60, feedback: 120, anzahl: 5 };
+const GRENZEN = { zutaten: 300, preise: 300, gesehen: 60, feedback: 120, favoriten: 10, anzahl: 5 };
+const MAX_MENGE = 1_000_000;
 const QUELLEN = ['bestand', 'kuehlschrank', 'grundausstattung'] as const;
 const FARBEN = ['rot', 'braun', 'gruen', 'gelb', 'weiss', 'schwarz', 'blau'] as const;
 const LAGERORTE = ['gefrierfach', 'kuehlschrank', 'vorrat'] as const;
 const AKTIONEN: Aktion[] = ['like', 'dislike', 'similar', 'skip', 'save', 'cook'];
+const HERKUENFTE = ['selbstgemacht', 'gekauft'] as const;
 
 export class AnfrageFehler extends Error {}
 
@@ -29,17 +33,43 @@ function zutat(x: unknown): SnapshotZutat | null {
   const id = kuerze(z?.id, 40);
   const name = kuerze(z?.name, 80);
   if (!quelle || !id || !name) return null;
+  const einheit = eins(z.einheit, EINHEITEN) ?? 'portion';
   return {
     id,
     quelle,
     name,
     farbe: eins(z.farbe, FARBEN),
     lagerort: eins(z.lagerort, LAGERORTE),
-    anzahl: zahlOderNull(z.anzahl, 0, 9999),
+    art: eins(z.art, ARTEN),
+    herkunft: eins(z.herkunft, HERKUENFTE),
+    einheit,
+    anzahl: zahlOderNull(z.anzahl, 0, MAX_MENGE),
+    portion_menge: einheit === 'portion' ? 1 : zahlOderNull(z.portion_menge, 1, MAX_MENGE) ?? 1,
     groesse_g: zahlOderNull(z.groesse_g, 1, 100000),
-    kosten_cent: zahlOderNull(z.kosten_cent, 0, 100000),
+    kosten_cent: zahlOderNull(z.kosten_cent, 0, 1_000_000),
+    kosten_menge: zahlOderNull(z.kosten_menge, 1, MAX_MENGE) ?? 1,
+    zusammensetzung: saubereZusammensetzung(z.zusammensetzung),
+    notiz: kuerze(z.notiz, 200) || null,
     bald_verbrauchen: z.bald_verbrauchen === true,
+    geoeffnet: z.geoeffnet === true,
+    rest: z.rest === true,
+    tage_bis_ablauf: zahlOderNull(z.tage_bis_ablauf, -3650, 3650),
     block_typ_id: zahlOderNull(z.block_typ_id, 1, Number.MAX_SAFE_INTEGER),
+  };
+}
+
+function preis(x: unknown): PreisInfo | null {
+  const p = x as Record<string, unknown>;
+  const name = kuerze(p?.name, 80);
+  const kosten = zahlOderNull(p?.kosten_cent, 0, 1_000_000);
+  if (!name || kosten === null) return null;
+  const einheit = eins(p.einheit, EINHEITEN) ?? 'portion';
+  return {
+    name,
+    kosten_cent: kosten,
+    kosten_menge: zahlOderNull(p.kosten_menge, 1, MAX_MENGE) ?? 1,
+    einheit,
+    portion_menge: einheit === 'portion' ? 1 : zahlOderNull(p.portion_menge, 1, MAX_MENGE) ?? 1,
   };
 }
 
@@ -63,10 +93,11 @@ export function pruefeAnfrage(roh: unknown): KiAnfrage {
   const snapshot: Snapshot = {
     datum: kuerze(s.datum, 30),
     zutaten: liste(s.zutaten, GRENZEN.zutaten).map(zutat).filter((z): z is SnapshotZutat => z !== null),
-    preise: liste(s.preise, GRENZEN.preise)
-      .map((p) => p as Record<string, unknown>)
-      .map((p) => ({ name: kuerze(p?.name, 80), kosten_cent: zahlOderNull(p?.kosten_cent, 0, 100000) }))
-      .filter((p): p is { name: string; kosten_cent: number } => !!p.name && p.kosten_cent !== null),
+    preise: liste(s.preise, GRENZEN.preise).map(preis).filter((p): p is PreisInfo => p !== null),
+    abgelaufen: liste(s.abgelaufen, 50)
+      .map((x) => x as Record<string, unknown>)
+      .map((x) => ({ name: kuerze(x?.name, 80), menge: zahlOderNull(x?.menge, 1, MAX_MENGE), einheit: eins(x?.einheit, EINHEITEN) ?? 'portion' }))
+      .filter((x): x is Snapshot['abgelaufen'][number] => !!x.name && x.menge !== null),
   };
 
   const o = (a.optionen ?? {}) as Record<string, unknown>;
@@ -89,10 +120,13 @@ export function pruefeAnfrage(roh: unknown): KiAnfrage {
   const anker = m?.art === 'aehnlich' ? gerichtKurz(m.zu) : null;
   const modus: Modus = anker ? { art: 'aehnlich', zu: anker } : { art: 'normal' };
 
+  const favoriten = liste(a.favoriten, GRENZEN.favoriten).map(gerichtKurz).filter((g): g is GerichtKurz => g !== null);
+
   return {
     snapshot,
     optionen,
     gesehen,
+    favoriten,
     feedback,
     modus,
     anzahl: zahlOderNull(a.anzahl, 1, GRENZEN.anzahl) ?? 3,

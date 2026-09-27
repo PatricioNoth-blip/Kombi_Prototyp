@@ -8,8 +8,14 @@
 //     2 in Folge    → anderer Gerichtstyp            (Curry → Reispfanne)
 //     3–4 in Folge  → zusätzlich andere Gewürzrichtung (→ Pasta)
 //     5+ in Folge   → komplett andere Richtung (auch anderer Sattmacher und Hauptzutat)
+// • „Gerade etwas anderes“ (skip) ist KEINE Ablehnung: Es wird nichts gelernt, nur die nächsten
+//   Vorschläge gehen kurz in eine andere Richtung.
 import type { Aktion, FeedbackEintrag, GerichtKurz, Leitplanken, Modus, Tendenz } from './typen.ts';
 import { normalisiere } from './text.ts';
+import { vielfaltSperre } from './vielfalt.ts';
+
+/** So viele letzte Entscheidungen zählen für „gerade etwas anderes“. */
+export const KURZFRISTIG = 3;
 
 const WIRKUNG: Record<Aktion, number> = {
   like: 1,
@@ -93,7 +99,15 @@ function musterTexte(tendenzen: Tendenz[], gemieden: Tendenz[]): string[] {
   return texte;
 }
 
-export function berechneLeitplanken(feedback: FeedbackEintrag[], modus: Modus): Leitplanken {
+/** Übersprungene Gerichte der letzten Entscheidungen – nur für den Moment meiden. */
+export function kurzfristigMeiden(feedback: FeedbackEintrag[]): GerichtKurz[] {
+  return feedback
+    .slice(-KURZFRISTIG)
+    .filter((f) => f.aktion === 'skip')
+    .map(({ name, eigenschaften, zutaten }) => ({ name, eigenschaften, zutaten }));
+}
+
+export function berechneLeitplanken(feedback: FeedbackEintrag[], modus: Modus, gesehen: GerichtKurz[] = []): Leitplanken {
   const tendenzen = lerneTendenzen(feedback);
   const gemieden = tendenzen.filter(
     (t) => t.negativ >= MIN_ENTSCHEIDUNGEN && t.score <= -SCHWELLE,
@@ -117,14 +131,17 @@ export function berechneLeitplanken(feedback: FeedbackEintrag[], modus: Modus): 
   const muster = musterTexte(tendenzen, gemieden);
   if (n >= 5) muster.push(`${n} Vorschläge in Folge passten nicht – ich öffne die Suche deutlich.`);
 
+  const anker = modus.art === 'aehnlich' ? modus.zu : null;
   return {
     radius,
     ablehnungen_in_folge: n,
     ausschluss,
     gemieden,
     beliebt,
+    kurzfristig_meiden: anker ? [] : kurzfristigMeiden(feedback),
+    vielfalt_sperre: vielfaltSperre(gesehen, anker),
     muster,
-    anker: modus.art === 'aehnlich' ? modus.zu : null,
+    anker,
   };
 }
 

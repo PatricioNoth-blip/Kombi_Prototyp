@@ -163,6 +163,21 @@ await pruefe('Sorten bearbeiten erlaubt', async () => {
   if (error) throw new Error(fehlerText(error));
 });
 
+// Migration „baukasten“ ist optional: Ohne sie läuft die App im Kompatibilitätsmodus.
+const baukasten = bestand.length > 0 && 'art' in bestand[0];
+if (baukasten) {
+  await pruefe('Baukasten: Art, Einheit, Ablauf und „geöffnet“ vorhanden', async () => {
+    const arten = [...new Set(bestand.map((s) => s.art))].join(', ');
+    return `Arten: ${arten}; geöffnet: ${bestand.filter((s) => s.geoeffnet > 0).length}, abgelaufen: ${bestand.filter((s) => s.abgelaufen > 0).length}`;
+  });
+  await pruefe('setze_geoeffnet() erreichbar', async () =>
+    erwarteFehler(await db.rpc('setze_geoeffnet', { p_charge_id: -1, p_geoeffnet: true }), 'P0001', 'gibt es nicht'));
+  await pruefe('setze_ablauf() erreichbar', async () =>
+    erwarteFehler(await db.rpc('setze_ablauf', { p_charge_id: -1, p_ablauf_am: null }), 'P0001', 'gibt es nicht'));
+} else {
+  console.log('ℹ Migration „baukasten“ noch nicht eingespielt – die App läuft wie bisher, neue Felder sind ausgeblendet.');
+}
+
 // ───────── App im Browser ─────────
 const APP_URL = process.env.APP_URL;
 if (!APP_URL) {
@@ -184,10 +199,10 @@ if (!APP_URL) {
     await page.waitForSelector('.zeile, .fehlerbox, .karte', { timeout: 20000 });
     if (await page.isVisible('.karte')) throw new Error('„Supabase ist noch nicht eingerichtet“ – .env fehlt beim Build');
     if (await page.isVisible('.fehlerbox')) throw new Error(await page.textContent('.fehlerbox'));
-    const zeilen = await page.locator('.zeile').count();
+    const zeilen = await page.locator('.zeile:visible').count();
     if (zeilen !== bestand.length) throw new Error(`${zeilen} Zeilen statt ${bestand.length}`);
-    const warnungen = await page.locator('.warnungen p').allTextContents();
-    return `${zeilen} Sorten${warnungen.length ? `; Warnungen: ${warnungen.join(' | ')}` : ''}`;
+    const wichtig = await page.locator('.wichtig li').allTextContents();
+    return `${zeilen} Sorten${wichtig.length ? `; Heute wichtig: ${wichtig.join(' | ')}` : ''}`;
   });
   await page.screenshot({ path: 'live-check-uebersicht.png', fullPage: true });
 
@@ -209,25 +224,25 @@ if (!APP_URL) {
     });
   }
 
-  await pruefe('Einfrieren-Dialog: Sorte → Anzahl (ohne zu buchen)', async () => {
-    await page.click('.unten-leiste .knopf');
+  await pruefe('Einbuchen-Dialog: Sorte → Menge (ohne zu buchen)', async () => {
+    await page.click('.aktion-knopf');
     const sorten = await page.locator('.sorte-knopf').count();
     await page.locator('.sorte-knopf').first().click();
     const zahlen = await page.locator('.zahl').count();
     await page.keyboard.press('Escape');
-    if (zahlen !== 9) throw new Error(`${zahlen} Zahlenknöpfe statt 9`);
-    return `${sorten} Sorten zur Auswahl, 9 Zahlenknöpfe`;
+    if (zahlen < 7) throw new Error(`nur ${zahlen} Mengenknöpfe`);
+    return `${sorten} Sorten zur Auswahl, ${zahlen} Mengenknöpfe`;
   });
 
   await pruefe('Sorten-Ansicht und Formular-Prüfung', async () => {
-    await page.click('.reiter button:has-text("Sorten")');
+    await page.click('.tabbar button:has-text("Sorten")');
     await page.waitForSelector('.zeile-details');
-    await page.click('.unten-leiste .knopf');
+    await page.click('.aktion-knopf');
     await page.click('.formular button[type=submit]');
     const text = await page.textContent('.fehlertext');
     await page.keyboard.press('Escape');
     if (text !== 'Bitte einen Namen eingeben.') throw new Error(`Meldung: ${text}`);
-    return `${await page.locator('.zeile').count()} Sorten, leeres Formular abgelehnt`;
+    return `${await page.locator('.zeile:visible').count()} Sorten, leeres Formular abgelehnt`;
   });
 
   await pruefe('Keine JavaScript-Fehler', async () => {

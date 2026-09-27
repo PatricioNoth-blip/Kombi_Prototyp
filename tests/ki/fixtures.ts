@@ -5,7 +5,7 @@ import type {
   Eigenschaften, FeedbackEintrag, GerichtKurz, KiAnbieter, KiAnfrage, KiAuftrag, Optionen, RohAntwort, Snapshot,
 } from '../../supabase/functions/_shared/kombi/typen.ts';
 
-const zeile = (id: number, name: string, farbe: BestandZeile['farbe'], groesse_g: number, kosten_cent: number, anzahl: number, extra: Partial<BestandZeile> = {}): BestandZeile =>
+export const zeile = (id: number, name: string, farbe: BestandZeile['farbe'], groesse_g: number, kosten_cent: number | null, anzahl: number, extra: Partial<BestandZeile> = {}): BestandZeile =>
   ({ id, name, farbe, groesse_g, kosten_cent, anzahl, bald_ablaufen: false, lagerort: 'gefrierfach', ...extra });
 
 export const SEED: BestandZeile[] = [

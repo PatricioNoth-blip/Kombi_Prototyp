@@ -94,15 +94,18 @@ describe('Konfiguration über Umgebungsvariablen', () => {
 });
 
 describe('Prompt', () => {
-  test('enthält Bestand mit IDs, Kühlschrank, Gesehenes und vorsichtige Hinweise – keine erfundenen Preise', () => {
+  test('enthält Haushalt nach Art mit IDs, Kühlschrank, Gesehenes und vorsichtige Hinweise – aber keine Preisbeträge', () => {
     const a: KiAuftrag = {
       ...anfrage({ snapshot: snapshot(SEED, 'halbe Paprika'), gesehen: [{ name: 'Curry A', eigenschaften: fb('dislike', 'x').eigenschaften, zutaten: [] }] }),
       leitplanken: berechneLeitplanken([fb('dislike', 'A', { gerichtstyp: 'curry' }), fb('dislike', 'B', { gerichtstyp: 'curry' })], { art: 'normal' }),
       notfall: false,
     };
     const text = auftragAlsText(a);
-    assert.match(text, /b3 \| Linsen gekocht \| Protein \(braun\)/);
-    assert.match(text, /0,08 € pro Block/);
+    assert.match(text, /## Komplettgerichte[^#]*b13 \| Pizza \| 4 Portionen \| Gefrierfach \| Zusammensetzung unbekannt/);
+    assert.match(text, /## Komponenten[^#]*b3 \| Linsen gekocht \| Protein \| 6 Portionen/);
+    assert.match(text, /## Einzelne Zutaten[^#]*b6 \| TK-Gemüsemix \| Gemüse/);
+    assert.match(text, /b3 [^\n]*€ \(sehr günstig\)/, 'Preisklasse statt Betrag');
+    assert.doesNotMatch(text, /\d+,\d\d €/, 'keine Euro-Beträge im Prompt');
     assert.match(text, /k1 \| halbe Paprika/);
     assert.match(text, /- Curry A/);
     assert.match(text, /vorerst meiden: Gerichtstyp curry/);

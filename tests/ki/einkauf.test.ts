@@ -3,9 +3,9 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { erzeugeVorschlaege } from '../../supabase/functions/_shared/kombi/engine.ts';
 import { regelbasiert } from '../../supabase/functions/_shared/kombi/anbieter/regelbasiert.ts';
-import { MULTI_USE, pruefeEinkauf, waehleMultiUse } from '../../supabase/functions/_shared/kombi/einkauf.ts';
+import { bewerteMultiUse, MULTI_USE, pruefeEinkauf, waehleMultiUse } from '../../supabase/functions/_shared/kombi/einkauf.ts';
 import { kannMahlzeit } from '../../supabase/functions/_shared/kombi/snapshot.ts';
-import { pruefeGericht } from '../../supabase/functions/_shared/kombi/validierung.ts';
+import { pruefeBaustein, pruefeGericht } from '../../supabase/functions/_shared/kombi/validierung.ts';
 import { bewerte } from '../../supabase/functions/_shared/kombi/bewertung.ts';
 import { berechneLeitplanken } from '../../supabase/functions/_shared/kombi/praeferenz.ts';
 import { anfrage, festerAnbieter, ids, OPTIONEN, SEED, snapshot } from './fixtures.ts';
@@ -94,5 +94,57 @@ describe('Abwägung statt „immer das Billigste“', () => {
     assert.ok(billig.wert.kosten.pro_portion_cent < kreativ.wert.kosten.pro_portion_cent, 'Linsen sind billiger');
     const l = berechneLeitplanken([], { art: 'normal' });
     assert.ok(bewerte(kreativ.wert, OPTIONEN, [], l) > bewerte(billig.wert, OPTIONEN, [], l));
+  });
+});
+
+describe('Notfall-Einkauf: von der Software bewertet und begründet', () => {
+  test('Gründe kommen aus Daten: passt zu Vorhandenem, Haltbarkeit, Lagerung, Preis unbekannt', () => {
+    const e = waehleMultiUse(snapshot(nurFarben('braun', 'rot', 'weiss'), ''), 'x');
+    assert.ok(['Reis', 'Pasta'].includes(e.name), e.name);
+    assert.ok(e.gruende.some((g) => /Lücke/.test(g)), 'füllt die Sattmacher-Lücke');
+    assert.ok(e.gruende.some((g) => /^Passt zu \d+ Sachen, die schon da sind: /.test(g)));
+    assert.ok(e.gruende.some((g) => /haltbar, ohne Kühlung lagerbar/.test(g)));
+    assert.ok(e.gruende.includes('Preis unbekannt.'));
+    assert.match(e.heute ?? '', new RegExp(`^${e.name} \\+ `), 'konkrete Kombination mit dem Bestand');
+  });
+
+  test('bekannter Preis wird mit Bezug genannt – aus dem Bestand, nicht geschätzt', () => {
+    const mitPreis = snapshot([...nurFarben('braun', 'rot', 'weiss'),
+      { id: 99, name: 'Reis', farbe: 'gelb', anzahl: 0, bald_ablaufen: false, groesse_g: 75, kosten_cent: 149, lagerort: 'vorrat', einheit: 'g', portion_menge: 75, kosten_menge: 1000 }], '');
+    const e = waehleMultiUse(mitPreis, 'x');
+    assert.equal(e.name, 'Reis');
+    assert.equal(e.preis_cent, 149);
+    assert.equal(e.preis_bezug, 'für 1 kg');
+    assert.ok(e.gruende.includes('Zuletzt 1,49 € für 1 kg.'));
+  });
+
+  test('Kombinierbarkeit zählt: mit Linsen und Soße im Bestand gewinnt ein Sattmacher', () => {
+    const [erste] = bewerteMultiUse(snapshot(nurFarben('braun', 'rot'), ''));
+    assert.equal(erste.m.rolle, 'gelb');
+    assert.ok(erste.partner.length >= 3);
+  });
+});
+
+describe('Neue Bausteine: sauber definiert, erst nach „übernehmen“ gespeichert', () => {
+  test('Art, Farbe, Lagerort, Portionen, Zutaten; Kosten nur aus bekannten Preisen', () => {
+    const b = pruefeBaustein({
+      name: 'Tomaten-Linsen-Basis', art: 'komponente', farbe: 'rot', lagerort: 'gefrierfach', portionen: 6, portion_g: 150,
+      zutaten: [{ id: 'b3', portionen: 3 }, { id: 'b1', portionen: 2 }, { name: 'Zwiebeln' }],
+      verwendbar_fuer: ['Pasta', 'Wrap', 'Auflauf'], begruendung: 'Vielseitig. Kostet nur 0,30 € pro Portion.',
+    }, snapshot(), 'x');
+    assert.ok(b);
+    assert.deepEqual([b.bestandsart, b.farbe, b.lagerort, b.portionen, b.portion_g], ['komponente', 'rot', 'gefrierfach', 6, 150]);
+    assert.deepEqual(b.zutaten, ['Linsen gekocht', 'Tomatensoße', 'Zwiebeln']);
+    // Linsen 3 × 8 + Soße 2 × 17 = 58 ct bekannt, Zwiebeln unbekannt → teilweise, pro Portion ab 10 ct
+    assert.equal(b.kosten.status, 'teilweise');
+    assert.equal(b.kosten.gesamt_cent, 58);
+    assert.equal(b.kosten.pro_portion_cent, 10);
+    assert.deepEqual(b.kosten.unbekannt, ['Zwiebeln']);
+    assert.equal(b.begruendung, 'Vielseitig.', 'Preis der KI entfernt');
+  });
+
+  test('ohne gültige Farbe oder zu wenig Verwendungen → keine Idee', () => {
+    assert.equal(pruefeBaustein({ name: 'X', farbe: 'lila', verwendbar_fuer: ['a', 'b', 'c'] }, snapshot(), 'x'), null);
+    assert.equal(pruefeBaustein({ name: 'X', farbe: 'rot', verwendbar_fuer: ['a'] }, snapshot(), 'x'), null);
   });
 });

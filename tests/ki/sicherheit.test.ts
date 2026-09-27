@@ -40,16 +40,16 @@ describe('KI-Vorschlag verändert den Bestand nicht', () => {
 describe('Datenbankänderung erst nach Nutzerbestätigung', () => {
   test('„Heute kochen“ erzeugt erst einen Plan – gebucht wird nur bei Bestätigung', async () => {
     const e = await erzeugeVorschlaege(regelbasiert(), anfrage({ snapshot: snapshot(SEED, 'Paprika') }), { id: ids() });
-    const g = e.gerichte[0];
+    const g = e.gerichte.find((x) => x.gerichtsart === 'rezept')!;
     const plan = entnahmePlan(g);
     assert.ok(plan.length >= 2);
-    assert.ok(plan.every((p) => p.anzahl > 0 && Number.isInteger(p.block_typ_id)));
+    assert.ok(plan.every((p) => p.menge > 0 && Number.isInteger(p.block_typ_id)));
     assert.equal(plan.some((p) => /Paprika|Salz/.test(p.name)), false, 'Kühlschrank & Grundausstattung werden nicht gebucht');
 
     const { port, aufrufe } = portAttrappe();
     assert.deepEqual(aufrufe, [], 'Plan allein bucht nichts');
     const ergebnis = await kochenBestaetigen(plan, port);
-    assert.deepEqual(aufrufe, plan.map((p) => [p.block_typ_id, p.anzahl]));
+    assert.deepEqual(aufrufe, plan.map((p) => [p.block_typ_id, p.menge]));
     assert.equal(ergebnis.bewegungIds.length, plan.length);
     assert.deepEqual(ergebnis.fehler, []);
   });
@@ -57,7 +57,11 @@ describe('Datenbankänderung erst nach Nutzerbestätigung', () => {
   test('der Nutzer kann Posten abwählen; Fehler einzelner Posten werden gemeldet', async () => {
     const { port, aufrufe } = portAttrappe([3]);
     const ergebnis = await kochenBestaetigen(
-      [{ block_typ_id: 3, name: 'Linsen gekocht', anzahl: 2 }, { block_typ_id: 9, name: 'Wrap', anzahl: 0 }, { block_typ_id: 1, name: 'Tomatensoße', anzahl: 1 }],
+      [
+        { block_typ_id: 3, name: 'Linsen gekocht', menge: 2, einheit: 'portion', art: 'komponente' },
+        { block_typ_id: 9, name: 'Wrap', menge: 0, einheit: 'portion', art: 'komponente' },
+        { block_typ_id: 1, name: 'Tomatensoße', menge: 1, einheit: 'portion', art: 'komponente' },
+      ],
       port,
     );
     assert.deepEqual(aufrufe, [[3, 2], [1, 1]], 'Anzahl 0 = abgewählt');

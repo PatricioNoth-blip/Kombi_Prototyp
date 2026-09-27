@@ -1,9 +1,15 @@
-// Alle Zugriffe auf Supabase. Die Buchungslogik (FIFO, Rückgängig, Prüfungen)
+// Alle Zugriffe auf Supabase. Die Buchungslogik (Reihenfolge, Rückgängig, Prüfungen)
 // liegt in der Datenbank – siehe supabase/migrations.
+//
+// Die App läuft auch, solange die Migration „baukasten“ noch fehlt: Dann gibt es die neuen
+// Felder (Art, Einheit, Zusammensetzung, Ablaufdatum …) einfach nicht, und die App zeigt
+// einen Hinweis statt eines Fehlers.
 import { supabase } from './supabase';
 import type { Farbe, LagerortId } from './farben';
+import type { Art, Einheit, Herkunft } from '../supabase/functions/_shared/kombi/typen.ts';
 
 export type Lagerort = LagerortId;
+export type { Art, Einheit, Herkunft };
 
 /** Eine Zeile der View „bestand“ */
 export type Sorte = {
@@ -20,11 +26,24 @@ export type Sorte = {
   kosten_cent: number | null;
   /** fehlt, solange die Migration „was_essen“ nicht eingespielt ist → Gefrierfach */
   lagerort?: Lagerort;
+  // ab Migration „baukasten“:
+  art?: Art;
+  herkunft?: Herkunft | null;
+  einheit?: Einheit;
+  portion_menge?: number;
+  kosten_menge?: number;
+  zusammensetzung?: string[] | null;
+  notiz?: string | null;
+  naechster_ablauf?: string | null;
+  geoeffnet?: number;
+  geoeffnet_seit?: string | null;
+  abgelaufen?: number;
 };
 
 export type SorteDaten = Pick<
   Sorte,
-  'name' | 'farbe' | 'groesse_g' | 'mindestbestand' | 'haltbar_tage' | 'kosten_cent' | 'lagerort'
+  | 'name' | 'farbe' | 'groesse_g' | 'mindestbestand' | 'haltbar_tage' | 'kosten_cent' | 'lagerort'
+  | 'art' | 'herkunft' | 'einheit' | 'portion_menge' | 'kosten_menge' | 'zusammensetzung' | 'notiz'
 >;
 
 export type Charge = {
@@ -32,15 +51,22 @@ export type Charge = {
   menge_start: number;
   menge_aktuell: number;
   eingefroren_am: string;
+  ablauf_am?: string | null;
+  geoeffnet_am?: string | null;
 };
 
 type DbFehler = { message: string; code?: string };
 
+/** Spalte/Funktion gibt es noch nicht → Migration fehlt */
+export const fehltMigration = (e: DbFehler | null | undefined) =>
+  !!e && (e.code === '42703' || e.code === 'PGRST204' || e.code === 'PGRST202' || /column .* does not exist/i.test(e.message));
+
 function meldung(fehler: DbFehler): string {
   if (fehler.code === '23505') return 'Eine Sorte mit diesem Namen gibt es schon.';
   if (fehler.code === '42501') {
-    return 'Keine Berechtigung – sind beide Migrationen in Supabase eingespielt? (siehe README)';
+    return 'Keine Berechtigung – sind alle Migrationen in Supabase eingespielt? (siehe README)';
   }
+  if (fehltMigration(fehler)) return 'Dafür fehlt noch die Migration „baukasten“ (siehe README).';
   if (/failed to fetch|networkerror|load failed/i.test(fehler.message)) {
     return 'Keine Verbindung zur Datenbank. Bist du online?';
   }
@@ -52,35 +78,47 @@ export function fehlerText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/** Bestand plus Info, ob die Baukasten-Migration schon da ist. */
 export async function ladeBestand(): Promise<Sorte[]> {
   const { data, error } = await supabase.from('bestand').select('*');
   if (error) throw new Error(meldung(error));
   return data as Sorte[];
 }
 
-export async function ladeChargen(sorteId: number): Promise<Charge[]> {
-  const { data, error } = await supabase
-    .from('charge')
-    .select('id, menge_start, menge_aktuell, eingefroren_am')
-    .eq('block_typ_id', sorteId)
-    .gt('menge_aktuell', 0)
-    .order('eingefroren_am')
-    .order('id');
-  if (error) throw new Error(meldung(error));
-  return data as Charge[];
+/** Gibt es die Baukasten-Spalten? (bei leerem Bestand per Probe-Abfrage) */
+export async function hatBaukasten(bestand: Sorte[]): Promise<boolean> {
+  if (bestand.length > 0) return 'art' in bestand[0];
+  const { error } = await supabase.from('block_typ').select('art').limit(1);
+  return !error;
 }
 
-/** Gibt die IDs der erzeugten Bewegungen zurück (für „Rückgängig“). */
-export async function einfrieren(sorteId: number, anzahl: number): Promise<number[]> {
+export async function ladeChargen(sorteId: number): Promise<Charge[]> {
+  const abfrage = (spalten: string) =>
+    supabase
+      .from('charge')
+      .select(spalten)
+      .eq('block_typ_id', sorteId)
+      .gt('menge_aktuell', 0)
+      .order('eingefroren_am')
+      .order('id');
+  let { data, error } = await abfrage('id, menge_start, menge_aktuell, eingefroren_am, ablauf_am, geoeffnet_am');
+  if (fehltMigration(error)) ({ data, error } = await abfrage('id, menge_start, menge_aktuell, eingefroren_am'));
+  if (error) throw new Error(meldung(error));
+  return data as unknown as Charge[];
+}
+
+/** Gibt die IDs der erzeugten Bewegungen zurück (für „Rückgängig“). Ablaufdatum optional. */
+export async function einfrieren(sorteId: number, anzahl: number, ablaufAm?: string | null): Promise<number[]> {
   const { data, error } = await supabase.rpc('einfrieren', {
     p_block_typ_id: sorteId,
     p_anzahl: anzahl,
+    ...(ablaufAm ? { p_ablauf_am: ablaufAm } : {}),
   });
   if (error) throw new Error(meldung(error));
   return data as number[];
 }
 
-/** Entnimmt nach FIFO. Gibt die IDs der erzeugten Bewegungen zurück. */
+/** Entnimmt: geöffnete Charge zuerst, dann frühester Ablauf, sonst die älteste. */
 export async function entnehmen(sorteId: number, anzahl: number): Promise<number[]> {
   const { data, error } = await supabase.rpc('entnehmen', {
     p_block_typ_id: sorteId,
@@ -92,6 +130,16 @@ export async function entnehmen(sorteId: number, anzahl: number): Promise<number
 
 export async function rueckgaengig(bewegungIds: number[]): Promise<void> {
   const { error } = await supabase.rpc('rueckgaengig', { p_bewegung_ids: bewegungIds });
+  if (error) throw new Error(meldung(error));
+}
+
+export async function setzeGeoeffnet(chargeId: number, geoeffnet: boolean): Promise<void> {
+  const { error } = await supabase.rpc('setze_geoeffnet', { p_charge_id: chargeId, p_geoeffnet: geoeffnet });
+  if (error) throw new Error(meldung(error));
+}
+
+export async function setzeAblauf(chargeId: number, ablaufAm: string | null): Promise<void> {
+  const { error } = await supabase.rpc('setze_ablauf', { p_charge_id: chargeId, p_ablauf_am: ablaufAm });
   if (error) throw new Error(meldung(error));
 }
 

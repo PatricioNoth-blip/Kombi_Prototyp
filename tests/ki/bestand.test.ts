@@ -14,7 +14,7 @@ describe('Rezept aus vorhandenem Bestand', () => {
     assert.equal(e.gerichte.length, 3);
     const idsImSnapshot = new Set(snap.zutaten.map((z) => z.id));
     for (const g of e.gerichte) {
-      assert.ok(g.zutaten.length >= 2, g.name);
+      assert.ok(g.zutaten.some((z) => z.quelle === 'bestand'), g.name);
       for (const z of g.zutaten) assert.ok(idsImSnapshot.has(z.id), `${z.name} ist im Snapshot`);
       assert.deepEqual(g.fehlt, [], `${g.name}: nichts fehlt`);
       assert.ok(g.warum_jetzt.includes('Du hast alles zuhause.'));
@@ -34,7 +34,7 @@ describe('keine erfundenen Bestände', () => {
   test('unbekannte IDs und Namen landen unter „fehlt“, nie unter den Zutaten', () => {
     const p = pruefeGericht(
       {
-        name: 'Lachs-Linsen-Pasta',
+        name: 'Lachs-Linsen-Pfanne',
         zutaten: [{ id: 'b3', bloecke: 1 }, { id: 'b999', name: 'Lachs' }, { name: 'Parmesan' }],
       },
       snapshot(), OPTIONEN, 'x',
@@ -64,11 +64,14 @@ describe('keine erfundenen Bestände', () => {
 });
 
 describe('fehlende Zutaten erkennen', () => {
-  test('mehr Blöcke als vorhanden → Rest fehlt, eingeplant wird nur der Bestand', () => {
-    const p = pruefeGericht({ name: 'Riesen-Wrap', zutaten: [{ id: 'b9', bloecke: 10 }, { id: 'b3', bloecke: 1 }] }, snapshot(), OPTIONEN, 'x');
+  test('mehr als vorhanden → Rest fehlt (mit Preis für genau diese Menge), eingeplant wird nur der Bestand', () => {
+    const p = pruefeGericht({ name: 'Riesen-Wrap', zutaten: [{ id: 'b9', portionen: 10 }, { id: 'b3', portionen: 1 }] }, snapshot(), OPTIONEN, 'x');
     assert.ok(p.ok);
-    assert.equal(p.wert.zutaten.find((z) => z.name === 'Wrap')?.bloecke, 4);
-    assert.deepEqual(p.wert.fehlt, [{ name: 'Wrap', grund: 'zu_wenig', menge: 6, preis_cent: 6 }]);
+    assert.equal(p.wert.zutaten.find((z) => z.name === 'Wrap')?.menge, 4);
+    assert.deepEqual(p.wert.fehlt, [
+      { name: 'Wrap', grund: 'zu_wenig', menge: 6, einheit: 'portion', preis_cent: 36, preis_bezug: 'für 6 Portionen' },
+    ]);
+    assert.equal(p.wert.kosten.einkauf_cent, 36);
   });
 
   test('„fehlt“ der KI wird übernommen – aber nicht, wenn wir es haben', () => {
@@ -91,24 +94,28 @@ describe('fehlende Zutaten erkennen', () => {
 });
 
 describe('Kosten korrekt berechnen', () => {
-  test('Blöcke × Preis pro Block, geteilt durch Personen', () => {
+  test('Portionen × Preis pro Portion, geteilt durch Personen (ältere Angabe „bloecke“ geht weiter)', () => {
     // Linsen 2 × 8 ct + Tomatensoße 1 × 17 ct + Wrap 2 × 6 ct = 45 ct → 2 Personen: 22,5 → 23 ct
     const p = pruefeGericht(
-      { name: 'Linsen-Wrap', zutaten: [{ id: 'b3', bloecke: 2 }, { id: 'b1', bloecke: 1 }, { id: 'b9', bloecke: 2 }, { id: 'g-salz' }] },
+      { name: 'Linsen-Wrap', zutaten: [{ id: 'b3', portionen: 2 }, { id: 'b1', bloecke: 1 }, { id: 'b9', portionen: 2 }, { id: 'g-salz' }] },
       snapshot(), OPTIONEN, 'x',
     );
     assert.ok(p.ok);
-    assert.deepEqual(p.wert.kosten, { gesamt_cent: 45, pro_portion_cent: 23, personen: 2, vollstaendig: true, einkauf_cent: 0 });
+    assert.deepEqual(p.wert.kosten, {
+      status: 'berechnet', gesamt_cent: 45, pro_portion_cent: 23, personen: 2,
+      unbekannt: [], einkauf_cent: null, einkauf_unbekannt: [],
+    });
   });
 
   test('Kühlschrank-Reste haben keinen Preis → Kosten als unvollständig markiert, nicht erfunden', () => {
     const p = pruefeGericht(
-      { name: 'Linsen-Wrap', zutaten: [{ id: 'b3', bloecke: 2 }, { id: 'k1' }] },
+      { name: 'Paprika-Linsen-Pfanne', zutaten: [{ id: 'b3', portionen: 2 }, { id: 'k1' }] },
       snapshot(SEED, 'halbe Paprika'), OPTIONEN, 'x',
     );
     assert.ok(p.ok);
     assert.equal(p.wert.kosten.gesamt_cent, 16);
-    assert.equal(p.wert.kosten.vollstaendig, false);
+    assert.equal(p.wert.kosten.status, 'teilweise');
+    assert.deepEqual(p.wert.kosten.unbekannt, ['halbe Paprika']);
   });
 
   test('Preis fehlender Zutaten nur aus Bestandsdaten, sonst unbekannt', () => {
@@ -118,27 +125,30 @@ describe('Kosten korrekt berechnen', () => {
       snapshot(leererWrap), OPTIONEN, 'x',
     );
     assert.ok(p.ok);
-    assert.deepEqual(p.wert.fehlt.map((f) => [f.name, f.preis_cent]), [['Wrap', 6], ['Avocado', null]]);
-    assert.equal(p.wert.kosten.einkauf_cent, 6);
+    assert.deepEqual(p.wert.fehlt.map((f) => [f.name, f.preis_cent, f.preis_bezug]), [['Wrap', 6, 'pro Portion'], ['Avocado', null, null]]);
+    // Wie viel Wrap gekauft werden muss, weiß niemand – also keine erfundene Einkaufssumme.
+    assert.equal(p.wert.kosten.einkauf_cent, null);
+    assert.deepEqual(p.wert.kosten.einkauf_unbekannt, ['Wrap', 'Avocado']);
   });
 });
 
 describe('Portionen korrekt berechnen', () => {
-  test('mehr Personen → mehr Blöcke, Preis pro Portion teilt durch Personen', async () => {
+  test('mehr Personen → mehr Portionen, Preis pro Portion teilt durch Personen', async () => {
     const zwei = await erzeugeVorschlaege(regelbasiert(), anfrage(), { id: ids() });
     const vier = await erzeugeVorschlaege(regelbasiert(), anfrage({ optionen: { ...OPTIONEN, personen: 4 } }), { id: ids() });
-    const bloecke = (g: typeof zwei.gerichte[number]) => g.zutaten.reduce((s, z) => s + (z.bloecke ?? 0), 0);
-    assert.ok(bloecke(vier.gerichte[0]) > bloecke(zwei.gerichte[0]));
+    const menge = (g: typeof zwei.gerichte[number]) => g.zutaten.reduce((s, z) => s + (z.menge ?? 0), 0);
+    assert.ok(menge(vier.gerichte[0]) > menge(zwei.gerichte[0]));
     for (const g of vier.gerichte) {
       assert.equal(g.kosten.personen, 4);
-      assert.equal(g.kosten.pro_portion_cent, Math.round(g.kosten.gesamt_cent / 4));
+      assert.equal(g.portionen, 4);
+      assert.ok(Math.abs((g.kosten.pro_portion_cent as number) - (g.kosten.gesamt_cent as number) / 4) <= 0.5);
     }
   });
 
-  test('Blöcke werden auf ganze Zahlen ≥ 1 gebracht', () => {
-    const p = pruefeGericht({ name: 'Test', zutaten: [{ id: 'b3', bloecke: 0 }, { id: 'b1', bloecke: 1.6 }] }, snapshot(), OPTIONEN, 'x');
+  test('Portionen-Blöcke werden auf ganze Zahlen ≥ 1 gebracht (halbe Blöcke gibt es nicht)', () => {
+    const p = pruefeGericht({ name: 'Test', zutaten: [{ id: 'b3', portionen: 0 }, { id: 'b1', portionen: 1.6 }] }, snapshot(), OPTIONEN, 'x');
     assert.ok(p.ok);
-    assert.deepEqual(p.wert.zutaten.map((z) => z.bloecke), [1, 2]);
+    assert.deepEqual(p.wert.zutaten.map((z) => z.menge), [1, 2]);
   });
 });
 

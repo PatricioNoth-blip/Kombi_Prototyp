@@ -59,7 +59,7 @@ export function openAiKompatibel(konfig: OpenAiKonfig): KiAnbieter {
     const body: Record<string, unknown> = {
       model: konfig.modell,
       messages: nachrichten,
-      temperature: konfig.temperatur ?? 0.9,
+      temperature: konfig.temperatur ?? 1.0,
     };
     if (jsonModus) body.response_format = { type: 'json_object' };
     return await f(`${konfig.basisUrl.replace(/\/$/, '')}/chat/completions`, {
