@@ -13,6 +13,8 @@ Adresse und sehen denselben Bestand – einen Login gibt es in v0.1 bewusst nich
 - **Entnehmen:** zuerst aus geöffneten Chargen, dann aus der mit dem frühesten Ablauf, sonst aus der ältesten (FIFO). Chargen lassen sich als „geöffnet“ markieren.
 - **Rückgängig:** Nach jeder Buchung erscheint 5 Sekunden lang „Rückgängig“. Das bucht eine Korrektur, ohne etwas zu löschen.
 - **Sorten anlegen – schnell, nicht kompliziert:** Name, Art (Zutat / Komponente / Komplettgericht), Kategorie, Lagerort, Einheit mit Portionsgröße und Preis „X € für N“. Unter „Mehr Details“: selbstgemacht/gekauft, Zusammensetzung, Rezept/Notiz, Haltbarkeit, Mindestbestand. Bei Namen wie „Pizza“ oder „Suppe“ weist die App darauf hin, dass der Inhalt sonst „unbekannt“ bleibt.
+- **Bestand aktualisieren:** Oben im Vorrat Kassenbon scannen, E-Bon importieren oder Bon-Text einfügen. Kombi erkennt Artikel, Mengen und Preise, fragt nur bei Unsicherem nach und bucht erst nach „Bestand aktualisieren“ – jede Position als eigene Einkaufscharge mit dem bezahlten Preis (Details unten).
+- **Produktion:** Komponenten (Tomaten-Basis, Falafel-Masse …) und Komplettgerichte (TK-Pizza, Suppe, Lasagne …) vorkochen: Zutaten werden FIFO entnommen, die tatsächliche Menge wird eine neue Charge mit echten Kosten, Lagerort und Haltbarkeit.
 - **Heute essen:** Die App schlägt einzeln Gerichte aus eurem echten Bestand vor. Ihr entscheidet mit Gefällt mir, Nicht meins, Ähnlich oder „Gerade etwas anderes“, und die Vorschläge passen sich innerhalb der Session an (Details unten).
 - Dunkelmodus folgt der Systemeinstellung.
 
@@ -31,6 +33,8 @@ Adresse und sehen denselben Bestand – einen Login gibt es in v0.1 bewusst nich
    3. [`supabase/seed.sql`](supabase/seed.sql): Beispieldaten, 17 Sorten vom Kochtag 27.09.2026
    4. [`supabase/migrations/20260928090000_was_essen.sql`](supabase/migrations/20260928090000_was_essen.sql): Lagerort und Tabellen für „Was essen wir?“
    5. [`supabase/migrations/20260929090000_baukasten.sql`](supabase/migrations/20260929090000_baukasten.sql): Art, Einheit, Preisbezug, Zusammensetzung, Ablaufdatum, „geöffnet“, strukturierte Rezepte
+   6. [`supabase/migrations/20260930090000_planung_einkauf.sql`](supabase/migrations/20260930090000_planung_einkauf.sql): Planung, Einkaufsliste, Auftauen, Komponenten-Funktion
+   7. [`supabase/migrations/20261015090000_bon_produktion.sql`](supabase/migrations/20261015090000_bon_produktion.sql): Kosten, Herkunft und Lagerort je Charge, Bon-Import, Produktion (braucht Datei 6)
 
    Bereits ausgeführte Dateien einfach überspringen und mit der nächsten weitermachen. Jede Datei nur **einmal** ausführen.
    Ohne Datei 5 läuft die App wie bisher und zeigt oben einen Hinweis; die neuen Felder sind dann ausgeblendet.
@@ -69,6 +73,44 @@ Zum Testen auf dem Handy im selben WLAN: `npm run dev -- --host` starten und die
 3. Auf beiden Handys öffnen und **„Zum Home-Bildschirm“** hinzufügen.
 
 > Hinweis: Kostenlose Supabase-Projekte pausieren nach etwa einer Woche ohne Nutzung. Im Supabase-Dashboard lassen sie sich mit einem Klick wieder starten.
+
+## 🧾 Bestand aktualisieren: Kassenbon, E-Bon, Text
+
+„Ich kaufe ein, scanne meinen Bon und Kombi kümmert sich fast automatisch darum.“
+
+**Einstieg:** Tab „Vorrat“ → **+ Bestand aktualisieren** → 🧾 Kassenbon scannen · 📱 E-Bon importieren · 📋 Bon-Text einfügen · ✍️ Manuell hinzufügen.
+
+1. **Erfassen:** Foto(s) vom Bon – lange Bons in mehreren Fotos von oben nach unten. Kombi sortiert sie (Kopf zuerst, Summe zuletzt) und zählt doppelt fotografierte Bereiche nur einmal; bei einer einzelnen gleichen Zeile am Fotorand entscheidet die Summe auf dem Bon. E-Bons als PDF liest Kombi direkt aus der Textebene – **ohne KI**. Direkte Händler-Anbindungen gibt es (noch) nicht.
+2. **Lesen:** Artikel, Anzahl, Einzelpreis, Betrag, Gewicht (Wiegeware), Rabatt, Pfand, Händler, Filiale, Kaufdatum, Summe. Ein Rabatt direkt unter einem Artikel gehört zu ihm; alle anderen bleiben „konnte nicht eindeutig zugeordnet werden“ – Kombi rät nicht. Stimmen die gelesenen Beträge nicht mit der Summe überein, sagt Kombi das.
+3. **Zuordnen:** Jeder Artikel bekommt eine Sorte mit Sicherheitswert (Kürzel wie „BIO NATJOG 500“ → Naturjoghurt). Gekauftes landet nicht still bei Selbstgemachtem („Tomaten“ ≠ „Tomatensoße“).
+4. **Nur nötige Rückfragen:** unbekanntes Produkt („🆕 Neues Produkt erkannt“), unsichere oder mehrdeutige Zuordnung („Tomaten – frisch, gehackt oder Dose?“), fehlende Umrechnung („1 × Pizza = ? Portionen“), und bei typischen Direkt-Essern oder laut Gewohnheit: „3 × Joghurt gekauft – wie viele sollen in deinen Bestand?“ mit optionalem Grund. Sicher Erkanntes wird nicht gefragt.
+5. **Bestandsänderungen prüfen:** 🟢 wird hinzugefügt (vorher → nachher, Kosten), ⚪ nicht übernommen (mit Grund), 🧴 kein Lebensmittel, 💶 Pfand und offene Rabatte. Jede Zeile lässt sich antippen und korrigieren.
+6. **✓ Bestand aktualisieren:** Erst jetzt ändert sich etwas – alles in einer Transaktion (`bon_buchen()`). **Abbrechen** ändert nie etwas. Derselbe Bon ein zweites Mal wird erkannt („trotzdem buchen“ ist möglich). Danach: „7 Artikel hinzugefügt · 2 nicht übernommen“, **Rückgängig** für den ganzen Import und 🔥 „Was könntest du jetzt produzieren?“.
+
+**Einkauf ≠ Bestand:** 3 × 500 g Joghurt gekauft, 2 übernommen → Einkauf 1500 g, Bestand +1000 g, Kosten 2/3 des bezahlten Preises.
+**Echte Preise:** Jede Position wird eine eigene Einkaufscharge mit dem bezahlten Preis (nach Rabatt). Keine Durchschnittspreise, keine Schätzungen – nicht lesbar heißt „Preis unbekannt“. Pfand ist nie Lebensmittelkosten. Waschmittel, Kosmetik, Tierbedarf … kommen nicht in den Lebensmittelbestand.
+**Lernen ohne Automatik:** „Du übernimmst Joghurt normalerweise nicht in deinen Bestand.“ – als Hinweis und Vorschlag, entschieden wird immer von dir. Bestätigte Zuordnungen und Umrechnungen werden beim nächsten Bon wiedererkannt.
+
+**Fotos lesen (optional, KI):** Die Edge Function `bon-lesen` lässt die KI den Bon nur **abschreiben**. Was die Zeilen bedeuten, rechnet der Parser deterministisch. Einrichtung wie bei „Heute essen“ (gleiche Secrets), zusätzlich deployen:
+```
+npx.cmd supabase functions deploy bon-lesen --project-ref yjjgfdvpqmclocgejrhz --no-verify-jwt
+```
+Dafür braucht es ein Modell mit Bildverständnis. Standard: Groq `meta-llama/llama-4-scout-17b-16e-instruct`, Gemini `gemini-2.5-flash` (liest auch PDFs), OpenRouter `google/gemma-3-27b-it:free`, Ollama `llama3.2-vision`. Anderes Modell: `KI_BON_MODELL` setzen. Ohne KI funktionieren E-Bon-PDFs mit Text und „Bon-Text einfügen“ trotzdem.
+
+## 🏭 Produktion: Vorkochen, Nachkochen, Einfrieren
+
+„Ich koche einmal mehr und Kombi weiß automatisch, was daraus entstanden ist.“
+
+Tab **Produktion**: 🔥 Jetzt sinnvoll · 📅 Geplant · 🧩 Komponenten · 🔵 Fertiggerichte · 🕘 Zuletzt produziert.
+
+- **Zwei Arten, eine Logik:** 🧩 Komponenten (Tomaten-Basis, Curry-Basis, Falafel-Masse, Ofengemüse, gekochte Linsen, Soßen) und 🔵 Komplettgerichte (TK-Pizza, Suppen, Lasagne, Chili, Burritos, Aufläufe …).
+- **Planen ändert nichts:** Zutaten und geplante Menge eintragen, Kombi prüft den Bestand („Zutaten vorhanden ✅“ oder „Fehlend: 200 g Käse“ → auf die Einkaufsliste) und rechnet die Kosten aus den Chargen voraus, die zuerst verbraucht würden.
+- **Abschließen bucht:** Mit der **tatsächlichen** Menge (geplant 8, geworden 7 Portionen), Lagerort (🧊 Gefrierfach, 🥬 Kühlschrank, 🏠 Vorrat – je Charge) und optional Haltbarkeit („Haltbarkeit nicht festgelegt“, Kombi erfindet keine). `produzieren()` entnimmt die Zutaten FIFO, berechnet die Kosten aus genau diesen Chargen und bucht eine neue Produktionscharge – alles oder nichts.
+- **Kostenkette ohne Doppelzählung:** Tomaten → Tomaten-Basis → TK-Pizza → Essen. Eine Komponente trägt ihre Kosten in ihrer Charge; im Komplettgericht zählt nur ihr entnommener Anteil. Beim Essen sinkt nur die Komplettgericht-Charge – die Zutaten sind schon bei der Produktion verbraucht. Unter „Zuletzt produziert“ steht, woher jeder Cent kommt.
+- **Empfehlungen nur aus echten Daten:** geplante Produktionen, „wie beim letzten Mal“ (Zutaten und Mengen der letzten Produktion), hinterlegte Zusammensetzung (nur Namen → „Mengen offen“), Mindestbestand, frisch Gekauftes, bald Ablaufendes. Kombi schlägt nur vor – produziert wird nie automatisch.
+- **Rückgängig:** Ganze Produktion mit einer Aktion, solange aus der neuen Charge noch nichts gegessen wurde. Eine geplante Produktion ist danach wieder „geplant“.
+
+Architektur, Datenmodell und die Antworten auf „Wie funktioniert das bisher?“: [`docs/bon_produktion.md`](docs/bon_produktion.md).
 
 ## 🍽️ Heute essen (KI-Vorschläge)
 
@@ -171,9 +213,10 @@ Die Tests prüfen die Akzeptanzkriterien direkt in der Datenbank:
 - Rückgängig funktioniert.
 - Die Zugriffsrechte stimmen: Die App darf lesen, Sorten pflegen und buchen, aber Chargen und Bewegungen nicht direkt ändern.
 - Baukasten: Einordnung vorhandener Sorten, Einheiten in g/ml, Ablaufdatum, Entnahme-Reihenfolge geöffnet → frühester Ablauf → FIFO, strukturierte Rezepte.
+- Bon-Import & Produktion (`tests/bon_produktion_test.sql`): Chargenkosten, bestätigte Mengen, echte Preise, Rabatt, Teilmenge, 0, Pfand, Nicht-Lebensmittel, neues Produkt, Doppelimport, alles oder nichts, FIFO mit Kosten, Komponente → Komplettgericht → Essen ohne Doppelzählung, tatsächliche Menge, Lagerort, Rückgängig, Rechte.
 
 ```bash
-npm test            # alles
+npm test            # alles (Engine + Datenbank)
 npm run test:ki     # nur „Was essen wir?“ – läuft überall, auch unter Windows
 npm run test:db     # nur Datenbank
 ```
@@ -225,7 +268,11 @@ supabase/migrations/…_inventar.sql   Tabellen, View, Buchungsfunktionen, Recht
 supabase/migrations/…_ohne_login.sql Zugriff für die App ohne Login (v0.1)
 supabase/migrations/…_was_essen.sql  Lagerort, Sessions, Vorschläge, Feedback, Rezepte
 supabase/migrations/…_baukasten.sql  Art, Einheit, Preisbezug, Zusammensetzung, Ablauf, geöffnet
+supabase/migrations/…_bon_produktion.sql  Chargenkosten, Bon-Import, Produktion
 supabase/functions/was-essen/        Edge Function: KI-Aufruf mit Prüfung (API-Key nur hier)
+supabase/functions/bon-lesen/        Edge Function: Bon-Fotos abschreiben lassen (nur Text)
+supabase/functions/_shared/kombi/bon/  Bon-Parser, Produktzuordnung, Rückfragen/Vorschau, E-Bon-PDF, KI-Prüfung
+supabase/functions/_shared/kombi/chargen.ts, produktion.ts  FIFO-Kosten, Produktionsprüfung, Empfehlungen
 supabase/functions/_shared/kombi/    Kombi-Engine: Snapshot, Prüfung, Kosten (kosten.ts), Mengen,
                                      Wahrheitsprüfung (wahrheit.ts), Abwechslung, Lernen, Einkauf, KI-Anbieter
 tests/ki/                            Tests für „Was essen wir?“ (node --test)
@@ -240,6 +287,8 @@ src/Uebersicht.tsx                   Vorrat: Heute wichtig, Gruppen nach Art, �
 src/SorteBlatt.tsx                   Details einer Sorte: Menge, Portion, Preis, Chargen, geöffnet
 src/Einfrieren.tsx                   Einbuchen-Dialog (Menge in der Einheit, optional MHD)
 src/Sorten.tsx                       Sorten anlegen und bearbeiten (Schnellweg + Mehr Details)
+src/BestandAktualisieren.tsx, BonImport.tsx, bonApi.ts   Bestand aktualisieren: Bon, E-Bon, Text
+src/Produktion.tsx, ProduktionBlatt.tsx, produktionApi.ts  Produktion planen, abschließen, Kostenherkunft
 src/Essen.tsx, src/essenApi.ts       „Heute essen“: Session, Karte, Entscheidungen, Demo-Modus
 src/GerichtKarte.tsx, KochenBlatt.tsx Rezeptkarte und „Heute kochen“ mit Bestätigung
 src/Blatt.tsx, src/Icon.tsx          Dialog von unten, Zahlenknöpfe, Linien-Icons

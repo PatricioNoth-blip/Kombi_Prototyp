@@ -178,6 +178,19 @@ if (baukasten) {
   console.log('ℹ Migration „baukasten“ noch nicht eingespielt – die App läuft wie bisher, neue Felder sind ausgeblendet.');
 }
 
+// Migration „bon_produktion“ ist optional: Ohne sie zeigt die App Hinweise statt Fehlern.
+const { error: bonFehlt } = await db.from('bon_import').select('id', { head: true, count: 'exact' });
+if (!bonFehlt) {
+  await pruefe('bon_buchen() erreichbar, bucht ohne Positionen nichts', async () =>
+    erwarteFehler(await db.rpc('bon_buchen', { p_bon: { fingerabdruck: 'live-check', positionen: [] } }), 'P0001', 'Es wurde nichts gebucht'));
+  await pruefe('produzieren() erreichbar, Menge 0 wird abgelehnt', async () =>
+    erwarteFehler(await db.rpc('produzieren', { p_block_typ_id: sorteId, p_eingaenge: [], p_menge: 0 }), 'P0001', 'mindestens 1'));
+  await pruefe('Chargenkosten nicht direkt änderbar', async () =>
+    erwarteFehler(await db.from('charge').update({ kosten_cent: 1, kosten_menge: 1 }).eq('id', -1), '42501'));
+} else {
+  console.log('ℹ Migration „bon_produktion“ noch nicht eingespielt – Bon-Import bucht erst danach, Produktion zeigt einen Hinweis.');
+}
+
 // ───────── App im Browser ─────────
 const APP_URL = process.env.APP_URL;
 if (!APP_URL) {
@@ -243,6 +256,47 @@ if (!APP_URL) {
     await page.keyboard.press('Escape');
     if (text !== 'Bitte einen Namen eingeben.') throw new Error(`Meldung: ${text}`);
     return `${await page.locator('.zeile:visible').count()} Sorten, leeres Formular abgelehnt`;
+  });
+
+  await pruefe('Bestand aktualisieren: Beispiel-Bon lesen und prüfen, dann abbrechen (nichts gebucht)', async () => {
+    const vorher = (await ladeBestand()).reduce((s, x) => s + x.anzahl, 0);
+    await page.click('.tabbar button:has-text("Vorrat")');
+    await page.click('.bestand-aktualisieren');
+    await page.click('.weg:has-text("Bon-Text einfügen")');
+    await page.click('button:has-text("Beispiel-Bon einsetzen")');
+    await page.click('.vollbild-fuss .knopf.haupt');
+    await page.waitForSelector('.frage-karte, .bon-kopfzeile', { timeout: 15000 });
+    const fragen = await page.isVisible('.frage-karte');
+    if (fragen) {
+      await page.click('.vollbild button:has-text("Zur Übersicht")');
+      await page.waitForSelector('.bon-kopfzeile', { timeout: 10000 });
+    }
+    const kopf = (await page.textContent('.bon-kopfzeile'))?.replace(/\s+/g, ' ').trim();
+    const hinzu = await page.locator('.aenderung-zeile').count();
+    const knopf = await page.textContent('.vollbild-fuss .knopf.haupt');
+    if (!/Bestand aktualisieren/.test(knopf ?? '')) throw new Error(`Hauptknopf: ${knopf}`);
+    await page.screenshot({ path: 'live-check-bon.png', fullPage: true });
+    await page.click('.vollbild-zurueck');
+    await page.waitForSelector('.meldung:has-text("noch nichts wurde am Bestand verändert")', { timeout: 10000 });
+    const nachher = (await ladeBestand()).reduce((s, x) => s + x.anzahl, 0);
+    if (nachher !== vorher) throw new Error(`Bestand ${vorher} → ${nachher}`);
+    return `${kopf}; ${hinzu} Änderung(en) vorgeschlagen${fragen ? ', Rückfragen angezeigt' : ''}; abgebrochen, Bestand unverändert`;
+  });
+
+  await pruefe('Produktion: Tab und Dialog (ohne zu buchen)', async () => {
+    await page.click('.tabbar button:has-text("Produktion")');
+    await page.waitForSelector('.inhalt .hinweisbox, .inhalt .bestand-aktualisieren', { timeout: 10000 });
+    if (await page.isVisible('.inhalt .hinweisbox:has-text("bon_produktion")')) return 'Hinweis: Migration „bon_produktion“ fehlt noch';
+    const abschnitte = await page.locator('.inhalt .abschnitt-titel').allTextContents();
+    await page.click('.inhalt .bestand-aktualisieren');
+    await page.waitForSelector('.vollbild', { timeout: 10000 });
+    const auswahl = await page.locator('.vollbild .sorte-knopf').count();
+    if (auswahl > 0) {
+      await page.locator('.vollbild .sorte-knopf').first().click();
+      await page.waitForSelector('.vollbild h3:has-text("Zutaten aus dem Bestand")', { timeout: 10000 });
+    }
+    await page.click('.vollbild-zurueck');
+    return `${abschnitte.join(' · ')}; ${auswahl} produzierbare Sorten`;
   });
 
   await pruefe('Keine JavaScript-Fehler', async () => {
