@@ -65,5 +65,7 @@ for datei in supabase/migrations/*.sql; do
     sql -f supabase/seed.sql
   fi
 done
-echo "→ Tests"
-sql -f tests/inventar_test.sql
+for test in tests/*_test.sql; do
+  echo "→ Tests $(basename "$test")"
+  sql -f "$test"
+done
