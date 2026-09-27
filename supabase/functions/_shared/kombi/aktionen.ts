@@ -1,7 +1,7 @@
 // Was nach einer Nutzerentscheidung passieren darf.
 // Vorschläge selbst ändern nie etwas. Datenbankänderungen laufen nur über diese Funktionen,
 // und die App ruft sie erst nach ausdrücklicher Bestätigung auf.
-import type { Aktion, Art, Einheit, Gericht, GerichtZutat } from './typen.ts';
+import type { Aktion, Art, Einheit, Farbe, FehlendeZutat, Gericht, GerichtZutat, Quelle } from './typen.ts';
 import { mengeText } from './mengen.ts';
 
 export type EntnahmePosten = {
@@ -78,6 +78,101 @@ export async function kochenBestaetigen(posten: EntnahmePosten[], port: Buchungs
     }
   }
   return ergebnis;
+}
+
+/** Kurzform für Zutatenlisten: „2×“ (Portionen), „3 Stück“, „250 g“ */
+export function kurzMenge(menge: number, einheit: Einheit): string {
+  if (einheit === 'portion') return `${menge}×`;
+  if (einheit === 'stueck') return `${menge} Stück`;
+  return mengeText(menge, einheit);
+}
+
+/**
+ * Was „Kochen starten“ entnimmt – als ein Satz:
+ *   Komplettgericht: „2 Portionen TK-Pizza entnehmen“
+ *   Rezept:          „2× Tomaten-Basis + 2× Linsen + 250 g Pasta“
+ */
+export function entnahmeText(posten: Pick<EntnahmePosten, 'menge' | 'einheit' | 'name' | 'art'>[]): string {
+  const aktiv = posten.filter((p) => p.menge > 0);
+  if (aktiv.length === 0) return 'Nichts zu entnehmen';
+  if (aktiv.length === 1 && aktiv[0].art === 'komplettgericht') return `${postenText(aktiv[0])} entnehmen`;
+  return aktiv.map((p) => `${kurzMenge(p.menge, p.einheit)} ${p.name}`).join(' + ');
+}
+
+export type KochZeile = {
+  name: string;
+  farbe: Farbe | null;
+  art: Art | null;
+  quelle: Quelle;
+  block_typ_id: number | null;
+  menge: number | null;
+  einheit: Einheit;
+  /** „2×“, „250 g“ – leer bei Kühlschrank/Grundausstattung */
+  text: string;
+  /** frei = wird nicht gebucht (Kühlschrank-Rest, Grundausstattung) */
+  status: 'ok' | 'zu_wenig' | 'leer' | 'unbekannt' | 'frei';
+  verfuegbar: number | null;
+  /** was nach dem Kochen übrig bleibt (berechnet) */
+  danach: number | null;
+  /** davon für andere Pläne reserviert */
+  reserviert_anderweitig: number;
+};
+
+export type KochAnsichtDaten = {
+  zeilen: KochZeile[];
+  fehlt: FehlendeZutat[];
+  hinweise: string[];
+  posten: EntnahmePosten[];
+  /** Satz für den Bestätigungsschritt */
+  entnahme: string;
+  kann_kochen: boolean;
+};
+
+/**
+ * Datenmodell der Kochansicht: tatsächliche Bestandsobjekte mit Mengen, geprüft gegen den
+ * AKTUELLEN Vorrat, plus was danach übrig bleibt. Bucht nichts.
+ */
+export function kochAnsicht(
+  g: Gericht,
+  bestand: { id: number; anzahl: number; abgelaufen?: number | null }[],
+  reserviertAnderweitig: Map<number, { menge: number; plaene: string[] }> = new Map(),
+): KochAnsichtDaten {
+  const plan = entnahmePlan(g);
+  const verwendbar = bestand.map((b) => ({ id: b.id, anzahl: Math.max(0, b.anzahl - Math.max(0, b.abgelaufen ?? 0)) }));
+  const status = pruefeEntnahme(plan, verwendbar);
+  const hinweise: string[] = [...g.warum_jetzt.filter((w) => !/zuhause\.$/.test(w)), ...g.hinweise];
+
+  const zeilen: KochZeile[] = g.zutaten.map((z) => {
+    const i = plan.findIndex((p) => p.block_typ_id === z.block_typ_id && z.quelle === 'bestand');
+    if (z.quelle !== 'bestand' || i < 0) {
+      return {
+        name: z.name, farbe: z.farbe, art: z.art, quelle: z.quelle, block_typ_id: z.block_typ_id, menge: null,
+        einheit: z.einheit ?? 'portion', text: '', status: 'frei', verfuegbar: null, danach: null, reserviert_anderweitig: 0,
+      };
+    }
+    const p = plan[i];
+    const st = status[i];
+    const res = reserviertAnderweitig.get(p.block_typ_id);
+    const frei = st.verfuegbar - (res?.menge ?? 0);
+    if (res && res.menge > 0 && p.menge > frei) {
+      hinweise.push(`${p.name}: ${mengeText(Math.min(res.menge, p.menge - Math.max(0, frei)), p.einheit)} davon sind für „${res.plaene.join('“, „')}“ eingeplant.`);
+    }
+    return {
+      name: z.name, farbe: z.farbe, art: z.art, quelle: z.quelle, block_typ_id: z.block_typ_id, menge: p.menge,
+      einheit: p.einheit, text: kurzMenge(p.menge, p.einheit), status: st.status, verfuegbar: st.verfuegbar,
+      danach: st.status === 'ok' ? st.verfuegbar - p.menge : null, reserviert_anderweitig: res?.menge ?? 0,
+    };
+  });
+
+  const posten = plan.map((p, i) => ({ ...p, menge: Math.min(p.menge, status[i].verfuegbar) })).filter((p) => p.menge > 0);
+  return {
+    zeilen,
+    fehlt: g.fehlt,
+    hinweise: [...new Set(hinweise)],
+    posten,
+    entnahme: entnahmeText(posten),
+    kann_kochen: posten.length > 0,
+  };
 }
 
 export type RezeptDatensatz = {

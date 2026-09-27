@@ -38,8 +38,10 @@ export function dringlichkeitVon(z: GerichtZutat, snapshot?: Snapshot): number {
   if (z.quelle === 'grundausstattung') return 0;
   if (z.quelle === 'kuehlschrank') return 0.7; // spontan genannte Reste
   if (z.geoeffnet) return 1;
+  const s = snapshot?.zutaten.find((x) => x.id === z.id);
+  if (s?.aufgetaut) return 0.95;
   if (z.bald_verbrauchen) return 0.85;
-  if (snapshot?.zutaten.find((s) => s.id === z.id)?.rest) return 0.7;
+  if (s?.rest) return 0.7;
   if (z.art === 'komplettgericht') return 0.45;
   if (z.art === 'komponente') return 0.3;
   return 0.12;

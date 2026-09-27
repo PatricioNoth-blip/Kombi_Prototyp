@@ -101,9 +101,9 @@ describe('Prompt', () => {
       notfall: false,
     };
     const text = auftragAlsText(a);
-    assert.match(text, /## Komplettgerichte[^#]*b13 \| Pizza \| 4 Portionen \| Gefrierfach \| Zusammensetzung unbekannt/);
-    assert.match(text, /## Komponenten[^#]*b3 \| Linsen gekocht \| Protein \| 6 Portionen/);
-    assert.match(text, /## Einzelne Zutaten[^#]*b6 \| TK-Gemüsemix \| Gemüse/);
+    assert.match(text, /## Komplettgerichte[^#]*b13 \| Pizza \| Rolle: Komplettgericht \| 4 Portionen \| Gefrierfach \| Zusammensetzung unbekannt/);
+    assert.match(text, /## Komponenten[^#]*b3 \| Linsen gekocht \| Rolle: Protein \| 6 Portionen/);
+    assert.match(text, /## Einzelne Zutaten[^#]*b6 \| TK-Gemüsemix \| Rolle: Gemüse/);
     assert.match(text, /b3 [^\n]*€ \(sehr günstig\)/, 'Preisklasse statt Betrag');
     assert.doesNotMatch(text, /\d+,\d\d €/, 'keine Euro-Beträge im Prompt');
     assert.match(text, /k1 \| halbe Paprika/);

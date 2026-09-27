@@ -6,10 +6,11 @@ import type {
 } from './typen.ts';
 import { ARTEN, EINHEITEN } from './typen.ts';
 import { normalisiereEigenschaften } from './validierung.ts';
-import { saubereZusammensetzung } from './snapshot.ts';
+import { saubereGerichtstypen, saubereRichtung, saubereZusammensetzung } from './snapshot.ts';
 import { kuerze } from './text.ts';
 
-const GRENZEN = { zutaten: 300, preise: 300, gesehen: 60, feedback: 120, favoriten: 10, anzahl: 5 };
+const GRENZEN = { zutaten: 300, preise: 300, gesehen: 60, feedback: 120, favoriten: 10, anzahl: 5, woche: 7 };
+const AUFGABEN = ['gerichte', 'komponenten', 'woche'] as const;
 const MAX_MENGE = 1_000_000;
 const QUELLEN = ['bestand', 'kuehlschrank', 'grundausstattung'] as const;
 const FARBEN = ['rot', 'braun', 'gruen', 'gelb', 'weiss', 'schwarz', 'blau'] as const;
@@ -54,6 +55,9 @@ function zutat(x: unknown): SnapshotZutat | null {
     geoeffnet: z.geoeffnet === true,
     rest: z.rest === true,
     tage_bis_ablauf: zahlOderNull(z.tage_bis_ablauf, -3650, 3650),
+    aufgetaut: z.aufgetaut === true,
+    gerichtstypen: saubereGerichtstypen(z.gerichtstypen),
+    richtung: saubereRichtung(z.richtung),
     block_typ_id: zahlOderNull(z.block_typ_id, 1, Number.MAX_SAFE_INTEGER),
   };
 }
@@ -118,7 +122,8 @@ export function pruefeAnfrage(roh: unknown): KiAnfrage {
 
   const m = a.modus as Record<string, unknown> | undefined;
   const anker = m?.art === 'aehnlich' ? gerichtKurz(m.zu) : null;
-  const modus: Modus = anker ? { art: 'aehnlich', zu: anker } : { art: 'normal' };
+  const modus: Modus = anker ? { art: 'aehnlich', zu: anker } : m?.art === 'reste' ? { art: 'reste' } : { art: 'normal' };
+  const aufgabe = eins(a.aufgabe, AUFGABEN) ?? 'gerichte';
 
   const favoriten = liste(a.favoriten, GRENZEN.favoriten).map(gerichtKurz).filter((g): g is GerichtKurz => g !== null);
 
@@ -129,6 +134,7 @@ export function pruefeAnfrage(roh: unknown): KiAnfrage {
     favoriten,
     feedback,
     modus,
-    anzahl: zahlOderNull(a.anzahl, 1, GRENZEN.anzahl) ?? 3,
+    aufgabe,
+    anzahl: zahlOderNull(a.anzahl, 1, aufgabe === 'woche' ? GRENZEN.woche : GRENZEN.anzahl) ?? 3,
   };
 }

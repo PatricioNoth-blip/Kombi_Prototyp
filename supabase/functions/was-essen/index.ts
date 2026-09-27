@@ -7,7 +7,7 @@
 //
 // Antwortcodes: 200 Ergebnis · 400 ungültige Anfrage · 429 Kontingent erschöpft ·
 //               503 KI nicht eingerichtet (die App nutzt dann den Demo-Modus) · 502 KI-Fehler
-import { erzeugeVorschlaege } from '../_shared/kombi/engine.ts';
+import { bearbeite } from '../_shared/kombi/engine.ts';
 import { pruefeAnfrage, AnfrageFehler } from '../_shared/kombi/anfrage.ts';
 import { anbieterAusUmgebung } from '../_shared/kombi/anbieter/konfiguration.ts';
 import { KiFehler } from '../_shared/kombi/anbieter/openai_kompatibel.ts';
@@ -39,7 +39,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const anfrage = pruefeAnfrage(JSON.parse(text));
-    const ergebnis = await erzeugeVorschlaege(anbieter, anfrage);
+    const ergebnis = await bearbeite(anbieter, anfrage);
     return json(ergebnis);
   } catch (e) {
     if (e instanceof SyntaxError || e instanceof AnfrageFehler) return json({ fehler: 'Ungültige Anfrage.' }, 400);

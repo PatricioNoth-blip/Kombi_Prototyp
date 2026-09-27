@@ -9,7 +9,7 @@ import type {
   RohBaustein, RohGericht, RohZutat, Snapshot, SnapshotZutat,
 } from './typen.ts';
 import {
-  ARTEN, GERICHTSTYPEN, GESCHMACK, GEWUERZRICHTUNGEN, KONSISTENZ, SATTMACHER, TEMPERATUR, ZUBEREITUNG,
+  ARTEN, EINHEITEN, GERICHTSTYPEN, GESCHMACK, GEWUERZRICHTUNGEN, KONSISTENZ, SATTMACHER, TEMPERATUR, ZUBEREITUNG,
 } from './typen.ts';
 import { bekannterPreisInfo, GRUNDAUSSTATTUNG } from './snapshot.ts';
 import { bezugText, mengeAusPortionen, mengeText, portionenAusMenge } from './mengen.ts';
@@ -103,7 +103,7 @@ export function rettetVon(zutaten: GerichtZutat[], snapshot: Snapshot): string[]
       if (z.quelle === 'kuehlschrank') return true;
       if (z.quelle !== 'bestand') return false;
       const s = snapshot.zutaten.find((x) => x.id === z.id);
-      return z.geoeffnet || z.bald_verbrauchen || !!s?.rest;
+      return z.geoeffnet || z.bald_verbrauchen || !!s?.rest || !!s?.aufgetaut;
     })
     .map((z) => z.name);
 }
@@ -118,6 +118,8 @@ function ablaufText(tage: number | null): string {
 
 export function warumJetzt(zutaten: GerichtZutat[], fehlt: FehlendeZutat[], snapshot?: Snapshot): string[] {
   const gruende: string[] = [];
+  const aufgetaut = zutaten.filter((z) => snapshot?.zutaten.find((s) => s.id === z.id)?.aufgetaut).map((z) => z.name);
+  if (aufgetaut.length) gruende.push(`${aufzaehlung(aufgetaut)} ${aufgetaut.length === 1 ? 'ist' : 'sind'} aufgetaut – heute verbrauchen.`);
   const offen = zutaten.filter((z) => z.geoeffnet).map((z) => z.name);
   if (offen.length) gruende.push(`${aufzaehlung(offen)} ${offen.length === 1 ? 'ist' : 'sind'} angebrochen – jetzt verbrauchen.`);
   for (const z of zutaten) {
@@ -163,7 +165,7 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
 
   const zutaten: GerichtZutat[] = [];
   const fehlt: FehlendeZutat[] = [];
-  const fehltName = (n: string, grund: FehlendeZutat['grund'], menge: number | null, z?: SnapshotZutat) => {
+  const fehltName = (n: string, grund: FehlendeZutat['grund'], menge: number | null, z?: SnapshotZutat, einheitRoh?: unknown) => {
     if (!n) return;
     if (fehlt.some((f) => normalisiere(f.name) === normalisiere(n))) return;
     if (grund === 'zu_wenig' && z && menge !== null) {
@@ -176,8 +178,10 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
       return;
     }
     const preis = bekannterPreisInfo(snapshot, n);
+    // Menge nur übernehmen, wenn die KI eine gültige Einheit nennt – sonst „Menge offen“.
+    const einheit = EINHEITEN.find((e) => e === einheitRoh) ?? null;
     fehlt.push({
-      name: n, grund, menge, einheit: null,
+      name: n, grund, menge: einheit ? menge : null, einheit,
       preis_cent: preis?.kosten_cent ?? null,
       preis_bezug: preis ? bezugText(preis.kosten_menge, preis.einheit) : null,
     });
@@ -230,7 +234,8 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
     if (!n) continue;
     // Schlägt die KI etwas als „fehlt“ vor, das wir haben, ignorieren wir den Eintrag.
     if (findeImSnapshot(snapshot, null, n)) continue;
-    fehltName(n, 'nicht_im_bestand', null);
+    const menge = Math.round(Number(f?.menge));
+    fehltName(n, 'nicht_im_bestand', Number.isFinite(menge) && menge > 0 && menge <= 10_000 ? menge : null, undefined, f?.einheit);
   }
 
   // Zubereitung: Was dort vorkommt, aber im ganzen Haushalt nicht existiert, fehlt ehrlich.
