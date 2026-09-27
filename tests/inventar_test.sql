@@ -508,6 +508,217 @@ reset role;
 \echo 'ok  Baukasten-Rechte: Sorte mit neuen Feldern, einbuchen mit Ablauf, öffnen, Rezept strukturiert – Chargen weiter geschützt'
 
 
+-- ─── Komponenten-Funktion: Gerichtstypen, Richtung, Startmenge ───
+do $$
+declare v_id bigint;
+begin
+  insert into block_typ (name, farbe, art, gerichtstypen, richtung, zusammensetzung)
+  values ('Test Tomaten-Basis', 'rot', 'komponente', array['pasta', 'pizza', 'suppe'], 'italienisch',
+          array['Tomaten', 'Zwiebeln', 'Knoblauch'])
+  returning id into v_id;
+  perform einfrieren(v_id, 8);
+  perform entnehmen(v_id, 2);
+  assert (select array[richtung, start_menge::text, anzahl::text] from bestand where id = v_id)
+    = array['italienisch', '8', '6'], 'View: Richtung, 6 von 8 Portionen';
+  assert (select gerichtstypen from bestand where id = v_id) = array['pasta', 'pizza', 'suppe'], 'View: Gerichtstypen';
+  assert pg_temp.fehler(format('update block_typ set richtung = %L where id = %s', 'marsianisch', v_id))
+    like '%violates check constraint%', 'unbekannte Richtung wird abgelehnt';
+end $$;
+\echo 'ok  Komponenten-Funktion: Gerichtstypen, Richtung, 6 / 8 Portionen'
+
+
+-- ─── kochen(): alles oder nichts, Plan abhaken, Rückgängig ───
+do $$
+declare
+  v_a    bigint;
+  v_b    bigint;
+  v_plan uuid;
+  v_ids  bigint[];
+  v_bew  bigint := (select count(*) from bewegung);
+begin
+  insert into block_typ (name, farbe) values ('Test Kochen A', 'braun') returning id into v_a;
+  insert into block_typ (name, farbe) values ('Test Kochen B', 'gelb') returning id into v_b;
+  perform einfrieren(v_a, 3);
+  perform einfrieren(v_b, 2);
+  v_bew := (select count(*) from bewegung);
+
+  -- B reicht nicht → auch A wird NICHT entnommen
+  assert pg_temp.fehler(format($f$select kochen('[{"block_typ_id": %s, "menge": 1}, {"block_typ_id": %s, "menge": 5}]')$f$, v_a, v_b))
+    = 'Nur noch 2× Test Kochen B da – 5× angefragt. Es wurde nichts entnommen.', 'Meldung bei zu wenig';
+  assert (select anzahl from bestand where id = v_a) = 3, 'A unverändert (alles oder nichts)';
+  assert (select count(*) from bewegung) = v_bew, 'keine Bewegung';
+  assert pg_temp.fehler($q$select kochen('[]')$q$) = 'Nichts zu entnehmen.', 'leerer Plan';
+
+  insert into plan (art, titel, portionen, daten) values ('mahlzeit', 'Test Gericht', 2, '{}') returning id into v_plan;
+  -- doppelte Posten derselben Sorte werden zusammengefasst
+  v_ids := kochen(format('[{"block_typ_id": %s, "menge": 1}, {"block_typ_id": %s, "menge": 2}, {"block_typ_id": %s, "menge": 1}]', v_a, v_b, v_a)::jsonb, v_plan);
+  assert (select array[anzahl] from bestand where id = v_a) = array[1], 'A: 3 − 2';
+  assert (select anzahl from bestand where id = v_b) = 0, 'B: 2 − 2';
+  assert (select status from plan where id = v_plan) = 'erledigt', 'Plan abgehakt';
+  assert pg_temp.fehler(format($f$select kochen('[{"block_typ_id": %s, "menge": 1}]', %L)$f$, v_a, v_plan))
+    = 'Diese Mahlzeit ist schon gekocht oder nicht mehr geplant. Es wurde nichts entnommen.', 'nicht doppelt kochen';
+  assert (select anzahl from bestand where id = v_a) = 1, 'zweites Kochen hat nichts entnommen';
+
+  perform kochen_rueckgaengig(v_ids, v_plan);
+  assert (select anzahl from bestand where id = v_a) = 3 and (select anzahl from bestand where id = v_b) = 2, 'Rückgängig: Bestand zurück';
+  assert (select status from plan where id = v_plan) = 'geplant', 'Rückgängig: Plan wieder offen';
+end $$;
+\echo 'ok  kochen(): alles oder nichts, Plan abhaken, nicht doppelt, Rückgängig'
+
+
+-- ─── herstellen(): Zutaten raus, Komponente rein – ein Schritt ───
+do $$
+declare
+  v_zutat bigint;
+  v_komp  bigint;
+  v_plan  uuid;
+  v_ids   bigint[];
+begin
+  insert into block_typ (name, farbe, art, einheit, portion_menge) values ('Test Linsen roh', 'braun', 'zutat', 'g', 80)
+  returning id into v_zutat;
+  insert into block_typ (name, farbe, art) values ('Test Linsen-Komponente', 'braun', 'komponente') returning id into v_komp;
+  perform einfrieren(v_zutat, 500);
+  insert into plan (art, titel, portionen, daten) values ('komponente', 'Test Linsen-Komponente', 6, '{}') returning id into v_plan;
+
+  -- zu wenig Zutat → auch die Komponente wird nicht eingebucht
+  assert pg_temp.fehler(format($f$select herstellen('[{"block_typ_id": %s, "menge": 900}]', %s, 6)$f$, v_zutat, v_komp))
+    like 'Nur noch 500 g%', 'zu wenig → nichts';
+  assert (select anzahl from bestand where id = v_komp) = 0, 'Komponente nicht eingebucht';
+
+  v_ids := herstellen(format('[{"block_typ_id": %s, "menge": 250}]', v_zutat)::jsonb, v_komp, 6, heute() + 90, v_plan);
+  assert (select anzahl from bestand where id = v_zutat) = 250, '250 g Linsen entnommen';
+  assert (select anzahl from bestand where id = v_komp) = 6, '6 Portionen Komponente eingebucht';
+  assert (select naechster_ablauf from bestand where id = v_komp) = heute() + 90, 'mit Ablaufdatum';
+  assert (select status from plan where id = v_plan) = 'erledigt', 'vorgemerkte Komponente erledigt';
+
+  perform kochen_rueckgaengig(v_ids, v_plan);
+  assert (select anzahl from bestand where id = v_zutat) = 500 and (select anzahl from bestand where id = v_komp) = 0,
+    'Rückgängig: beides zurück';
+
+  -- ohne Zutaten aus dem Vorrat (alles frisch gekauft)
+  v_ids := herstellen('[]', v_komp, 4);
+  assert (select anzahl from bestand where id = v_komp) = 4, 'nur einbuchen';
+end $$;
+\echo 'ok  herstellen(): Zutaten entnehmen + Komponente einbuchen in einem Schritt, Rückgängig'
+
+
+-- ─── Auftauen: nur Status, verbraucht beim Kochen ───
+do $$
+declare
+  v_id  bigint;
+  v_auf bigint;
+  v_ids bigint[];
+begin
+  insert into block_typ (name, farbe, art) values ('Test Lasagne auftauen', 'blau', 'komplettgericht') returning id into v_id;
+  perform einfrieren(v_id, 4);
+  insert into auftauen (block_typ_id, menge, auftauen_am) values (v_id, 2, heute()) returning id into v_auf;
+  assert (select array[anzahl, auftauen_geplant, aufgetaut] from bestand where id = v_id) = array[4, 2, 0],
+    'vorgemerkt – Bestand unverändert';
+  update auftauen set status = 'aufgetaut' where id = v_auf;
+  assert (select array[anzahl, auftauen_geplant, aufgetaut] from bestand where id = v_id) = array[4, 0, 2],
+    'aufgetaut – Bestand weiter unverändert';
+
+  v_ids := kochen(format('[{"block_typ_id": %s, "menge": 2}]', v_id)::jsonb);
+  assert (select status from auftauen where id = v_auf) = 'verbraucht', 'beim Kochen verbraucht';
+  assert (select aufgetaut from bestand where id = v_id) = 0, 'nichts mehr aufgetaut';
+  perform kochen_rueckgaengig(v_ids);
+  assert (select status from auftauen where id = v_auf) = 'aufgetaut', 'Rückgängig: wieder aufgetaut';
+  assert pg_temp.fehler(format('update auftauen set status = %L where id = %s', 'geschmolzen', v_auf))
+    like '%violates check constraint%', 'unbekannter Status';
+end $$;
+\echo 'ok  Auftauen: geplant → aufgetaut → verbraucht, ändert keinen Bestand, Rückgängig'
+
+
+-- ─── Einkauf → Vorrat: tatsächliche Menge, nur einmal, Rückgängig ───
+do $$
+declare
+  v_id     bigint;
+  v_buch   bigint;
+  v_menge  integer;
+  v_bew    bigint;
+begin
+  insert into block_typ (name, farbe, art, einheit, portion_menge, kosten_cent, kosten_menge)
+  values ('Test Zwiebeln', 'gruen', 'zutat', 'g', 100, 99, 1000) returning id into v_id;
+  insert into einkauf_eintrag (name, schluessel, menge, einheit, quelle) values ('Zwiebeln', 'zwiebel', 500, 'g', 'manuell');
+
+  -- nicht abgehakt → nichts wird gebucht
+  v_bew := (select count(*) from bewegung);
+  assert pg_temp.fehler(format('select einkauf_buchen(%L, %L, %s, 300)', 'zwiebel', 'g', v_id))
+    = 'Das ist schon im Vorrat oder nicht als gekauft markiert. Es wurde nichts gebucht.', 'ohne Haken keine Buchung';
+  assert (select count(*) from bewegung) = v_bew, 'keine Bewegung';
+
+  insert into einkauf_status (schluessel, einheit, status) values ('zwiebel', 'g', 'gekauft');
+  -- geplant 500 g, gekauft 300 g → 300 g werden gebucht
+  v_buch := einkauf_buchen('zwiebel', 'g', v_id, 300, heute() + 30, 149);
+  assert (select anzahl from bestand where id = v_id) = 300, 'tatsächliche Menge gebucht';
+  assert (select status from einkauf_eintrag where schluessel = 'zwiebel') = 'erledigt', 'Eintrag erledigt';
+  assert not exists (select from einkauf_status where schluessel = 'zwiebel'), 'Haken verbraucht';
+  assert (select array[kosten_cent, kosten_menge] from block_typ where id = v_id) = array[149, 300], 'bezahlter Preis übernommen';
+
+  -- zweiter Aufruf (Doppeltipp, zweites Handy) bucht NICHTS
+  assert pg_temp.fehler(format('select einkauf_buchen(%L, %L, %s, 300)', 'zwiebel', 'g', v_id))
+    like 'Das ist schon im Vorrat%', 'keine Doppelbuchung';
+  assert (select anzahl from bestand where id = v_id) = 300, 'weiter 300 g';
+
+  perform einkauf_rueckgaengig(v_buch);
+  assert (select anzahl from bestand where id = v_id) = 0, 'Rückgängig: Bestand zurück';
+  assert (select status from einkauf_eintrag where schluessel = 'zwiebel') = 'offen', 'Eintrag wieder offen';
+  assert (select status from einkauf_status where schluessel = 'zwiebel') = 'gekauft', 'wieder abgehakt';
+  assert (select array[kosten_cent, kosten_menge] from block_typ where id = v_id) = array[99, 1000], 'alter Preis zurück';
+  assert pg_temp.fehler(format('select einkauf_rueckgaengig(%s)', v_buch)) = 'Das wurde schon rückgängig gemacht.', 'nur einmal';
+end $$;
+\echo 'ok  Einkauf → Vorrat: tatsächliche Menge, keine Doppelbuchung, Preis lernen, Rückgängig'
+
+
+-- ─── Nutzung: nur echte (nicht rückgängig gemachte) Buchungen ───
+do $$
+declare
+  v_id  bigint;
+  v_ids bigint[];
+begin
+  insert into block_typ (name, farbe, art) values ('Test Nutzung', 'rot', 'komponente') returning id into v_id;
+  perform einfrieren(v_id, 3);
+  perform einfrieren(v_id, 3);
+  perform entnehmen(v_id, 2);
+  v_ids := entnehmen(v_id, 1);
+  perform rueckgaengig(v_ids);                 -- zählt nicht
+  assert (select array[verbrauch_28, herstellungen_56, mittlere_menge] from nutzung where block_typ_id = v_id)
+    = array[2, 2, 3], format('Nutzung: %s', (select row(verbrauch_28, herstellungen_56, mittlere_menge) from nutzung where block_typ_id = v_id));
+end $$;
+\echo 'ok  Nutzung: Verbrauch und Herstellungen ohne Rückgängig-Buchungen'
+
+
+-- ─── Planung & Einkauf ohne Login: Rechte ───
+set local role anon;
+do $$
+declare
+  v_plan uuid;
+  v_eintrag bigint;
+  v_summe bigint := (select sum(anzahl) from bestand);
+begin
+  insert into plan (art, titel, datum, portionen, daten) values ('mahlzeit', 'Test Plan anon', heute() + 1, 2, '{"zutaten": []}')
+  returning id into v_plan;
+  update plan set datum = heute() + 2 where id = v_plan;
+  insert into einkauf_eintrag (name, schluessel, menge, einheit, quelle, plan_id) values ('Tofu', 'tofu', 400, 'g', 'manuell', v_plan)
+  returning id into v_eintrag;
+  update einkauf_eintrag set menge = 200 where id = v_eintrag;
+  insert into einkauf_status (schluessel, einheit, status) values ('tofu', 'g', 'zurueckgestellt');
+  delete from einkauf_status where schluessel = 'tofu';
+  delete from plan where id = v_plan;
+  assert (select plan_id from einkauf_eintrag where id = v_eintrag) is null, 'Eintrag bleibt, Plan-Bezug weg';
+  assert (select sum(anzahl) from bestand) = v_summe, 'Planen und Einkaufsliste ändern keinen Bestand';
+
+  assert pg_temp.fehler(format('delete from einkauf_eintrag where id = %s', v_eintrag)) like 'permission denied%',
+    'Einträge nicht löschbar (Status „geloescht“)';
+  assert pg_temp.fehler($q$insert into einkauf_buchung (schluessel, einheit, block_typ_id, menge, bewegung_ids) values ('x', 'g', 1, 1, '{}')$q$)
+    like 'permission denied%', 'Verlauf nur über einkauf_buchen()';
+  assert pg_temp.fehler($q$select entnehme_posten('[]', null)$q$) like 'permission denied%', 'interne Funktion gesperrt';
+  assert (select count(*) from nutzung) > 0, 'Nutzung lesbar';
+end $$;
+reset role;
+\echo 'ok  Planung & Einkauf ohne Login: anlegen, ändern, entfernen – Buchungen nur über Funktionen'
+
+
 rollback;
 \echo ''
 \echo 'Alle Tests bestanden.'
