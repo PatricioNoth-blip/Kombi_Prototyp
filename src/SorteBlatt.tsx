@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import * as api from './api';
-import { fehlerText, ladeChargen, type Charge, type Sorte } from './api';
+import { fehlerText, ladeChargen, type Charge, type Einheit, type Sorte } from './api';
 import { Blatt, AnzahlWahl } from './Blatt';
 import { ARTEN_INFO, buchungsVerb, farbe, lagerort } from './farben';
 import { Icon } from './Icon';
 import {
-  ablaufText, artVon, datum, einheitVon, mengeText, plusTage, portionMengeVon, portionspreisText, preisMitBezug, tageSeit,
+  ablaufText, artVon, datum, einheitVon, euro, mengeText, plusTage, portionMengeVon, portionspreisText, preisMitBezug, tageSeit,
 } from './format';
 
 type Props = {
@@ -30,6 +30,21 @@ function inEntnahmeReihenfolge(chargen: Charge[], haltbarTage: number): Charge[]
       a.eingefroren_am.localeCompare(b.eingefroren_am) ||
       a.id - b.id,
   );
+}
+
+const QUELLE: Record<string, string> = { bon: 'Kassenbon', e_bon: 'E-Bon', produktion: 'Produktion' };
+
+/** „0,15 € / 100 g · Kassenbon · Kühlschrank“ – Preis und Herkunft dieser Charge */
+function chargeKostenText(c: Charge, einheit: Einheit, pm: number): string | null {
+  if (c.kosten_status === undefined) return null; // Migration „bon_produktion“ fehlt
+  const teile: string[] = [];
+  const preis = c.kosten_cent != null && c.kosten_menge ? Number(c.kosten_cent) / c.kosten_menge : null;
+  if (preis === null) teile.push('Preis unbekannt');
+  else if (einheit === 'g' || einheit === 'ml') teile.push(`${c.kosten_status === 'teilweise' ? 'ab ' : ''}${euro(Math.round(preis * pm))} / ${mengeText(pm, einheit)}`);
+  else teile.push(`${c.kosten_status === 'teilweise' ? 'ab ' : ''}${euro(Math.round(preis))} / ${einheit === 'stueck' ? 'Stück' : 'Portion'}`);
+  if (c.quelle) teile.push(QUELLE[c.quelle] ?? c.quelle);
+  if (c.lagerort) teile.push(lagerort(c.lagerort).name);
+  return teile.join(' · ');
 }
 
 function plusTageIso(iso: string, tage: number): string {
@@ -163,6 +178,7 @@ export function SorteBlatt({ sorte, baukasten, laeuft, onEntnehmen, onEinfrieren
                       ? `MHD ${datum(c.ablauf_am)} · ${ablaufText(c.ablauf_am)}`
                       : `haltbar bis ca. ${plusTage(c.eingefroren_am, sorte.haltbar_tage)}`}
                   </small>
+                  {chargeKostenText(c, einheit, pm) && <small>{chargeKostenText(c, einheit, pm)}</small>}
                 </span>
                 <span className="chargen-rechts">
                   {c.geoeffnet_am && <span className="status status-offen">geöffnet</span>}

@@ -1,0 +1,257 @@
+/* Bestand aktualisieren (Kassenbon, E-Bon, Text) und Produktion – nutzt die Tokens aus style.css. */
+
+/* ───────── Ganze Seite ───────── */
+.vollbild {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: einblenden 0.18s ease-out;
+}
+.vollbild-kopf {
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 16px 10px;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+}
+.vollbild-kopf h2 { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; }
+.vollbild-zurueck { display: inline-flex; align-items: center; gap: 6px; margin-left: -4px; }
+.vollbild-inhalt {
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 4px 16px 24px;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+}
+.vollbild-fuss {
+  padding: 12px 16px calc(12px + var(--sicher-unten));
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+  background: var(--glas);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  border-top: 0.5px solid var(--trenn);
+}
+.fuss-hinweis { margin-top: 8px; text-align: center; font-size: 13px; color: var(--text-2); }
+
+/* ───────── Einstieg im Vorrat ───────── */
+.bestand-aktualisieren {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: var(--r-liste);
+  background: var(--akzent);
+  color: var(--akzent-text);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--akzent) 28%, transparent);
+  text-align: left;
+}
+.bestand-aktualisieren strong { display: block; font-size: 17px; }
+.bestand-aktualisieren small { display: block; font-size: 13px; opacity: 0.85; }
+.bestand-aktualisieren .icon { flex: none; }
+.bestand-aktualisieren span { flex: 1; }
+
+.wege { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.weg {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 68px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--r-liste);
+  background: var(--flaeche);
+  box-shadow: var(--schatten-1);
+  text-align: left;
+  color: var(--text);
+}
+.weg-emoji { font-size: 28px; width: 36px; text-align: center; }
+.weg-text { flex: 1; display: grid; gap: 2px; }
+.weg-text strong { font-size: 17px; }
+.weg-text small { color: var(--text-2); font-size: 14px; }
+.weg .icon { color: var(--text-3); }
+
+/* ───────── Erfassen ───────── */
+.quellen-wahl { margin: 4px 0 16px; }
+.aufnahme {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 26px 18px;
+  border-radius: var(--r-karte);
+  border: 2px dashed color-mix(in srgb, var(--akzent) 45%, transparent);
+  background: var(--akzent-weich);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+}
+.aufnahme .icon { color: var(--akzent); }
+.aufnahme strong { font-size: 18px; }
+.aufnahme small { color: var(--text-2); font-size: 14px; }
+.galerie { display: block; text-align: center; cursor: pointer; }
+.foto-liste { list-style: none; margin: 12px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.foto-liste li { position: relative; border-radius: 14px; overflow: hidden; background: var(--flaeche); box-shadow: var(--schatten-1); }
+.foto-liste img { display: block; width: 100%; height: 130px; object-fit: cover; }
+.foto-nr {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+.foto-knoepfe { display: flex; justify-content: space-around; padding: 6px 2px; }
+.erklaerung { margin: 12px 4px; }
+.gemerkt { display: grid; gap: 4px; }
+.gemerkt .knopf-reihe { margin: 6px 0 0; }
+
+/* ───────── Rückfragen ───────── */
+.frage-zaehler { margin: 0 4px 10px; }
+.frage-karte {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--r-karte);
+  background: var(--flaeche);
+  box-shadow: var(--schatten-1);
+}
+.frage-titel { font-size: 20px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; }
+.bon-rohtext {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--flaeche-2);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.bon-rohtext-klein { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 14px; }
+.bon-roh {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--flaeche);
+  font-size: 13px;
+  white-space: pre-wrap;
+  color: var(--text-2);
+}
+.kandidaten { display: grid; gap: 8px; }
+.kandidat { justify-content: space-between; text-align: left; }
+.kandidat small { color: var(--text-2); font-weight: 500; font-size: 13px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 6px 13px;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  background: var(--flaeche-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.chip.gewaehlt { border-color: var(--akzent); background: var(--akzent-weich); font-weight: 600; }
+.zahl.gewaehlt { outline: 2.5px solid var(--akzent); background: var(--akzent-weich); }
+.sorte-wahl {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--trenn);
+  border-radius: 12px;
+  background: var(--flaeche);
+  color: var(--text);
+  font-size: 16px;
+}
+.neues-produkt { gap: 14px; }
+
+/* ───────── Prüfen ───────── */
+.bon-kopfzeile { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 4px 14px; font-size: 14px; color: var(--text-2); }
+.status-ok { color: var(--gruen); }
+.offene-fragen {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: var(--r-liste);
+  background: var(--bald-weich);
+  color: var(--text);
+  text-align: left;
+  font-size: 15px;
+}
+.offene-fragen strong { color: var(--bald); font-size: 16px; }
+.aenderung { flex: none; font-size: 17px; font-weight: 700; color: var(--gruen); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.marke {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--offen-weich);
+  color: var(--offen);
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+.alle-zeilen { margin-top: 18px; }
+.alle-zeilen .liste { margin-top: 8px; }
+.ziel-name { margin-bottom: 10px; }
+
+/* ───────── Fertig ───────── */
+.fertig-kopf { display: grid; justify-items: center; gap: 6px; padding: 18px 8px 8px; text-align: center; }
+.fertig-haken {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--gruen-weich);
+  color: var(--gruen);
+  animation: auftauchen 0.35s ease-out;
+}
+.fertig-titel { font-size: 22px; font-weight: 700; }
+.empfehlung {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-liste);
+  background: var(--flaeche);
+  box-shadow: var(--schatten-1);
+}
+.empfehlung-name { font-size: 17px; font-weight: 600; }
+.empfehlung .knopf-reihe { margin: 8px 0 0; }
+.empfehlung .knopf { min-height: 42px; font-size: 15px; }
+.gruende { margin: 4px 0 0; padding-left: 18px; font-size: 14px; color: var(--text-2); }
+
+/* ───────── Produktion ───────── */
+.tabbar { max-width: 420px; }
+.mengen-zeile { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.mengen-zeile strong { min-width: 110px; text-align: center; font-size: 22px; font-variant-numeric: tabular-nums; }
+.eingaenge .zeile { gap: 6px; padding-right: 8px; }
+.eingang-menge { width: 76px !important; min-height: 38px !important; padding: 6px 8px !important; text-align: right; font-size: 16px !important; }
+.eingang-einheit { font-size: 13px; color: var(--text-2); min-width: 30px; }
+.pruef-ergebnis { margin-top: 12px; padding: 12px 14px; border-radius: 14px; font-weight: 600; }
+.pruef-ergebnis.ok { background: var(--gruen-weich); color: var(--gruen); }
+.pruef-ergebnis.fehlt { display: grid; gap: 10px; background: var(--bald-weich); color: var(--text); font-weight: 500; }
+.kosten-vorschau { font-size: 18px; margin: 0 4px 6px; }
+.fuss-knoepfe { margin: 0; flex-wrap: nowrap; }
+.fuss-knoepfe .knopf { flex: 0 0 auto; }
+.fuss-knoepfe .knopf.haupt { flex: 1 1 auto; width: auto; }

@@ -53,6 +53,13 @@ export type Charge = {
   eingefroren_am: string;
   ablauf_am?: string | null;
   geoeffnet_am?: string | null;
+  // ab Migration „bon_produktion“: Kosten, Herkunft und Lagerort je Charge
+  kosten_cent?: number | null;
+  kosten_menge?: number | null;
+  kosten_status?: 'berechnet' | 'teilweise' | 'unbekannt';
+  kosten_quelle?: 'sortenpreis' | 'bon' | 'produktion' | null;
+  quelle?: 'bon' | 'e_bon' | 'produktion' | null;
+  lagerort?: Lagerort | null;
 };
 
 type DbFehler = { message: string; code?: string };
@@ -61,7 +68,7 @@ type DbFehler = { message: string; code?: string };
 export const fehltMigration = (e: DbFehler | null | undefined) =>
   !!e && (e.code === '42703' || e.code === 'PGRST204' || e.code === 'PGRST202' || /column .* does not exist/i.test(e.message));
 
-function meldung(fehler: DbFehler): string {
+export function meldung(fehler: DbFehler): string {
   if (fehler.code === '23505') return 'Eine Sorte mit diesem Namen gibt es schon.';
   if (fehler.code === '42501') {
     return 'Keine Berechtigung – sind alle Migrationen in Supabase eingespielt? (siehe README)';
@@ -101,7 +108,10 @@ export async function ladeChargen(sorteId: number): Promise<Charge[]> {
       .gt('menge_aktuell', 0)
       .order('eingefroren_am')
       .order('id');
-  let { data, error } = await abfrage('id, menge_start, menge_aktuell, eingefroren_am, ablauf_am, geoeffnet_am');
+  let { data, error } = await abfrage(
+    'id, menge_start, menge_aktuell, eingefroren_am, ablauf_am, geoeffnet_am, kosten_cent, kosten_menge, kosten_status, kosten_quelle, quelle, lagerort',
+  );
+  if (fehltMigration(error)) ({ data, error } = await abfrage('id, menge_start, menge_aktuell, eingefroren_am, ablauf_am, geoeffnet_am'));
   if (fehltMigration(error)) ({ data, error } = await abfrage('id, menge_start, menge_aktuell, eingefroren_am'));
   if (error) throw new Error(meldung(error));
   return data as unknown as Charge[];

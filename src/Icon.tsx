@@ -27,6 +27,14 @@ const PFADE = {
   korb: 'M3 9h18l-2 11H5L3 9Z M8 9l4-6 4 6',
   funken: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z',
   offen: 'M5 10h14v10H5z M8 10V7a4 4 0 0 1 7.5-2',
+  bon: 'M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21V3Z M9 8h6 M9 12h6 M9 16h3',
+  kamera: 'M4 8h3l2-3h6l2 3h3v11H4V8Z M12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
+  datei: 'M7 3h7l5 5v13H7V3Z M14 3v5h5',
+  text: 'M5 6h14 M5 10h14 M5 14h10 M5 18h7',
+  topf: 'M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-6Z M2 10h20 M9 6.5c0-1 1-1.5 1-2.5 M14 6.5c0-1 1-1.5 1-2.5',
+  haken: 'M5 12.5l4.5 4.5L19 7.5',
+  hoch: 'M6 15l6-6 6 6',
+  runter: 'M6 9l6 6 6-6',
 } as const;
 
 export type IconName = keyof typeof PFADE;

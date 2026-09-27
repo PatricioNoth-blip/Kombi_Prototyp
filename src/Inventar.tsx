@@ -6,15 +6,28 @@ import { SorteBlatt } from './SorteBlatt';
 import { Einfrieren } from './Einfrieren';
 import { Sorten, SorteFormular } from './Sorten';
 import { Essen } from './Essen';
+import { BestandAktualisieren } from './BestandAktualisieren';
+import { BonImport } from './BonImport';
+import { Produktion } from './Produktion';
+import { ProduktionBlatt, type ProduktionsVorlage } from './ProduktionBlatt';
+import { produktionRueckgaengig } from './produktionApi';
+import type { ImportQuelle } from '../supabase/functions/_shared/kombi/bon/typen.ts';
 import { Icon, type IconName } from './Icon';
 import { buchungsVerb } from './farben';
 import { mengeText } from './format';
 
-type Meldung = { text: string; fehler?: boolean; rueckgaengig?: number[] };
-type Ansicht = 'bestand' | 'essen' | 'sorten';
+type Meldung = {
+  text: string;
+  fehler?: boolean;
+  rueckgaengig?: number[];
+  /** eigenes Rückgängig (z. B. ganze Produktion statt einzelner Bewegungen) */
+  aktion?: { text: string; los: () => Promise<void> };
+};
+type Ansicht = 'bestand' | 'produktion' | 'essen' | 'sorten';
 
 const REITER: { id: Ansicht; name: string; titel: string; icon: IconName }[] = [
   { id: 'bestand', name: 'Vorrat', titel: 'Vorrat', icon: 'vorrat' },
+  { id: 'produktion', name: 'Produktion', titel: 'Produktion', icon: 'topf' },
   { id: 'essen', name: 'Essen', titel: 'Heute essen', icon: 'essen' },
   { id: 'sorten', name: 'Sorten', titel: 'Sorten', icon: 'sorten' },
 ];
@@ -23,7 +36,7 @@ const SPEICHER = 'kombi-ansicht';
 function letzteAnsicht(): Ansicht {
   try {
     const a = localStorage.getItem(SPEICHER);
-    return a === 'essen' || a === 'sorten' ? a : 'bestand';
+    return a === 'essen' || a === 'sorten' || a === 'produktion' ? a : 'bestand';
   } catch {
     return 'bestand';
   }
@@ -42,6 +55,11 @@ export function Inventar() {
   const [laeuft, setLaeuft] = useState<Set<number>>(new Set());
   const [meldung, setMeldung] = useState<Meldung | null>(null);
   const [gescrollt, setGescrollt] = useState(false);
+  // Bestand aktualisieren: Auswahl (Bon, E-Bon, Text, manuell) und der Bon-Import selbst
+  const [aktualisieren, setAktualisieren] = useState(false);
+  const [bonQuelle, setBonQuelle] = useState<ImportQuelle | null>(null);
+  const [produktionVorlage, setProduktionVorlage] = useState<ProduktionsVorlage | null>(null);
+  const [version, setVersion] = useState(0);
   const timer = useRef<number | undefined>(undefined);
 
   const laden = useCallback(async () => {
@@ -49,6 +67,7 @@ export function Inventar() {
       const b = await api.ladeBestand();
       setBestand(b);
       setBaukasten(await api.hatBaukasten(b));
+      setVersion((v) => v + 1);
       setLadefehler(null);
     } catch (e) {
       setLadefehler(fehlerText(e));
@@ -124,6 +143,18 @@ export function Inventar() {
     }
   }
 
+  async function aktionAusfuehren(a: NonNullable<Meldung['aktion']>) {
+    window.clearTimeout(timer.current);
+    setMeldung(null);
+    try {
+      await a.los();
+    } catch (e) {
+      zeige({ text: fehlerText(e), fehler: true });
+    } finally {
+      await laden();
+    }
+  }
+
   /** menge in der Einheit der Sorte (Portionen, Stück, g, ml) */
   function entnehmen(sorte: Sorte, menge: number) {
     setOffeneSorteId(null);
@@ -147,6 +178,8 @@ export function Inventar() {
   const untertitel =
     bestand && ansicht === 'bestand'
       ? `${bestand.filter((s) => s.anzahl > 0).length} von ${bestand.length} Sorten da`
+      : ansicht === 'produktion'
+        ? 'Vorkochen, nachkochen, einfrieren'
       : ansicht === 'essen'
         ? 'Was machen wir aus dem, was da ist?'
         : bestand
@@ -185,11 +218,28 @@ export function Inventar() {
         {bestand === null ? (
           !ladefehler && <p className="leise laden">Lade Vorrat …</p>
         ) : ansicht === 'bestand' ? (
+          <>
+          <button type="button" className="bestand-aktualisieren" onClick={() => setAktualisieren(true)}>
+            <Icon name="bon" groesse={26} />
+            <span>
+              <strong>+ Bestand aktualisieren</strong>
+              <small>Kassenbon scannen, E-Bon importieren oder manuell</small>
+            </span>
+          </button>
           <Uebersicht
             bestand={bestand}
             laeuft={laeuft}
             onEntnehmen={entnehmen}
             onOeffnen={(s) => setOffeneSorteId(s.id)}
+          />
+          </>
+        ) : ansicht === 'produktion' ? (
+          <Produktion
+            bestand={bestand}
+            version={version}
+            onStarten={setProduktionVorlage}
+            onMeldung={(text, fehler) => zeige({ text, fehler })}
+            onBestandGeaendert={() => void laden()}
           />
         ) : ansicht === 'sorten' ? (
           <Sorten
@@ -229,6 +279,11 @@ export function Inventar() {
         </nav>
         {ansicht === 'bestand' && bestand && bestand.length > 0 && (
           <button type="button" className="aktion-knopf" onClick={() => setEinfrierenDialog({ sorteId: null })} aria-label="Einbuchen" title="Einbuchen">
+            <Icon name="plus" groesse={28} />
+          </button>
+        )}
+        {ansicht === 'produktion' && bestand && (
+          <button type="button" className="aktion-knopf" onClick={() => setProduktionVorlage({ block_typ_id: null, eingaenge: [], menge: null })} aria-label="Produktion starten" title="Produktion starten">
             <Icon name="plus" groesse={28} />
           </button>
         )}
@@ -288,6 +343,62 @@ export function Inventar() {
         />
       )}
 
+      {aktualisieren && (
+        <BestandAktualisieren
+          onBon={(q) => {
+            setAktualisieren(false);
+            setBonQuelle(q);
+          }}
+          onManuell={() => {
+            setAktualisieren(false);
+            setEinfrierenDialog({ sorteId: null });
+          }}
+          onSchliessen={() => setAktualisieren(false)}
+        />
+      )}
+
+      {bonQuelle && bestand && (
+        <BonImport
+          quelle={bonQuelle}
+          bestand={bestand}
+          onGebucht={() => void laden()}
+          onMeldung={(text, fehler) => zeige({ text, fehler })}
+          onProduktion={(e) => {
+            setBonQuelle(null);
+            setProduktionVorlage({ block_typ_id: e.block_typ_id, eingaenge: e.eingaenge, menge: e.menge });
+          }}
+          onSchliessen={() => setBonQuelle(null)}
+        />
+      )}
+
+      {produktionVorlage && bestand && (
+        <ProduktionBlatt
+          bestand={bestand}
+          vorlage={produktionVorlage}
+          onProduziert={(text, id) => {
+            setProduktionVorlage(null);
+            zeige({
+              text,
+              aktion: {
+                text: 'Rückgängig',
+                los: async () => {
+                  await produktionRueckgaengig(id);
+                  zeige({ text: 'Produktion rückgängig gemacht – Zutaten sind zurück im Bestand.' });
+                },
+              },
+            });
+            void laden();
+          }}
+          onGeplant={(text) => {
+            setProduktionVorlage(null);
+            zeige({ text });
+            void laden();
+          }}
+          onMeldung={(text, fehler) => zeige({ text, fehler })}
+          onSchliessen={() => setProduktionVorlage(null)}
+        />
+      )}
+
       {einfrierenDialog && bestand && (
         <Einfrieren
           bestand={bestand}
@@ -305,6 +416,11 @@ export function Inventar() {
             {meldung.rueckgaengig && (
               <button type="button" onClick={() => void rueckgaengigMachen(meldung.rueckgaengig!)}>
                 Rückgängig
+              </button>
+            )}
+            {meldung.aktion && (
+              <button type="button" onClick={() => void aktionAusfuehren(meldung.aktion!)}>
+                {meldung.aktion.text}
               </button>
             )}
           </div>
