@@ -1,10 +1,8 @@
 // Welche Teile welcher Migration gibt es in der echten Datenbank? Nur lesend, mit dem App-Schlüssel.
 //
 // • Tabellen, Views, Spalten: select … limit 0 – liest keine einzige Zeile.
-// • Funktionen: aus dem OpenAPI-Verzeichnis von PostgREST (GET /rest/v1/). Fehlt eine dort, ein
-//   GET-Aufruf mit einem Parameter, den keine Funktion hat: PostgREST findet keine passende Funktion,
-//   führt nichts aus (GET läuft zusätzlich in einer Nur-Lesen-Transaktion) und nennt im Hinweis die
-//   vorhandene Signatur („Perhaps you meant to call the function public.x(…)“).
+// • Funktionen: GET-Aufruf mit den erwarteten Parameternamen und ungültigen Werten – siehe funktionDa().
+//   (Das OpenAPI-Verzeichnis und die Hinweistexte von PostgREST sind mit dem App-Schlüssel nicht verlässlich.)
 // • Migration „ohne_login“ ändert nur Rechte – geprüft über das, was die App-Rolle darf.
 // Trigger, Constraints, Fremdschlüssel, RLS-Policies und Rechte im Detail sieht die App-Rolle nicht:
 // dafür gibt es scripts/schema-stand.sql für den SQL-Editor (ebenfalls nur lesend).
@@ -117,39 +115,19 @@ async function pruefeRelation(db, name, spalten) {
 }
 
 /**
- * Funktionen laut OpenAPI-Verzeichnis von PostgREST (GET /rest/v1/, nur lesend): Name → Parameter.
- * null, wenn das Verzeichnis für den App-Schlüssel nicht abrufbar ist.
+ * Gibt es eine Funktion mit (mindestens) diesen Parameternamen? Aufruf per GET mit absichtlich
+ * ungültigen Werten: Gibt es die Funktion, scheitert schon die Umwandlung der Werte (z. B. 22P02),
+ * bevor sie läuft – und GET läuft in einer Nur-Lesen-Transaktion, schreiben ginge ohnehin nicht.
+ * Gibt es keine passende Funktion, antwortet PostgREST mit PGRST202. Funktionen ohne Parameter
+ * (heute()) werden dabei tatsächlich ausgeführt – nur lesende.
  */
-async function funktionsVerzeichnis(url, schluessel) {
-  try {
-    const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/`, {
-      headers: { apikey: schluessel, authorization: `Bearer ${schluessel}`, accept: 'application/openapi+json' },
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!r.ok) return null;
-    const spec = await r.json();
-    const verzeichnis = new Map();
-    for (const [pfad, ops] of Object.entries(spec.paths ?? {})) {
-      const m = pfad.match(/^\/rpc\/(\w+)$/);
-      if (!m) continue;
-      const koerper = ops.post?.parameters?.find((p) => p.in === 'body')?.schema?.properties;
-      const abfrage = (ops.get?.parameters ?? []).filter((p) => p.in === 'query').map((p) => p.name);
-      verzeichnis.set(m[1], (koerper ? Object.keys(koerper) : abfrage).sort());
-    }
-    return verzeichnis;
-  } catch {
-    return null;
+async function funktionDa(db, name, params) {
+  const { error } = await db.rpc(name, Object.fromEntries(params.map((p) => [p, '§kein-wert§'])), { get: true });
+  if (!error) {
+    if (params.length) throw new Error(`${name}: wurde mit ungültigen Werten ausgeführt`);
+    return true;
   }
-}
-
-/** Rückfall ohne Verzeichnis: Parameter aus dem Hinweis von PostgREST – oder null (kein Hinweis auf diese Funktion). */
-async function parameterAusHinweis(db, name) {
-  const { error } = await db.rpc(name, { __schema_stand: 1 }, { get: true });
-  if (!error) throw new Error(`${name}: wurde unerwartet ausgeführt`);
-  if (error.code !== 'PGRST202') throw new Error(`${name}: ${error.code} ${error.message}`);
-  const m = `${error.hint ?? ''}`.match(new RegExp(`public\\.${name}(?:\\(([^)]*)\\))?(?![\\w])`));
-  if (!m) return null;
-  return (m[1] ?? '').split(',').map((p) => p.trim()).filter(Boolean).sort();
+  return error.code !== 'PGRST202';
 }
 
 /**
@@ -157,10 +135,7 @@ async function parameterAusHinweis(db, name) {
  * Eine Funktion gilt als vorhanden, wenn sie mindestens die erwarteten Parameter hat
  * (spätere Migrationen dürfen sie erweitern, z. B. einfrieren(…, p_ablauf_am)).
  */
-export async function schemaStand(db, url, schluessel) {
-  const verzeichnis = await funktionsVerzeichnis(url, schluessel);
-  // Fehlt eine Funktion im Verzeichnis (es zeigt nur, was die App-Rolle ausführen darf), zählt der Hinweis.
-  const parameter = async (name) => verzeichnis?.get(name) ?? parameterAusHinweis(db, name);
+export async function schemaStand(db) {
   const ergebnis = [];
   for (const m of MIGRATIONEN) {
     const da = [];
@@ -184,13 +159,11 @@ export async function schemaStand(db, url, schluessel) {
       } else da.push(name);
     }
     for (const [name, params] of Object.entries(m.funktionen ?? {})) {
-      const live = await parameter(name);
-      if (live === null) fehlt.push(`${name}()`);
-      else if (params.every((p) => live.includes(p))) da.push(`${name}()`);
-      else fehlt.push(`${name}(${params.join(', ')}) – live: ${name}(${live.join(', ')})`);
+      if (await funktionDa(db, name, params)) da.push(`${name}()`);
+      else fehlt.push(`${name}(${params.join(', ')})`);
     }
     const status = fehlt.length === 0 ? 'vollständig' : da.length === 0 ? 'fehlt' : 'teilweise';
     ergebnis.push({ datei: m.datei, fremd: !!m.fremd, status, da, fehlt });
   }
-  return { methode: verzeichnis ? 'OpenAPI-Verzeichnis' : 'Hinweise von PostgREST', ergebnis };
+  return ergebnis;
 }

@@ -288,15 +288,14 @@ if (ausgaben) {
 console.log('\nSchema je Migration (nur lesend)');
 try {
   const { schemaStand } = await import('./schema-stand.mjs');
-  const { methode, ergebnis } = await schemaStand(db, env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY);
-  for (const m of ergebnis) {
+  for (const m of await schemaStand(db)) {
     const zeichen = { vollständig: '●', teilweise: '◐', fehlt: '○' }[m.status];
     console.log(`${zeichen} ${m.datei}: ${m.status}` +
       (m.status === 'teilweise' ? ` – vorhanden: ${m.da.join(', ')} · fehlt: ${m.fehlt.join(', ')}` : '') +
       (m.status === 'vollständig' ? ` – ${m.da.length} Objekte` : '') +
       (m.status === 'fehlt' ? ` – keines von ${m.fehlt.length} Objekten (${m.fehlt.slice(0, 4).join(', ')}${m.fehlt.length > 4 ? ' …' : ''})` : ''));
   }
-  console.log(`ℹ Funktionen erkannt über: ${methode}. Trigger, Constraints, Fremdschlüssel, RLS und Policies: scripts/schema-stand.sql im SQL-Editor.`);
+  console.log('ℹ Trigger, Constraints, Fremdschlüssel, RLS und Policies im Detail: scripts/schema-stand.sql im SQL-Editor (nur lesend).');
 } catch (e) {
   console.log(`⚠ Schema-Prüfung nicht möglich: ${e.message}`);
 }
