@@ -1,19 +1,23 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type { Gericht, KomponentenVorschlag, Optionen } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { Einkaufsliste, PlanStand } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
 import { restSnapshot } from '../supabase/functions/_shared/kombi/planung.ts';
 import { erzeugeKomponenten, erzeugeVorschlaege } from '../supabase/functions/_shared/kombi/engine.ts';
 import { regelbasiert } from '../supabase/functions/_shared/kombi/anbieter/regelbasiert.ts';
 import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
-import type { Sorte } from './api';
+import { fehlerText, type Sorte } from './api';
 import { baueSnapshotAus } from './essenApi';
-import { naehrwerteGericht, type Haushaltsdaten } from './haushalt';
-import { GerichtMeta, Verfuegbarkeit } from './GerichtKarte';
-import { WichtigZeile } from './Vorrat';
+import { ausgabeEintragen, ausgabeEntfernen, naehrwerteGericht, type Haushaltsdaten } from './haushalt';
+import { Bild, DEKO } from './Bild';
+import { Box, MetaIcons, Verfuegbar, WarnIcon, WichtigKacheln } from './Karten';
+import { Blatt } from './Blatt';
 import { Icon } from './Icon';
-import { euro } from './format';
-import { heuteWichtig } from './dashboard';
-import { dringendHeute, heuteGekocht, monatsbilanz, sinnvolleProduktion, startReihenfolge, type ProduktionsTipp, type StartAbschnitt } from './startseite';
+import { euro, euroZuCent } from './format';
+import { heuteWichtig, zustand } from './dashboard';
+import {
+  heuteGekocht, monatsbilanz, sinnvolleProduktion, startReihenfolge,
+  type Monatsbilanz, type ProduktionsTipp, type StartAbschnitt,
+} from './startseite';
 import type { Bereich } from './navigation';
 
 type Props = {
@@ -30,6 +34,8 @@ type Props = {
   onKochen: (g: Gericht, planId: string | null) => void;
   onOeffnen: (s: Sorte) => void;
   onBereich: (b: Bereich) => void;
+  onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void;
+  onGeaendert: () => void;
 };
 
 const START_OPTIONEN: Optionen = { personen: 2, max_minuten: 15, guenstig: true };
@@ -72,166 +78,38 @@ export function useLokaleIdeen(bestand: Sorte[] | null, reserviert: Map<number, 
   return ideen;
 }
 
-function Abschnitt({ titel, link, children }: { titel: string; link?: { text: string; onClick: () => void }; children: ReactNode }) {
-  return (
-    <section className="abschnitt" aria-label={titel}>
-      <div className="abschnitt-kopf">
-        <h2>{titel}</h2>
-        {link && <button type="button" className="link" onClick={link.onClick}>{link.text}</button>}
-      </div>
-      {children}
-    </section>
-  );
-}
+/** Die Startseite: Geld, was heute wichtig ist, was es zu essen gibt, Produktion und Einkauf. */
+export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaellig, ideen, onKochen, onOeffnen, onBereich, onMeldung, onGeaendert }: Props) {
+  const [geldOffen, setGeldOffen] = useState(false);
 
-/** Die Startseite: was heute wichtig ist, was es zu essen gibt, was der Haushalt kostet. */
-export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaellig, ideen, onKochen, onOeffnen, onBereich }: Props) {
-
-  // ───────── Heute wichtig ─────────
   const wichtig = heuteWichtig(bestand, heute);
-  const dringend = dringendHeute(bestand, heute, auftauFaellig);
+  const bilanz = monatsbilanz(h, heute);
+  const gekocht = heuteGekocht(h.mahlzeiten, heute);
 
-  // ───────── Essen ─────────
+  // Vorschläge: Geplantes für heute zuerst, dann Ideen aus dem freien Vorrat (ohne heute schon Gekochtes)
   const geplant = h.plaene
     .filter((p) => p.art === 'mahlzeit' && p.daten.gericht && p.datum !== null && p.datum <= heute)
-    .sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? ''))[0] ?? null;
-  const gekocht = heuteGekocht(h.mahlzeiten, heute);
-  // was heute schon gekocht wurde, wird nicht gleich wieder vorgeschlagen
-  const idee = ideen?.gerichte.find((g) => !gekocht.titel.includes(g.name)) ?? null;
-  const haupt: { g: Gericht; planId: string | null } | null = geplant
-    ? { g: geplant.daten.gericht!, planId: geplant.id }
-    : idee ? { g: idee, planId: null } : null;
+    .sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? ''))
+    .map((p) => ({ g: p.daten.gericht!, planId: p.id as string | null }));
+  const vorschlaege = [
+    ...geplant,
+    ...(ideen?.gerichte ?? []).filter((g) => !gekocht.titel.includes(g.name)).map((g) => ({ g, planId: null })),
+  ].slice(0, 4);
 
-  // ───────── Geld ─────────
-  const bilanz = monatsbilanz(h, heute);
-
-  // ───────── Produktion ─────────
   const vorgemerkt = h.plaene.filter((p) => p.art === 'komponente').map((p) => {
     const stand = proPlan.get(p.id) ?? [];
     return { plan_id: p.id, titel: p.titel, portionen: p.portionen, alles_da: stand.every((x) => x.fehlt === 0) };
   });
   const tipp: ProduktionsTipp | null = sinnvolleProduktion(vorgemerkt, ideen?.komponenten ?? []);
-
-  // ───────── Einkauf ─────────
   const offen = liste.zeilen.filter((z) => z.status === 'offen');
 
   const folge = startReihenfolge({
-    dringend,
     wichtig: wichtig.length + auftauFaellig,
     produktion: tipp !== null,
     einkauf: h.planung && offen.length > 0,
     // ohne Protokoll (Migration „kosten_naehrwerte“) gibt es Ausgaben nur aus der Einkaufsliste
     geld: h.planung && (h.protokoll || bilanz.ausgegeben.anzahl > 0),
   });
-
-  const teile: Record<StartAbschnitt, () => ReactNode> = {
-    wichtig: () => (
-      <div key="wichtig">
-        {wichtig.length > 0 && (
-          <Abschnitt titel="Heute wichtig" link={wichtig.length > 5 ? { text: 'Alle anzeigen', onClick: () => onBereich('vorrat') } : undefined}>
-            <ul className="liste">
-              {wichtig.slice(0, 5).map((w) => <WichtigZeile key={w.sorte.id} w={w} onOeffnen={onOeffnen} />)}
-            </ul>
-          </Abschnitt>
-        )}
-        {auftauen}
-      </div>
-    ),
-    essen: () => (
-      <Abschnitt key="essen" titel="Was möchtest du essen?">
-        {haupt ? (
-          <Hauptvorschlag g={haupt.g} geplant={haupt.planId !== null} bestand={bestand} onKochen={() => onKochen(haupt.g, haupt.planId)}
-            onAndere={() => onBereich('essen')} />
-        ) : ideen === null ? (
-          <div className="flaeche"><p className="leise">Kombi schaut in den Vorrat …</p></div>
-        ) : (
-          <div className="flaeche vorschlag">
-            <p className="vorschlag-text">Aus dem freien Vorrat lässt sich gerade kein ganzes Gericht kochen.</p>
-            <button type="button" className="knopf breit" onClick={() => onBereich('essen')}>Ideen mit Einkauf ansehen</button>
-          </div>
-        )}
-        {gekocht.titel.length > 0 && (
-          <p className="abschnitt-fuss">
-            Heute gekocht: {gekocht.titel.join(', ')}
-            {gekocht.kcal !== null && ` · ${gekocht.kcal.toLocaleString('de-DE')} kcal`}
-          </p>
-        )}
-      </Abschnitt>
-    ),
-    geld: () => (
-      <Abschnitt key="geld" titel={`Geld im ${bilanz.monat}`}>
-        <div className="flaeche geld">
-          <div className="geld-haupt">
-            <small>Für Einkäufe ausgegeben</small>
-            <span className="geld-zahl">{euro(bilanz.ausgegeben.cent)}</span>
-            {bilanz.ausgegeben.ohne_preis > 0 && (
-              <small>ohne {bilanz.ausgegeben.ohne_preis} {bilanz.ausgegeben.ohne_preis === 1 ? 'Einkauf' : 'Einkäufe'} ohne Preisangabe</small>
-            )}
-          </div>
-          {h.protokoll && bilanz.gekocht.anzahl + bilanz.produktion.anzahl > 0 && (
-            <div className="geld-zeilen">
-              {bilanz.gekocht.anzahl > 0 && (
-                <div className="geld-zeile">
-                  <span>Gekocht · {bilanz.gekocht.anzahl} {bilanz.gekocht.anzahl === 1 ? 'Mahlzeit' : 'Mahlzeiten'}</span>
-                  <strong>{wert(bilanz.gekocht)}</strong>
-                </div>
-              )}
-              {bilanz.gekocht.pro_mahlzeit_cent !== null && (
-                <div className="geld-zeile"><span>Ø pro Mahlzeit</span><strong>{euro(bilanz.gekocht.pro_mahlzeit_cent)}</strong></div>
-              )}
-              {bilanz.produktion.anzahl > 0 && (
-                <div className="geld-zeile">
-                  <span>Produktion · {bilanz.produktion.anzahl}×</span>
-                  <strong>{wert(bilanz.produktion)}</strong>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <p className="abschnitt-fuss">
-          {bilanz.ausgegeben.anzahl === 0
-            ? 'Noch keine Einkäufe mit Preis in diesem Monat. Beim Einbuchen den bezahlten Betrag angeben – dann steht er hier.'
-            : 'Nur Bezahltes zählt als Ausgabe. Gekocht und Produktion zeigen den Wert der verbrauchten Zutaten.'}
-        </p>
-      </Abschnitt>
-    ),
-    produktion: () => tipp && (
-      <Abschnitt key="produktion" titel="Produktion">
-        <ul className="liste mit-icon">
-          <li>
-            <button type="button" className="zeile" onClick={() => onBereich('produktion')}>
-              <span className="icon-kachel"><Icon name="topf" groesse={18} /></span>
-              <span className="zeile-haupt">
-                <span className="zeile-titel">{tipp.art === 'vorgemerkt' ? tipp.titel : tipp.komponente.name}</span>
-                <span className="zeile-meta">
-                  {tipp.art === 'vorgemerkt'
-                    ? `Vorgemerkt · alles da · ${tipp.portionen} Portionen`
-                    : `${tipp.grund} · ${tipp.komponente.portionen} Portionen · ${tipp.komponente.zeit_min} Min`}
-                </span>
-              </span>
-              <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
-            </button>
-          </li>
-        </ul>
-      </Abschnitt>
-    ),
-    einkauf: () => (
-      <Abschnitt key="einkauf" titel="Einkauf">
-        <ul className="liste mit-icon">
-          <li>
-            <button type="button" className="zeile" onClick={() => onBereich('einkauf')}>
-              <span className="icon-kachel"><Icon name="wagen" groesse={18} /></span>
-              <span className="zeile-haupt">
-                <span className="zeile-titel">{offen.length} {offen.length === 1 ? 'Ding fehlt' : 'Dinge fehlen'}</span>
-                <span className="zeile-meta">{offen.slice(0, 3).map((z) => z.name).join(', ')}{offen.length > 3 ? ' …' : ''} · {einkaufKosten(liste.kosten)}</span>
-              </span>
-              <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
-            </button>
-          </li>
-        </ul>
-      </Abschnitt>
-    ),
-  };
 
   if (bestand.length === 0) {
     return (
@@ -243,45 +121,285 @@ export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaell
     );
   }
 
-  return <>{folge.map((a) => teile[a]())}</>;
+  const produktionBox = tipp && (
+    <Box titel="Produktion" icon="topf">
+      <div className="mini-tipp">
+        <Bild name={tipp.art === 'vorgemerkt' ? tipp.titel : tipp.komponente.name} farbe={tipp.art === 'idee' ? tipp.komponente.rolle : null} art="kachel" />
+        <div>
+          <strong>{tipp.art === 'vorgemerkt' ? tipp.titel : tipp.komponente.name}</strong>
+          <small>Heute sinnvoll · {tipp.art === 'vorgemerkt' ? tipp.portionen : tipp.komponente.portionen} Portionen</small>
+          <small className="status-kritisch">{tipp.art === 'vorgemerkt' ? 'Vorgemerkt · alles da' : produktionsGrund(tipp, bestand, heute)}</small>
+        </div>
+      </div>
+      <button type="button" className="knopf weich gross-schrift" onClick={() => onBereich('produktion')}>
+        Ansehen <Icon name="pfeil" groesse={16} />
+      </button>
+    </Box>
+  );
+
+  const einkaufBox = h.planung && offen.length > 0 && (
+    <Box titel="Einkauf" icon="wagen">
+      <div className="einkauf-kurz">
+        <strong>{offen.length} {offen.length === 1 ? 'Ding fehlt' : 'Dinge fehlen'}</strong>
+        <span>{einkaufKosten(liste.kosten).split(' · ')[0]}</span>
+        {liste.kosten.status === 'teilweise' && <small>Preis teilweise bekannt</small>}
+      </div>
+      <div className="bilder-reihe">
+        {offen.slice(0, 4).map((z) => <Bild key={z.schluessel + z.einheit_schluessel} name={z.name} farbe={z.kategorie === 'sonstiges' ? null : z.kategorie} art="klein" />)}
+      </div>
+      <button type="button" className="knopf weich-gruen gross-schrift" onClick={() => onBereich('einkauf')}>
+        Einkaufen <Icon name="pfeil" groesse={16} />
+      </button>
+    </Box>
+  );
+
+  const teile: Record<StartAbschnitt, () => ReactNode> = {
+    geld: () => <GeldKarte key="geld" b={bilanz} h={h} onOeffnen={() => setGeldOffen(true)} />,
+    wichtig: () => (
+      <div key="wichtig">
+        {wichtig.length > 0 && (
+          <Box titel="Heute wichtig" kopfIcon={<WarnIcon />} link={{ text: 'Alle anzeigen', onClick: () => onBereich('vorrat'), grau: true }}>
+            <WichtigKacheln wichtig={wichtig.slice(0, 8)} onOeffnen={onOeffnen} />
+          </Box>
+        )}
+        {auftauen}
+      </div>
+    ),
+    essen: () => (
+      <div key="essen" className="abschnitt">
+        {vorschlaege.length > 0 ? (
+          <Karussell>
+            {vorschlaege.map((v) => (
+              <GerichtFotoKarte key={v.g.id} g={v.g} geplant={v.planId !== null} bestand={bestand}
+                onKochen={() => onKochen(v.g, v.planId)} onMehr={() => onBereich('essen')} />
+            ))}
+          </Karussell>
+        ) : (
+          <Box titel="Was möchtest du essen?" icon="essen">
+            <p className="leise">{ideen === null ? 'Kombi schaut in den Vorrat …' : 'Aus dem freien Vorrat lässt sich gerade kein ganzes Gericht kochen.'}</p>
+            {ideen !== null && <button type="button" className="knopf breit abstand-oben" onClick={() => onBereich('essen')}>Ideen mit Einkauf ansehen</button>}
+          </Box>
+        )}
+        <div className="karussell-fuss">
+          <p className="heute-gekocht">
+            {gekocht.titel.length > 0 && <>Heute gekocht: {gekocht.titel.join(', ')}{gekocht.kcal !== null && ` · ${gekocht.kcal.toLocaleString('de-DE')} kcal`}</>}
+          </p>
+          {vorschlaege.length > 0 && <button type="button" className="mehr-link" onClick={() => onBereich('essen')}>Andere Vorschläge <Icon name="pfeil" groesse={16} /></button>}
+        </div>
+      </div>
+    ),
+    // Produktion und Einkauf stehen nebeneinander – gerendert beim Einkauf (oder allein, wenn es keinen gibt)
+    produktion: () => (folge.includes('einkauf') ? null : <div key="produktion" className="zwei">{produktionBox}</div>),
+    einkauf: () => <div key="einkauf" className="zwei">{folge.includes('produktion') && produktionBox}{einkaufBox}</div>,
+  };
+
+  return (
+    <>
+      {folge.map((a) => teile[a]())}
+      {geldOffen && <GeldBlatt b={bilanz} h={h} heute={heute} onMeldung={onMeldung} onGeaendert={onGeaendert} onSchliessen={() => setGeldOffen(false)} />}
+    </>
+  );
 }
 
-/** Warenwert: genau, „ab …“ wenn Preise fehlen – oder ehrlich „unbekannt“ */
-const wert = (x: { cent: number; vollstaendig: boolean }) =>
-  x.vollstaendig ? euro(x.cent) : x.cent > 0 ? `ab ${euro(x.cent)}` : 'unbekannt';
+/** „Tomaten laufen bald ab“ – der dringendste Grund aus dem Vorrat, sonst was verwertet wird */
+function produktionsGrund(t: Extract<ProduktionsTipp, { art: 'idee' }>, bestand: Sorte[], heute: string): string {
+  for (const name of t.komponente.verwertet) {
+    const s = bestand.find((b) => b.name === name);
+    const z = s ? zustand(s, heute) : null;
+    if (s && z && z.art !== 'niedrig') return `${s.name}: ${z.art === 'bald' ? z.text : z.titel.toLocaleLowerCase('de-DE')}`;
+  }
+  return t.grund;
+}
+
+/** Wischbare Vorschläge mit Punkten darunter */
+function Karussell({ children }: { children: ReactNode[] }) {
+  const [aktiv, setAktiv] = useState(0);
+  return (
+    <>
+      <div className="karussell" onScroll={(e) => {
+        const el = e.currentTarget;
+        setAktiv(Math.round(el.scrollLeft / Math.max(1, el.clientWidth - 28)));
+      }}>
+        {children}
+      </div>
+      {children.length > 1 && (
+        <div className="punkte" aria-hidden="true">{children.map((_, i) => <span key={i} className={i === aktiv ? 'an' : ''} />)}</div>
+      )}
+    </>
+  );
+}
+
+function GerichtFotoKarte({ g, geplant, bestand, onKochen, onMehr }: {
+  g: Gericht; geplant: boolean; bestand: Sorte[]; onKochen: () => void; onMehr: () => void;
+}) {
+  const farbe = g.zutaten.find((z) => z.quelle !== 'grundausstattung' && z.farbe)?.farbe ?? null;
+  return (
+    <article className="foto-karte">
+      <div className="foto-karte-bild"><Bild name={g.name} emoji={g.emoji} farbe={farbe} art="flaeche" /></div>
+      <div className="foto-karte-inhalt">
+        <p className="ueber">{geplant ? 'Heute geplant' : 'Was möchtest du essen?'}</p>
+        <h3>{g.name}</h3>
+        <MetaIcons g={g} n={naehrwerteGericht(g, bestand)} />
+        <Verfuegbar g={g} />
+        <button type="button" className="knopf pillen-knopf gross-schrift" onClick={onKochen}>
+          Kochen <Icon name="pfeil" groesse={16} />
+        </button>
+        <button type="button" className="vor-knopf icon-knopf klein" onClick={onMehr} aria-label="Andere Vorschläge"><Icon name="pfeil" groesse={16} /></button>
+      </div>
+    </article>
+  );
+}
+
+/** Geld diesen Monat – wie im Entwurf, aber ehrlich: die Summe ist nur echtes Geld (Einkäufe + Sonstiges). */
+function GeldKarte({ b, h, onOeffnen }: { b: Monatsbilanz; h: Haushaltsdaten; onOeffnen: () => void }) {
+  const bezug = Math.max(b.gesamt_cent, b.vormonat?.cent ?? 0, 1);
+  const anteil = (c: number) => `${Math.max(0, (c / bezug) * 100)}%`;
+  return (
+    <button type="button" className="geld-held" onClick={onOeffnen} aria-label={`Diesen Monat ${euro(b.gesamt_cent)} ausgegeben – Details`}>
+      <img src={DEKO.heldTomaten} alt="" aria-hidden="true" />
+      <p className="geld-titel">Diesen Monat</p>
+      <div className="geld-summe">
+        <span className="geld-zahl">{euro(b.gesamt_cent)}</span>
+        {b.vormonat && (
+          <span className="trend">
+            <span className={`trend-chip ${b.vormonat.aenderung_prozent <= 0 ? 'runter' : 'hoch'}`}>
+              {b.vormonat.aenderung_prozent <= 0 ? '↓' : '↑'} {Math.abs(b.vormonat.aenderung_prozent)} %
+            </span>
+            <small>im Vergleich zum Vormonat</small>
+          </span>
+        )}
+      </div>
+      <div className="geld-mitte">
+        <div className="teilbalken" aria-hidden="true">
+          {b.ausgegeben.cent > 0 && <span style={{ width: anteil(b.ausgegeben.cent), background: 'var(--ok)' }} />}
+          {b.sonstiges.cent > 0 && <span style={{ width: anteil(b.sonstiges.cent), background: 'var(--gelb)' }} />}
+          {b.gesamt_cent < bezug && <span className="leer" />}
+        </div>
+        {b.gekocht.pro_mahlzeit_cent !== null && (
+          <span className="geld-schnitt">
+            <Icon name="essen" groesse={22} />
+            <span><strong>Ø {euro(b.gekocht.pro_mahlzeit_cent)}</strong><small>pro Mahlzeit</small></span>
+          </span>
+        )}
+      </div>
+      <div className="geld-spalten">
+        <span className="geld-spalte">
+          <span><Icon name="wagen" groesse={16} className="status-ok" /> Einkäufe</span>
+          <strong>{euro(b.ausgegeben.cent)}</strong>
+        </span>
+        <span className="geld-spalte">
+          <span><Icon name="topf" groesse={16} className="status-achtung" /> Produktion</span>
+          <strong>{b.produktion.anzahl ? `${b.produktion.vollstaendig ? '' : 'ab '}${euro(b.produktion.cent)}` : '–'}</strong>
+          <small>Warenwert</small>
+        </span>
+        <span className="geld-spalte">
+          <span><Icon name="sonstiges" groesse={16} /> Sonstiges</span>
+          <strong>{h.ausgaben ? euro(b.sonstiges.cent) : '–'}</strong>
+        </span>
+      </div>
+      {b.leer && <p className="geld-leer">Noch nichts erfasst. Beim Einbuchen den bezahlten Betrag angeben – dann steht er hier.</p>}
+    </button>
+  );
+}
+
+/** Geld im Detail: was zählt, was nicht – und sonstige Ausgaben eintragen oder entfernen. */
+function GeldBlatt({ b, h, heute, onMeldung, onGeaendert, onSchliessen }: {
+  b: Monatsbilanz; h: Haushaltsdaten; heute: string;
+  onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void; onGeaendert: () => void; onSchliessen: () => void;
+}) {
+  const [betrag, setBetrag] = useState('');
+  const [notiz, setNotiz] = useState('');
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [laeuft, setLaeuft] = useState(false);
+  const diesen = h.sonstige.filter((a) => !a.entfernt && a.datum.slice(0, 7) === heute.slice(0, 7));
+
+  async function hinzufuegen(e: FormEvent) {
+    e.preventDefault();
+    const cent = euroZuCent(betrag);
+    if (cent === null || Number.isNaN(cent) || cent <= 0) return setFehler('Bitte einen Betrag wie 6,20 eingeben.');
+    setFehler(null);
+    setLaeuft(true);
+    try {
+      await ausgabeEintragen(cent, notiz || null);
+      setBetrag('');
+      setNotiz('');
+      onMeldung(`${euroText(cent)} unter „Sonstiges“ eingetragen.`);
+      onGeaendert();
+    } catch (err) {
+      setFehler(fehlerText(err));
+    } finally {
+      setLaeuft(false);
+    }
+  }
+
+  async function entfernen(id: number, text: string) {
+    try {
+      await ausgabeEntfernen(id, true);
+      onMeldung(`${text} entfernt.`, () => ausgabeEntfernen(id, false));
+      onGeaendert();
+    } catch (err) {
+      onMeldung(fehlerText(err));
+    }
+  }
+
+  const zeile = (titel: string, meta: string | null, wert: string) => (
+    <li><div className="zeile"><span className="zeile-haupt"><span className="zeile-titel">{titel}</span>{meta && <span className="zeile-meta">{meta}</span>}</span><span className="zeile-wert"><strong>{wert}</strong></span></div></li>
+  );
+
+  return (
+    <Blatt titel={`Geld im ${b.monat}`} untertitel="Nur echte Beträge – Kombi schätzt nichts." onSchliessen={onSchliessen}>
+      <h3 className="unterkopf">Ausgegeben</h3>
+      <ul className="liste">
+        {zeile('Einkäufe', `${b.ausgegeben.anzahl} ${b.ausgegeben.anzahl === 1 ? 'Einkauf' : 'Einkäufe'}${b.ausgegeben.ohne_preis ? ` · ${b.ausgegeben.ohne_preis} ohne Preis` : ''}`, euro(b.ausgegeben.cent))}
+        {zeile('Sonstiges', h.ausgaben ? `${b.sonstiges.anzahl} ${b.sonstiges.anzahl === 1 ? 'Eintrag' : 'Einträge'}` : 'Migration „ausgaben“ fehlt noch', h.ausgaben ? euro(b.sonstiges.cent) : '–')}
+        {zeile('Zusammen', b.vormonat ? `Vormonat bis zum ${b.vormonat.bis_tag}.: ${euro(b.vormonat.cent)}` : null, euro(b.gesamt_cent))}
+      </ul>
+
+      <h3 className="unterkopf">Warenwert – schon in den Einkäufen enthalten</h3>
+      <ul className="liste">
+        {zeile('Gekocht', `${b.gekocht.anzahl} ${b.gekocht.anzahl === 1 ? 'Mahlzeit' : 'Mahlzeiten'}`, b.gekocht.anzahl ? `${b.gekocht.vollstaendig ? '' : 'ab '}${euro(b.gekocht.cent)}` : '–')}
+        {b.gekocht.pro_mahlzeit_cent !== null && zeile('Ø pro Mahlzeit', null, euro(b.gekocht.pro_mahlzeit_cent))}
+        {zeile('Produktion', `${b.produktion.anzahl}× hergestellt`, b.produktion.anzahl ? `${b.produktion.vollstaendig ? '' : 'ab '}${euro(b.produktion.cent)}` : '–')}
+      </ul>
+      <p className="abschnitt-fuss">Gekocht und Produktion zeigen, was die verbrauchten Zutaten wert waren. Das Geld dafür ist schon bei den Einkäufen gezählt – es wird nie doppelt addiert.</p>
+
+      {h.ausgaben && (
+        <>
+          <h3 className="unterkopf">Sonstiges im {b.monat}</h3>
+          {diesen.length > 0 && (
+            <ul className="liste">
+              {diesen.map((a) => (
+                <li key={a.id}>
+                  <div className="zeile">
+                    <span className="zeile-haupt">
+                      <span className="zeile-titel">{a.notiz || 'Sonstiges'}</span>
+                      <span className="zeile-meta">{new Date(`${a.datum}T12:00:00`).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}</span>
+                    </span>
+                    <span className="zeile-wert"><strong>{euro(a.betrag_cent)}</strong></span>
+                    <button type="button" className="icon-knopf klein" aria-label={`${a.notiz || 'Ausgabe'} entfernen`} onClick={() => void entfernen(a.id!, a.notiz || 'Ausgabe')}>
+                      <Icon name="muell" groesse={15} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form className="ausgabe-form abstand-oben" onSubmit={hinzufuegen}>
+            <input type="text" inputMode="decimal" placeholder="0,00 €" value={betrag} onChange={(e) => setBetrag(e.target.value)} aria-label="Betrag in Euro" />
+            <input type="text" placeholder="Wofür? z. B. Kantine" maxLength={80} value={notiz} onChange={(e) => setNotiz(e.target.value)} aria-label="Wofür" />
+            <button type="submit" className="knopf pillen-knopf" disabled={laeuft || !betrag.trim()} aria-label="Ausgabe hinzufügen"><Icon name="plus" groesse={18} /></button>
+          </form>
+          {fehler && <p className="fehlertext">{fehler}</p>}
+          <p className="abschnitt-fuss">Für Ausgaben ohne Bezug zum Vorrat – z. B. Kantine, Bäcker, bestellt. Entfernen lässt sich rückgängig machen.</p>
+        </>
+      )}
+    </Blatt>
+  );
+}
 
 /** „≈ 12,40 €“ nur aus bekannten Preisen, sonst ehrlich „Preis teilweise bekannt“ */
 export function einkaufKosten(k: Einkaufsliste['kosten']): string {
   if (k.status === 'leer' || k.status === 'unbekannt' || k.bekannt_cent === null) return 'Preis unbekannt';
-  if (k.status === 'teilweise') return 'Preis teilweise bekannt';
-  return `≈ ${euroText(k.bekannt_cent)}`;
-}
-
-function Hauptvorschlag({ g, geplant, bestand, onKochen, onAndere }: {
-  g: Gericht; geplant: boolean; bestand: Sorte[]; onKochen: () => void; onAndere: () => void;
-}) {
-  const n = naehrwerteGericht(g, bestand);
-  const farbe = g.zutaten.find((z) => z.quelle !== 'grundausstattung' && z.farbe)?.farbe ?? 'neutral';
-  const komponenten = g.zutaten.filter((z) => z.art === 'komponente' || z.art === 'komplettgericht');
-  return (
-    <div className={`flaeche vorschlag f-${farbe}`}>
-      <div className="vorschlag-kopf">
-        <span className="gericht-bild" aria-hidden="true">{g.emoji}</span>
-        <div className="vorschlag-titel">
-          {geplant && <span className="zeile-meta">Heute geplant</span>}
-          <h3>{g.name}</h3>
-          <GerichtMeta g={g} n={n} />
-        </div>
-      </div>
-      {g.beschreibung && <p className="vorschlag-text">{g.beschreibung}</p>}
-      {komponenten.length > 0 && (
-        <p className="gericht-zutaten"><span className="leise">Aus deinen Komponenten: </span><strong>{komponenten.map((z) => z.name).join(', ')}</strong></p>
-      )}
-      <Verfuegbarkeit g={g} />
-      <button type="button" className="knopf haupt" onClick={onKochen}>
-        <Icon name="pfanne" /> Kochen
-      </button>
-      <button type="button" className="link breit" onClick={onAndere}>Andere Vorschläge</button>
-    </div>
-  );
+  if (k.status === 'teilweise') return `ab ${euroText(k.bekannt_cent)} · Preis teilweise bekannt`;
+  return `ca. ${euroText(k.bekannt_cent)}`;
 }

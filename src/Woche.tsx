@@ -12,6 +12,7 @@ import { GerichtKarte } from './GerichtKarte';
 import { Icon } from './Icon';
 import { kcalKurz } from './format';
 import { freieTage, plusTageIso, tagName } from './dashboard';
+import { Bild } from './Bild';
 
 type Props = {
   bestand: Sorte[];
@@ -190,7 +191,7 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
               return (
                 <li key={p.id}>
                   <div className="zeile">
-                    <span className="gericht-bild klein" aria-hidden="true">{g.emoji}</span>
+                    <Bild name={g.name} emoji={g.emoji} art="kachel" />
                     <span className="zeile-haupt">
                       <span className={`zeile-meta${vorbei ? ' status-achtung' : ''}`}>{p.datum ? tagName(heute, p.datum) : 'Flexibel'}</span>
                       <span className="zeile-titel">{p.titel}</span>
@@ -248,7 +249,7 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
               {vorschau.gerichte.map((g, i) => (
                 <li key={g.id}>
                   <div className="zeile">
-                    <span className="gericht-bild klein" aria-hidden="true">{g.emoji}</span>
+                    <Bild name={g.name} emoji={g.emoji} art="kachel" />
                     <span className="zeile-haupt">
                       <span className="zeile-meta">{vorschau.tage[i] ? tagName(heute, vorschau.tage[i]) : 'Flexibel'}</span>
                       <span className="zeile-titel">{g.name}</span>

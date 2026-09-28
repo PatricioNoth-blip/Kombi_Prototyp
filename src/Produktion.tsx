@@ -17,6 +17,9 @@ import { PostenListe } from './PostenListe';
 import { Icon } from './Icon';
 import { lagerort } from './farben';
 import { artVon, einheitVon, euroKurz, heuteIso, kcalKurz, mengeText, portionMengeVon, portionenVon } from './format';
+import { plusTageIso, zustand } from './dashboard';
+import { Bild } from './Bild';
+import { Box } from './Karten';
 
 type Props = {
   bestand: Sorte[];
@@ -29,7 +32,10 @@ type Props = {
   reserviert: Map<number, number>;
   /** lokal nach Kombi-Regeln berechnete Ideen (null = wird berechnet) */
   ideen: KomponentenVorschlag[] | null;
+  heute: string;
   onOeffnen: (s: Sorte) => void;
+  /** zur Wochenplanung (Essen → Woche) */
+  onWoche: () => void;
   onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void;
   onGeaendert: () => void;
 };
@@ -48,6 +54,22 @@ export function Sterne({ n }: { n: number }) {
 
 const fehltNamen = (k: KomponentenVorschlag) => [...new Set(k.zutaten.filter((z) => z.quelle === 'einkauf').map((z) => z.name))];
 
+const WOCHENTAGE = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+
+/** „Linsen-Bolognese läuft bald ab (noch 2 Tage)“ – der dringendste verwertete Vorrat, sonst was verwertet wird */
+function dringendsterGrund(k: KomponentenVorschlag, bestand: Sorte[], heute: string): { text: string; klein: string | null } {
+  for (const name of k.verwertet) {
+    const s = bestand.find((b) => b.name === name);
+    const z = s ? zustand(s, heute) : null;
+    if (s && z && z.art !== 'niedrig') {
+      return z.art === 'bald'
+        ? { text: `Läuft bald ab: ${s.name}`, klein: `(${z.text})` }
+        : { text: `${s.name}: ${z.titel.toLocaleLowerCase('de-DE')}`, klein: z.text };
+    }
+  }
+  return { text: `Verwertet ${k.verwertet.slice(0, 2).join(' und ')}`, klein: null };
+}
+
 /** Was soll hergestellt werden – und wohin kommt es? */
 type Auftrag = { k: KomponentenVorschlag; planId: string | null };
 
@@ -55,14 +77,13 @@ type Auftrag = { k: KomponentenVorschlag; planId: string | null };
  * Produktion: Komponenten vorkochen und einlagern. Oben steht nur, was JETZT sinnvoll ist –
  * Vorgemerktes mit allem da, sonst eine Idee, die Dringendes verwertet. Alles Weitere darunter.
  */
-export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPlan, nutzung, reserviert, ideen, onOeffnen, onMeldung, onGeaendert }: Props) {
+export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPlan, nutzung, reserviert, ideen, heute, onOeffnen, onWoche, onMeldung, onGeaendert }: Props) {
   const [kiIdeen, setKiIdeen] = useState<KomponentenVorschlag[] | null>(null);
   const [quelle, setQuelle] = useState<{ art: Quelle; anbieter: string; hinweis: string | null } | null>(null);
   const [laedt, setLaedt] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [offen, setOffen] = useState<KomponentenVorschlag | null>(null);
   const [auftrag, setAuftrag] = useState<Auftrag | null>(null);
-  const [alleIdeen, setAlleIdeen] = useState(false);
 
   if (!planung) {
     return (
@@ -100,7 +121,6 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
         modus: { art: 'normal' }, anzahl: 6, aufgabe: 'komponenten',
       });
       setKiIdeen(a.ergebnis.komponenten);
-      setAlleIdeen(true);
       setQuelle({ art: a.quelle, anbieter: a.ergebnis.anbieter, hinweis: a.hinweis ?? a.ergebnis.hinweis });
     } catch (e) {
       setFehler(fehlerText(e));
@@ -109,61 +129,83 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
     }
   }
 
-  const ideeZeile = (k: KomponentenVorschlag) => {
+  const warnung = jetzt && !jetzt.planId ? dringendsterGrund(jetzt.k, bestand, heute) : null;
+  const weitereVorgemerkt = vorgemerkt.filter((p) => p.id !== jetzt?.planId);
+  const tage = Array.from({ length: 7 }, (_, i) => plusTageIso(heute, i));
+  const flexibel = plaene.filter((p) => p.datum === null).length;
+
+  const empfKarte = (k: KomponentenVorschlag) => {
     const fehlt = fehltNamen(k);
     return (
-      <li key={k.id} className={`f-${k.rolle}`}>
-        <button type="button" className="zeile" onClick={() => setOffen(k)}>
-          <span className="punkt" aria-hidden="true" />
-          <span className="zeile-haupt">
-            <span className="zeile-titel">{k.name}</span>
-            <span className="zeile-meta">
-              {ROLLEN[k.rolle].name} · {k.portionen} Portionen · {fehlt.length ? <span className="status-achtung">fehlt: {fehlt.slice(0, 2).join(', ')}{fehlt.length > 2 ? ' …' : ''}</span> : <span className="status-ok">alles da</span>}
-            </span>
+      <button key={k.id} type="button" className="empfohlen-karte" onClick={() => setOffen(k)}>
+        <span className="empf-bild"><Bild name={k.name} farbe={k.rolle} art="flaeche" /></span>
+        <span className="empf-text">
+          <strong>{k.name} <Icon name="pfeil" groesse={16} /></strong>
+          <span className="meta-icons">
+            <span><Icon name="personen" groesse={15} /> {k.portionen} Portionen</span>
+            <span><Icon name="uhr" groesse={15} /> {k.zeit_min} Min</span>
           </span>
-          <Sterne n={k.nutzbarkeit.sterne} />
-        </button>
-      </li>
+          {fehlt.length
+            ? <span className="marke warm"><Icon name="wagen" groesse={14} /> <span>{fehlt.length === 1 ? `fehlt: ${fehlt[0]}` : `${fehlt.length} fehlen`}</span></span>
+            : <span className="marke"><Icon name="blatt" groesse={14} /> <span>Aus dem Vorrat</span></span>}
+        </span>
+      </button>
     );
   };
 
   return (
     <div className="produktion">
       {jetzt ? (
-        <section className="abschnitt" aria-label="Jetzt sinnvoll">
-          <div className="abschnitt-kopf"><h2>Jetzt sinnvoll</h2></div>
-          <div className={`flaeche produktion-tipp f-${jetzt.k.rolle}`}>
-            <div className="vorschlag-kopf">
-              <span className="gericht-bild" aria-hidden="true">{GERICHT_EMOJI[jetzt.k.gerichtstypen[0] ?? 'sonstiges']}</span>
-              <div className="vorschlag-titel">
-                <span className="zeile-meta">{jetzt.planId ? 'Vorgemerkt · alles da' : `Verwertet ${jetzt.k.verwertet.slice(0, 2).join(' und ')}`}</span>
-                <h3>{jetzt.k.name}</h3>
-                <p className="meta">
-                  <span>{jetzt.k.portionen} Portionen</span><span>{jetzt.k.zeit_min} Min</span><span>{euroKurz(jetzt.k.kosten)} / Portion</span>
-                </p>
-              </div>
+        <Box titel="Jetzt sinnvoll" icon="funken">
+          <article className="foto-karte getoent">
+            <div className="foto-karte-bild"><Bild name={jetzt.k.name} farbe={jetzt.k.rolle} art="flaeche" /></div>
+            <div className="foto-karte-inhalt">
+              <h3>{jetzt.k.name}</h3>
+              <p className="meta-icons">
+                <span><Icon name="personen" groesse={17} /> {jetzt.k.portionen} Portionen</span>
+                <span><Icon name="uhr" groesse={17} /> {jetzt.k.zeit_min} Min</span>
+              </p>
+              {warnung ? (
+                <p className="warnzeile"><span className="warn-punkt" aria-hidden="true">!</span><span>{warnung.text}{warnung.klein && <small>{warnung.klein}</small>}</span></p>
+              ) : (
+                <p className="verfuegbar status-ok"><span className="kreis-haken"><Icon name="haken" groesse={13} /></span> Vorgemerkt · alles da</p>
+              )}
+              <button type="button" className="knopf pillen-knopf" onClick={() => setAuftrag(jetzt)}>
+                <Icon name="topf" groesse={20} /> Produktion starten <Icon name="weiter" groesse={18} />
+              </button>
+              <button type="button" className="link" onClick={() => setOffen(jetzt.k)}>Details</button>
             </div>
-            {jetzt.k.beschreibung && <p className="vorschlag-text">{jetzt.k.beschreibung}</p>}
-            <button type="button" className="knopf haupt" onClick={() => setAuftrag(jetzt)}>
-              <Icon name="topf" /> Produktion starten
-            </button>
-            <button type="button" className="link breit" onClick={() => setOffen(jetzt.k)}>Details</button>
-          </div>
-        </section>
+          </article>
+        </Box>
       ) : (
         <p className="hinweisbox">Gerade muss nichts produziert werden. Unten gibt es Ideen, falls du trotzdem vorkochen möchtest.</p>
       )}
 
-      {vorgemerkt.filter((p) => p.id !== jetzt?.planId).length > 0 && (
-        <section className="abschnitt" aria-label="Vorgemerkt">
-          <div className="abschnitt-kopf"><h2>Vorgemerkt</h2></div>
-          <ul className="liste">
-            {vorgemerkt.filter((p) => p.id !== jetzt?.planId).map((p) => {
+      <Box titel="Empfohlen" icon="birne" link={{ text: laedt ? 'Sucht …' : 'Neue Ideen', onClick: () => void mitKi() }}>
+        {fehler && <p className="fehlerbox">{fehler}</p>}
+        {ideen === null && !kiIdeen ? (
+          <p className="leise">Kombi rechnet …</p>
+        ) : empfohlen.length === 0 ? (
+          <p className="leise">{quelle?.hinweis ?? 'Gerade keine weitere sinnvolle Komponente.'}</p>
+        ) : (
+          <div className="empfohlen">{empfohlen.map(empfKarte)}</div>
+        )}
+        <p className="abschnitt-fuss">
+          {quelle?.art === 'ki'
+            ? `Ideen von der KI (${quelle.anbieter}) – Mengen, Kosten und Nutzbarkeit rechnet Kombi selbst.`
+            : 'Aus deinem Vorrat nach Kombi-Regeln. „Neue Ideen“ fragt die KI. Gespeichert wird nichts ohne Bestätigung.'}
+        </p>
+      </Box>
+
+      {weitereVorgemerkt.length > 0 && (
+        <Box titel="Vorgemerkt" icon="baustein">
+          <ul className="liste mit-bild">
+            {weitereVorgemerkt.map((p) => {
               const fehlt = fehltImPlan(p);
               return (
-                <li key={p.id} className={`f-${p.daten.komponente!.rolle}`}>
+                <li key={p.id}>
                   <button type="button" className="zeile" onClick={() => setAuftrag({ k: p.daten.komponente!, planId: p.id })}>
-                    <span className="punkt" aria-hidden="true" />
+                    <Bild name={p.titel} farbe={p.daten.komponente!.rolle} art="klein" />
                     <span className="zeile-haupt">
                       <span className="zeile-titel">{p.titel}</span>
                       <span className="zeile-meta">
@@ -178,42 +220,33 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
               );
             })}
           </ul>
-        </section>
+        </Box>
       )}
 
-      <section className="abschnitt" aria-label="Empfohlen">
-        <div className="abschnitt-kopf">
-          <h2>Empfohlen</h2>
-          <button type="button" className="link" onClick={() => void mitKi()} disabled={laedt}>
-            {laedt ? 'Sucht …' : 'Neue Ideen'}
-          </button>
+      <Box titel="Geplant" icon="kalender" link={{ text: 'Diese Woche', onClick: onWoche, grau: true }}>
+        <div className="woche-streifen">
+          {tage.map((t, i) => {
+            const n = plaene.filter((p) => p.datum === t).length;
+            return (
+              <button key={t} type="button" className={`tag${i === 0 ? ' heute' : ''}`} onClick={onWoche} aria-label={`${i === 0 ? 'Heute' : t}: ${n} geplant`}>
+                <strong>{i === 0 ? 'Heute' : WOCHENTAGE[new Date(`${t}T12:00:00Z`).getUTCDay()]}</strong>
+                <small className={n ? 'voll' : ''}>{n}</small>
+              </button>
+            );
+          })}
         </div>
-        {fehler && <p className="fehlerbox">{fehler}</p>}
-        {ideen === null && !kiIdeen ? (
-          <p className="leise">Kombi rechnet …</p>
-        ) : empfohlen.length === 0 ? (
-          <p className="leise">{quelle?.hinweis ?? 'Gerade keine weitere sinnvolle Komponente.'}</p>
-        ) : (
-          <ul className="liste">{(alleIdeen ? empfohlen : empfohlen.slice(0, 3)).map(ideeZeile)}</ul>
-        )}
-        {!alleIdeen && empfohlen.length > 3 && (
-          <button type="button" className="link breit" onClick={() => setAlleIdeen(true)}>Weitere {empfohlen.length - 3} anzeigen</button>
-        )}
         <p className="abschnitt-fuss">
-          {quelle?.art === 'ki'
-            ? `Ideen von der KI (${quelle.anbieter}) – Mengen, Kosten und Nutzbarkeit rechnet Kombi selbst.`
-            : 'Aus deinem Vorrat nach Kombi-Regeln. „Neue Ideen“ fragt die KI. Gespeichert wird nichts ohne Bestätigung.'}
+          {plaene.filter((p) => p.datum !== null && p.datum >= tage[0] && p.datum <= tage[6]).length} geplant in den nächsten 7 Tagen{flexibel > 0 ? ` · ${flexibel} flexibel ohne Tag` : ''}
         </p>
-      </section>
+      </Box>
 
       {komponenten.length > 0 && (
-        <section className="abschnitt" aria-label="Deine Komponenten">
-          <div className="abschnitt-kopf"><h2>Deine Komponenten</h2></div>
-          <ul className="liste">
+        <Box titel="Deine Komponenten" icon="vorrat">
+          <ul className="liste mit-bild">
             {komponenten.map((s) => (
-              <li key={s.id} className={`f-${s.farbe}`}>
+              <li key={s.id}>
                 <button type="button" className={`zeile${s.anzahl === 0 ? ' leer' : ''}`} onClick={() => onOeffnen(s)}>
-                  <span className="punkt" aria-hidden="true" />
+                  <Bild name={s.name} farbe={s.farbe} art="klein" />
                   <span className="zeile-haupt">
                     <span className="zeile-titel">{s.name}</span>
                     <span className="zeile-meta">{ROLLEN[s.farbe].name} · {lagerort(s.lagerort).name}</span>
@@ -223,12 +256,11 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
               </li>
             ))}
           </ul>
-        </section>
+        </Box>
       )}
 
       {batch.length > 0 && (
-        <section className="abschnitt" aria-label="Größer vorkochen">
-          <div className="abschnitt-kopf"><h2>Größer vorkochen</h2></div>
+        <Box titel="Größer vorkochen" icon="aehnlich">
           <ul className="liste">
             {batch.map((b) => (
               <li key={b.block_typ_id}>
@@ -241,7 +273,7 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
               </li>
             ))}
           </ul>
-        </section>
+        </Box>
       )}
 
       {offen && (

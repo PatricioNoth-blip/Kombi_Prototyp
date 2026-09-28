@@ -2,7 +2,9 @@ import type { Gericht } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { Naehrwerte } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
 import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { Icon } from './Icon';
-import { euroKurz, kcalKurz, mengeText } from './format';
+import { mengeText } from './format';
+import { Bild } from './Bild';
+import { MetaIcons } from './Karten';
 
 /** Zutaten in Kurzform: „Tomaten-Basis, Spaghetti“ */
 const namen = (zs: Gericht['zutaten']) => zs.map((z) => z.name).join(', ');
@@ -14,17 +16,6 @@ export function Verfuegbarkeit({ g }: { g: Gericht }) {
   }
   const text = g.fehlt.map((f) => `${f.menge !== null && f.einheit ? `${mengeText(f.menge, f.einheit)} ` : ''}${f.name}`).join(', ');
   return <p className="verfuegbar status-achtung"><Icon name="wagen" groesse={16} /> Fehlt: {text}</p>;
-}
-
-/** „18 Min · 0,64 € · 620 kcal“ und darunter der Bezug */
-export function GerichtMeta({ g, n }: { g: Gericht; n: Naehrwerte }) {
-  const bekannt = g.kosten.status !== 'unbekannt' || n.status !== 'unbekannt';
-  return (
-    <div>
-      <p className="meta"><span>{g.zeit_min} Min</span><span>{euroKurz(g.kosten)}</span><span>{kcalKurz(n)}</span></p>
-      {bekannt && <p className="meta-text">je Portion · {g.portionen} {g.portionen === 1 ? 'Portion' : 'Portionen'}</p>}
-    </div>
-  );
 }
 
 /**
@@ -39,11 +30,11 @@ export function GerichtKarte({ g, naehrwerte: n, kompakt = false }: { g: Gericht
 
   return (
     <article className={`gericht f-${farbe}`}>
-      <div className="gericht-kopf" aria-hidden="true">{g.emoji}</div>
+      <div className="gericht-kopf" aria-hidden="true"><Bild name={g.name} emoji={g.emoji} farbe={farbe === 'neutral' ? null : farbe} art="flaeche" /></div>
       <div className="gericht-inhalt">
         <h3 className="gericht-name">{g.name}</h3>
         {g.beschreibung && <p className="gericht-text">{g.beschreibung}</p>}
-        <GerichtMeta g={g} n={n} />
+        <MetaIcons g={g} n={n} portionen />
         {komponenten.length > 0 && (
           <p className="gericht-zutaten"><span className="leise">Aus deinen Komponenten: </span><strong>{namen(komponenten)}</strong></p>
         )}

@@ -1,9 +1,12 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import type { NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts';
 import type { Sorte } from './api';
 import { ARTEN_INFO, farbe as farbInfo, lagerort, LAGERORTE } from './farben';
 import { Icon, type IconName } from './Icon';
-import { artVon, einheitVon, euro, mengeKurz, portionMengeVon } from './format';
+import { artVon, einheitVon, euro, mengeKurz, mengeText, portionMengeVon } from './format';
 import { heuteWichtig, ortKacheln, sortenFuer, vorratswert, zustand, type Wichtig } from './dashboard';
+import { Bild, DEKO, ORT_FOTO } from './Bild';
+import { Box, tonVon, WarnIcon, WichtigKacheln, zustandKurz } from './Karten';
 import type { NavZustand } from './navigation';
 
 type Props = {
@@ -17,6 +20,7 @@ type Props = {
   reserviert: Map<number, number>;
   /** „Für heute auftauen“ (fertig gerendert, kann leer sein) */
   auftauen: ReactNode;
+  nutzung: NutzungZeile[];
   onOeffnen: (s: Sorte) => void;
   onEntnehmen: (s: Sorte, menge: number) => void;
 };
@@ -26,32 +30,15 @@ export const einePortion = (s: Sorte) => Math.min(portionMengeVon(s), s.anzahl);
 
 const rolleVon = (s: Sorte) => (artVon(s) === 'komplettgericht' ? 'Komplettgericht' : farbInfo(s.farbe).bedeutung);
 
-/** Farbe des Zustands: kritisch (rot), Aufmerksamkeit (orange), Info (blau), sonst neutral */
+/** Farbe des Zustands – wie die Kacheln: läuft ab/abgelaufen rot, geöffnet gelb, aufgetaut blau, knapp neutral */
 export const zustandKlasse = (w: Wichtig) =>
-  w.art === 'abgelaufen' ? 'status-kritisch' : w.art === 'bald' ? 'status-achtung' : w.art === 'niedrig' ? '' : 'status-info';
-
-export function WichtigZeile({ w, onOeffnen }: { w: Wichtig; onOeffnen: (s: Sorte) => void }) {
-  return (
-    <li className={`f-${w.sorte.farbe}`}>
-      <button type="button" className="zeile" onClick={() => onOeffnen(w.sorte)}>
-        <span className="punkt" aria-hidden="true" />
-        <span className="zeile-haupt">
-          <span className="zeile-titel">{w.sorte.name}</span>
-          <span className="zeile-meta">
-            <span className={zustandKlasse(w)}>{w.art === 'niedrig' || w.art === 'bald' ? w.text : w.titel}</span> · {lagerort(w.sorte.lagerort).name}
-          </span>
-        </span>
-        <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
-      </button>
-    </li>
-  );
-}
+  w.art === 'abgelaufen' || w.art === 'bald' ? 'status-kritisch' : w.art === 'geoeffnet' ? 'status-achtung' : w.art === 'aufgetaut' ? 'status-info' : '';
 
 function Suchfeld({ wert, onAendern }: { wert: string; onAendern: (t: string) => void }) {
   return (
     <label className="suchfeld">
       <Icon name="suche" groesse={17} />
-      <input type="search" value={wert} onChange={(e) => onAendern(e.target.value)} placeholder="Suchen" aria-label="Im Vorrat suchen" />
+      <input type="search" value={wert} onChange={(e) => onAendern(e.target.value)} placeholder="Suchen (z. B. Tomaten, Reis, …)" aria-label="Im Vorrat suchen" />
       {wert && (
         <button type="button" className="such-leeren" onClick={() => onAendern('')} aria-label="Suche leeren">
           <Icon name="schliessen" groesse={12} />
@@ -76,7 +63,7 @@ function SorteZeile({ s, heute, reserviert, zeigeOrt, laeuft, onOeffnen, onEntne
     <li className={`vorrat-zeile f-${s.farbe}`}>
       <div className={`zeile${s.anzahl === 0 ? ' leer' : ''}`}>
         <button type="button" className="zeile-knopf" onClick={() => onOeffnen(s)}>
-          <span className="punkt" aria-hidden="true" />
+          <Bild name={s.name} farbe={s.farbe} art="klein" />
           <span className="zeile-haupt">
             <span className="zeile-titel">{s.name}</span>
             <span className="zeile-meta">{unter}</span>
@@ -98,9 +85,7 @@ function SorteZeile({ s, heute, reserviert, zeigeOrt, laeuft, onOeffnen, onEntne
 }
 
 /** Der Vorrat: erst was wichtig ist und wo was liegt – Einzelheiten erst beim Öffnen. */
-export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reserviert, auftauen, onOeffnen, onEntnehmen }: Props) {
-  const [alleWichtig, setAlleWichtig] = useState(false);
-
+export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reserviert, auftauen, nutzung, onOeffnen, onEntnehmen }: Props) {
   if (bestand.length === 0) {
     return (
       <div className="leer-zustand">
@@ -148,7 +133,7 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
         {sorten.length === 0 ? (
           <p className="leer-zustand">Nichts gefunden.</p>
         ) : nav.art || nav.suche ? (
-          <ul className="liste abstand-oben">{sorten.map((s) => zeile(s, ort === 'alle'))}</ul>
+          <ul className="liste mit-bild abstand-oben">{sorten.map((s) => zeile(s, ort === 'alle'))}</ul>
         ) : (
           arten.map((a) => {
             const gruppe = sorten.filter((s) => artVon(s) === a.id);
@@ -156,7 +141,7 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
             return (
               <section key={a.id}>
                 <h3 className="unterkopf">{a.mehrzahl}</h3>
-                <ul className="liste">{gruppe.map((s) => zeile(s, ort === 'alle'))}</ul>
+                <ul className="liste mit-bild">{gruppe.map((s) => zeile(s, ort === 'alle'))}</ul>
               </section>
             );
           })
@@ -171,7 +156,7 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
     return (
       <>
         <Suchfeld wert={nav.suche} onAendern={(t) => onNav({ suche: t })} />
-        {treffer.length === 0 ? <p className="leer-zustand">Nichts gefunden.</p> : <ul className="liste abstand-oben">{treffer.map((s) => zeile(s, true))}</ul>}
+        {treffer.length === 0 ? <p className="leer-zustand">Nichts gefunden.</p> : <ul className="liste mit-bild abstand-oben">{treffer.map((s) => zeile(s, true))}</ul>}
       </>
     );
   }
@@ -179,83 +164,108 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
   const wichtig = heuteWichtig(bestand, heute);
   const kacheln = ortKacheln(bestand, heute);
   const wert = vorratswert(bestand);
-  const komponenten = bestand.filter((s) => artVon(s) === 'komponente');
+  const da = bestand.filter((s) => s.anzahl > 0);
+  const anzahl = (id: string) => da.filter((s) => (s.lagerort ?? 'gefrierfach') === id).length;
+  const komponenten = da.filter((s) => artVon(s) === 'komponente').length;
+  const knapp = bestand.filter((s) => s.nachkochen).length;
+  const verbrauch = new Map(nutzung.map((n) => [n.block_typ_id, n.verbrauch_28]));
+  // „Deine wichtigsten Vorräte“: was Aufmerksamkeit braucht, dann was am meisten verbraucht wird
+  const wichtigste = [...bestand]
+    .filter((s) => s.anzahl > 0 || zustand(s, heute))
+    .sort((a, b) => {
+      const za = zustand(a, heute);
+      const zb = zustand(b, heute);
+      const rang = (z: Wichtig | null) => (z && z.art !== 'niedrig' ? 0 : 1);
+      return rang(za) - rang(zb) || (verbrauch.get(b.id) ?? 0) - (verbrauch.get(a.id) ?? 0) || a.name.localeCompare(b.name, 'de');
+    })
+    .slice(0, 6);
   const ICON: Record<string, IconName> = Object.fromEntries(LAGERORTE.map((l) => [l.id, l.icon]));
+  const TON: Record<string, string> = { kuehlschrank: 'ton-gruen', gefrierfach: 'ton-blau', vorrat: 'ton-gelb' };
+  const summe = Math.max(1, da.length);
+  const stat = (titel: string, zahl: number, icon: IconName, klasse: string, onClick: () => void) => (
+    <button type="button" className="vorrat-zahl" onClick={onClick}>
+      <span className={`icon-rund ${klasse}`}><Icon name={icon} groesse={15} /></span>
+      <strong>{zahl}</strong>
+      <small>{titel}</small>
+    </button>
+  );
 
   return (
     <>
       <Suchfeld wert={nav.suche} onAendern={(t) => onNav({ suche: t })} />
 
-      {wichtig.length > 0 && (
-        <section className="abschnitt" aria-label="Heute wichtig">
-          <div className="abschnitt-kopf">
-            <h2>Heute wichtig</h2>
-            {wichtig.length > 3 && (
-              <button type="button" className="link" onClick={() => setAlleWichtig((a) => !a)}>
-                {alleWichtig ? 'Weniger' : `Alle ${wichtig.length}`}
-              </button>
-            )}
+      <section className="vorrat-held" aria-label="Dein Vorrat">
+        <img src={DEKO.heldGemuese} alt="" aria-hidden="true" />
+        <div className="vorrat-held-kopf">
+          <div>
+            <p className="geld-titel">Dein Vorrat</p>
+            <span className="geld-zahl">{da.length} Artikel</span>
           </div>
-          <ul className="liste">
-            {(alleWichtig ? wichtig : wichtig.slice(0, 3)).map((w) => <WichtigZeile key={w.sorte.id} w={w} onOeffnen={onOeffnen} />)}
-          </ul>
-        </section>
+          <div className="fuellung">
+            <Icon name="blatt" groesse={18} />
+            <span>
+              <strong className={knapp ? 'status-achtung' : ''}>{knapp ? `${knapp} ${knapp === 1 ? 'wird' : 'werden'} knapp` : 'Gut gefüllt'}</strong>
+              <small>{wert.cent > 0 ? `Wert ≈ ${euro(wert.cent)}` : 'Preise noch offen'}</small>
+            </span>
+          </div>
+        </div>
+        <div className="teilbalken" aria-hidden="true">
+          {anzahl('kuehlschrank') > 0 && <span style={{ width: `${(anzahl('kuehlschrank') / summe) * 100}%`, background: 'var(--ok)' }} />}
+          {anzahl('gefrierfach') > 0 && <span style={{ width: `${(anzahl('gefrierfach') / summe) * 100}%`, background: 'var(--info)' }} />}
+          {anzahl('vorrat') > 0 && <span style={{ width: `${(anzahl('vorrat') / summe) * 100}%`, background: 'var(--gelb)' }} />}
+        </div>
+        <div className="vorrat-zahlen">
+          {stat('Frischware', anzahl('kuehlschrank'), 'blatt', 'farbe-frisch', () => onNav({ ort: 'kuehlschrank' }))}
+          {stat('Tiefkühl', anzahl('gefrierfach'), 'schneeflocke', 'farbe-tk', () => onNav({ ort: 'gefrierfach' }))}
+          {stat('Vorrat', anzahl('vorrat'), 'glas', 'farbe-vorrat', () => onNav({ ort: 'vorrat' }))}
+          {stat('Komponenten', komponenten, 'baustein', 'farbe-komp', () => onNav({ ort: 'alle', art: 'komponente' }))}
+        </div>
+      </section>
+
+      {wichtig.length > 0 && (
+        <Box titel="Heute wichtig" kopfIcon={<WarnIcon />} link={{ text: 'Alle anzeigen', onClick: () => onNav({ ort: 'alle' }), grau: true }}>
+          <WichtigKacheln wichtig={wichtig} mitPunkt onOeffnen={onOeffnen} />
+        </Box>
       )}
 
       {auftauen}
 
-      <section className="abschnitt" aria-label="Lagerorte">
-        <div className="abschnitt-kopf"><h2>Lagerorte</h2></div>
-        <ul className="liste mit-icon">
-          {kacheln.map((k) => (
-            <li key={k.id} className="ort-zeile">
-              <button type="button" className="zeile" onClick={() => onNav({ ort: k.id })}>
-                <span className="icon-kachel"><Icon name={ICON[k.id]} groesse={18} /></span>
-                <span className="zeile-haupt">
-                  <span className="zeile-titel">{LAGERORTE.find((l) => l.id === k.id)!.name}</span>
-                  <span className="zeile-meta">
-                    {k.sorten === 0 ? 'leer' : `${k.sorten} ${k.sorten === 1 ? 'Sorte' : 'Sorten'}`}
-                    {k.achtung > 0 && <span className="status-achtung"> · {k.achtung} wichtig</span>}
-                  </span>
-                </span>
-                <span className="zeile-wert"><strong>{k.zahl}</strong> {k.einheit === 'Portionen' ? 'Port.' : k.einheit}</span>
-                <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="ort-karten" aria-label="Lagerorte">
+        {kacheln.map((k) => (
+          <button key={k.id} type="button" className={`ort-karte ${TON[k.id]}`} onClick={() => onNav({ ort: k.id })}>
+            <img src={ORT_FOTO[k.id]} alt="" aria-hidden="true" />
+            <span className="ort-karte-text">
+              <span className="icon-rund"><Icon name={ICON[k.id]} groesse={17} /></span>
+              <strong>{LAGERORTE.find((l) => l.id === k.id)!.name}</strong>
+              <small>{anzahl(k.id)} Artikel</small>
+            </span>
+          </button>
+        ))}
+      </div>
 
-      <section className="abschnitt">
-        <ul className="liste mit-icon">
-          {komponenten.length > 0 && (
-            <li>
-              <button type="button" className="zeile" onClick={() => onNav({ ort: 'alle', art: 'komponente' })}>
-                <span className="icon-kachel"><Icon name="baustein" groesse={18} /></span>
-                <span className="zeile-haupt">
-                  <span className="zeile-titel">Komponenten</span>
-                  <span className="zeile-meta">vorgekocht im Bestand</span>
-                </span>
-                <span className="zeile-wert"><strong>{komponenten.filter((s) => s.anzahl > 0).length}</strong> da</span>
-                <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
-              </button>
-            </li>
-          )}
-          <li>
-            <button type="button" className="zeile alle-knopf" onClick={() => onNav({ ort: 'alle' })}>
-              <span className="icon-kachel"><Icon name="sorten" groesse={18} /></span>
-              <span className="zeile-haupt"><span className="zeile-titel">Alle Sorten</span></span>
-              <span className="zeile-wert">{bestand.length}</span>
-              <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
-            </button>
-          </li>
+      <Box titel="Wichtigste Vorräte" link={{ text: 'Alle', onClick: () => onNav({ ort: 'alle' }), grau: true }} className="alle-box">
+        <ul className="liste mit-bild gross bild-zeile">
+          {wichtigste.map((s) => {
+            const z = zustand(s, heute);
+            return (
+              <li key={s.id}>
+                <button type="button" className="zeile" onClick={() => onOeffnen(s)}>
+                  <Bild name={s.name} farbe={s.farbe} art="rund" />
+                  <span className="zeile-haupt">
+                    <span className="zeile-titel">{s.name}</span>
+                    <span className="zeile-meta ort-meta">
+                      <span>{mengeText(s.anzahl, einheitVon(s))}</span> · <span><Icon name={ICON[s.lagerort ?? 'gefrierfach']} groesse={13} /> {lagerort(s.lagerort).name}</span>
+                    </span>
+                  </span>
+                  <span className={`pille ${tonVon(z)}`}>{zustandKurz(z)}</span>
+                  <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
+                </button>
+              </li>
+            );
+          })}
         </ul>
-        {wert.cent > 0 && (
-          <p className="abschnitt-fuss">
-            Wert des Vorrats ≈ {euro(wert.cent)}{wert.ohne_preis > 0 ? ` – ohne ${wert.ohne_preis} ${wert.ohne_preis === 1 ? 'Sorte' : 'Sorten'} ohne Preis` : ''}
-          </p>
-        )}
-      </section>
+        <button type="button" className="link breit alle-knopf" onClick={() => onNav({ ort: 'alle' })}>Alle {bestand.length} Sorten</button>
+      </Box>
     </>
   );
 }

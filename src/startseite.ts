@@ -4,13 +4,15 @@
 //   • Ausgegeben  = was beim Einkauf tatsächlich bezahlt wurde (Einkaufsbuchungen mit Preis).
 //   • Produktion  = Wert der verarbeiteten Zutaten – kein zusätzliches Geld, sie sind schon eingekauft.
 //   • Gekocht     = Wert der entnommenen Mengen (aus den Kosten der entnommenen Chargen).
-// Nur „Ausgegeben“ ist Geld, das den Haushalt verlassen hat; die anderen beiden sind Warenwert.
+//   • Sonstiges   = von Hand eingetragene Ausgaben ohne Bezug zum Vorrat (Kaffee, bestellt …).
+// Nur Einkäufe und Sonstiges sind Geld, das den Haushalt verlassen hat; Produktion und Gekocht sind Warenwert.
 import type { KomponentenVorschlag } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { Sorte } from './api';
 import { tageBis, zustand } from './dashboard.ts';
 
 export type EinkaufsBuchung = { erstellt_am: string; preis_cent: number | null; rueckgaengig: boolean };
 export type HerstellungsZeile = { datum: string; kosten_cent: number | null; kosten_unbekannt: number; rueckgaengig: boolean };
+export type SonstigeAusgabe = { id?: number; datum: string; betrag_cent: number; notiz?: string | null; entfernt: boolean };
 export type MahlzeitZeile = {
   datum: string; titel: string; portionen: number;
   kosten_cent: number | null; kosten_unbekannt: number; kcal: number | null; kcal_unbekannt: number; rueckgaengig: boolean;
@@ -18,8 +20,13 @@ export type MahlzeitZeile = {
 
 export type Monatsbilanz = {
   monat: string;
+  /** Einkäufe + Sonstiges – nur echtes Geld, kein Warenwert */
+  gesamt_cent: number;
   /** tatsächlich bezahlt; ohne_preis = Einkäufe, bei denen kein Preis angegeben wurde */
   ausgegeben: { cent: number; anzahl: number; ohne_preis: number };
+  sonstiges: { cent: number; anzahl: number };
+  /** Vormonat bis zum gleichen Tag – null, wenn es dort keine Ausgaben gab (dann kein Vergleich) */
+  vormonat: { cent: number; bis_tag: number; aenderung_prozent: number } | null;
   /** Warenwert der verarbeiteten Zutaten; vollstaendig = alle Preise bekannt */
   produktion: { cent: number; anzahl: number; vollstaendig: boolean };
   /** Warenwert der gekochten Mahlzeiten; Ø nur, wenn für jede Mahlzeit alles bekannt ist */
@@ -36,13 +43,29 @@ export function lokalesDatum(zeitstempel: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Erster Tag des Vormonats (YYYY-MM-DD) */
+export function vormonatsanfang(heute: string): string {
+  const j = Number(heute.slice(0, 4));
+  const m = Number(heute.slice(5, 7));
+  return m === 1 ? `${j - 1}-12-01` : `${j}-${String(m - 1).padStart(2, '0')}-01`;
+}
+
 export function monatsbilanz(
-  d: { einkaeufe: EinkaufsBuchung[]; herstellungen: HerstellungsZeile[]; mahlzeiten: MahlzeitZeile[] },
+  d: { einkaeufe: EinkaufsBuchung[]; herstellungen: HerstellungsZeile[]; mahlzeiten: MahlzeitZeile[]; sonstige?: SonstigeAusgabe[] },
   heute: string,
 ): Monatsbilanz {
   const monat = heute.slice(0, 7);
   const imMonat = (datum: string) => datum.slice(0, 7) === monat;
   const einkaeufe = d.einkaeufe.filter((e) => !e.rueckgaengig && imMonat(lokalesDatum(e.erstellt_am)));
+  const sonstige = (d.sonstige ?? []).filter((a) => !a.entfernt && imMonat(a.datum));
+
+  // Vergleich fair: Vormonat nur bis zum gleichen Tag (am 28. also 1.–28. des Vormonats)
+  const vm = vormonatsanfang(heute).slice(0, 7);
+  const tag = Number(heute.slice(8, 10));
+  const imVormonat = (datum: string) => datum.slice(0, 7) === vm && Number(datum.slice(8, 10)) <= tag;
+  const vorEinkauf = d.einkaeufe.filter((e) => !e.rueckgaengig && e.preis_cent !== null && imVormonat(lokalesDatum(e.erstellt_am)));
+  const vorSonst = (d.sonstige ?? []).filter((a) => !a.entfernt && imVormonat(a.datum));
+  const vorCent = vorEinkauf.reduce((s, e) => s + (e.preis_cent ?? 0), 0) + vorSonst.reduce((s, a) => s + a.betrag_cent, 0);
   const herst = d.herstellungen.filter((h) => !h.rueckgaengig && imMonat(h.datum));
   const mahl = d.mahlzeiten.filter((m) => !m.rueckgaengig && imMonat(m.datum));
   const summe = (xs: { kosten_cent: number | null }[]) => xs.reduce((s, x) => s + (x.kosten_cent ?? 0), 0);
@@ -50,13 +73,19 @@ export function monatsbilanz(
     xs.every((x) => x.kosten_cent !== null && x.kosten_unbekannt === 0);
   const gekochtCent = summe(mahl);
   const gekochtVoll = vollstaendig(mahl);
+  const einkaufCent = einkaeufe.reduce((s, e) => s + (e.preis_cent ?? 0), 0);
+  const sonstCent = sonstige.reduce((s, a) => s + a.betrag_cent, 0);
+  const gesamt = einkaufCent + sonstCent;
   return {
     monat: MONATE[Number(monat.slice(5, 7)) - 1] ?? '',
+    gesamt_cent: gesamt,
     ausgegeben: {
-      cent: einkaeufe.reduce((s, e) => s + (e.preis_cent ?? 0), 0),
+      cent: einkaufCent,
       anzahl: einkaeufe.length,
       ohne_preis: einkaeufe.filter((e) => e.preis_cent === null).length,
     },
+    sonstiges: { cent: sonstCent, anzahl: sonstige.length },
+    vormonat: vorCent > 0 ? { cent: vorCent, bis_tag: tag, aenderung_prozent: Math.round(((gesamt - vorCent) / vorCent) * 100) } : null,
     produktion: { cent: summe(herst), anzahl: herst.length, vollstaendig: vollstaendig(herst) },
     gekocht: {
       cent: gekochtCent,
@@ -64,7 +93,7 @@ export function monatsbilanz(
       vollstaendig: gekochtVoll,
       pro_mahlzeit_cent: mahl.length && gekochtVoll ? Math.round(gekochtCent / mahl.length) : null,
     },
-    leer: einkaeufe.length + herst.length + mahl.length === 0,
+    leer: einkaeufe.length + herst.length + mahl.length + sonstige.length === 0,
   };
 }
 
@@ -89,12 +118,11 @@ export function dringendHeute(bestand: Sorte[], heute: string, auftauenFaellig: 
 export type StartAbschnitt = 'wichtig' | 'essen' | 'geld' | 'produktion' | 'einkauf';
 
 /**
- * Reihenfolge der Startseite: Heute → Essen → Vorratsprobleme → Geld → Produktion → Einkauf.
- * Ist heute etwas dringend, steht „Heute wichtig“ ganz oben; leere Bereiche entfallen.
+ * Reihenfolge der Startseite (wie im Entwurf): Geld → Heute wichtig → Essen → Produktion | Einkauf.
+ * Leere Bereiche entfallen – so rückt Wichtiges automatisch nach oben.
  */
-export function startReihenfolge(k: { dringend: boolean; wichtig: number; produktion: boolean; einkauf: boolean; geld: boolean }): StartAbschnitt[] {
-  const folge: StartAbschnitt[] = k.dringend ? ['wichtig', 'essen'] : ['essen', 'wichtig'];
-  folge.push('geld', 'produktion', 'einkauf');
+export function startReihenfolge(k: { wichtig: number; produktion: boolean; einkauf: boolean; geld: boolean }): StartAbschnitt[] {
+  const folge: StartAbschnitt[] = ['geld', 'wichtig', 'essen', 'produktion', 'einkauf'];
   return folge.filter((a) =>
     (a !== 'wichtig' || k.wichtig > 0) && (a !== 'produktion' || k.produktion) && (a !== 'einkauf' || k.einkauf) && (a !== 'geld' || k.geld));
 }

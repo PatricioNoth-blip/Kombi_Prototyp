@@ -848,6 +848,29 @@ reset role;
 \echo 'ok  Protokolle ohne Login: lesen, essen() und Rückgängig – nichts direkt änderbar'
 
 
+-- ─── Sonstige Ausgaben: nur eintragen und als entfernt markieren ───
+set local role anon;
+do $$
+declare
+  v_id bigint;
+begin
+  insert into ausgabe (betrag_cent, notiz) values (620, 'Test Kaffee') returning id into v_id;
+  assert (select datum from ausgabe where id = v_id) = heute(), 'Datum ist heute';
+  assert (select sum(betrag_cent) from ausgabe where notiz like 'Test%' and not entfernt) = 620, 'Betrag gespeichert';
+  update ausgabe set entfernt = true where id = v_id;
+  assert (select entfernt from ausgabe where id = v_id), 'als entfernt markiert (nicht gelöscht)';
+  update ausgabe set entfernt = false where id = v_id;
+  assert pg_temp.fehler($q$delete from ausgabe$q$) like 'permission denied%', 'Ausgaben nicht löschbar';
+  assert pg_temp.fehler($q$update ausgabe set betrag_cent = 1$q$) like 'permission denied%', 'Betrag nicht nachträglich änderbar';
+  assert pg_temp.fehler($q$insert into ausgabe (betrag_cent, entfernt) values (100, true)$q$) like 'permission denied%', 'entfernt nicht direkt setzbar';
+  assert pg_temp.fehler($q$insert into ausgabe (betrag_cent) values (0)$q$) like '%check constraint%', 'Betrag 0 abgelehnt';
+  assert pg_temp.fehler($q$insert into ausgabe (betrag_cent) values (2000000)$q$) like '%check constraint%', 'unplausibel hoher Betrag abgelehnt';
+  assert pg_temp.fehler($q$insert into ausgabe (betrag_cent, datum) values (100, heute() + 30)$q$) like '%row-level security%', 'Datum in der Zukunft abgelehnt';
+end $$;
+reset role;
+\echo 'ok  Sonstige Ausgaben: eintragen, entfernen und zurückholen – nicht löschbar, Betrag fest'
+
+
 rollback;
 \echo ''
 \echo 'Alle Tests bestanden.'

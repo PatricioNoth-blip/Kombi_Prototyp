@@ -11,7 +11,8 @@ import { produktSchluessel } from '../supabase/functions/_shared/kombi/einkaufsl
 import type { AuftauEintrag } from '../supabase/functions/_shared/kombi/planung.ts';
 import { bedarfAusGericht, bedarfAusKomponente } from '../supabase/functions/_shared/kombi/planung.ts';
 import type { NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts';
-import type { EinkaufsBuchung, HerstellungsZeile, MahlzeitZeile } from './startseite.ts';
+import type { EinkaufsBuchung, HerstellungsZeile, MahlzeitZeile, SonstigeAusgabe } from './startseite.ts';
+import { vormonatsanfang } from './startseite.ts';
 import { artVon, einheitVon, portionMengeVon } from './format';
 import { naehrwertAus, naehrwerteFuerGericht, type Naehrwert, type Naehrwerte } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
 
@@ -36,23 +37,30 @@ export type Haushaltsdaten = {
   einkaeufe: EinkaufsBuchung[];
   herstellungen: HerstellungsZeile[];
   mahlzeiten: MahlzeitZeile[];
+  /** sonstige Ausgaben seit Anfang des Vormonats */
+  sonstige: SonstigeAusgabe[];
   /** Migration „planung_einkauf“ vorhanden? */
   planung: boolean;
   /** Migration „kosten_naehrwerte“ vorhanden? (Protokoll von Kochen/Produktion, Kosten je Charge) */
   protokoll: boolean;
+  /** Migration „ausgaben“ vorhanden? (sonstige Ausgaben) */
+  ausgaben: boolean;
 };
 
 export const LEER: Haushaltsdaten = {
-  plaene: [], eintraege: [], status: [], auftauen: [], nutzung: [], einkaeufe: [], herstellungen: [], mahlzeiten: [],
-  planung: false, protokoll: false,
+  plaene: [], eintraege: [], status: [], auftauen: [], nutzung: [], einkaeufe: [], herstellungen: [], mahlzeiten: [], sonstige: [],
+  planung: false, protokoll: false, ausgaben: false,
 };
 
-function monatsanfang(): string {
+function heute(): string {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function meldung(e: { message: string; code?: string }): string {
+  if (/ausgabe/.test(e.message) && (e.code === 'PGRST205' || e.code === '42P01')) {
+    return 'Dafür fehlt noch die Migration „ausgaben“ (siehe README).';
+  }
   if (/essen|produzieren|einkaufen|mahlzeit|herstellung/.test(e.message) && (e.code === 'PGRST202' || e.code === 'PGRST205')) {
     return 'Dafür fehlt noch die Migration „kosten_naehrwerte“ (siehe README).';
   }
@@ -66,8 +74,9 @@ function pruefe(error: { message: string; code?: string } | null) {
 
 /** Lädt alles für Planung/Einkauf/Auftauen. Fehlt die Migration, gibt es leere Listen. */
 export async function ladeHaushalt(): Promise<Haushaltsdaten> {
-  const ab = monatsanfang();
-  const [plaene, eintraege, status, auftauen, nutzung, einkaeufe, herstellungen, mahlzeiten] = await Promise.all([
+  // ab Anfang des Vormonats: für den Vergleich „bis zum gleichen Tag im Vormonat“
+  const ab = vormonatsanfang(heute());
+  const [plaene, eintraege, status, auftauen, nutzung, einkaeufe, herstellungen, mahlzeiten, sonstige] = await Promise.all([
     supabase.from('plan').select('*').eq('status', 'geplant').order('erstellt_am'),
     supabase.from('einkauf_eintrag').select('*').eq('status', 'offen').order('erstellt_am'),
     supabase.from('einkauf_status').select('schluessel, einheit, status'),
@@ -76,6 +85,7 @@ export async function ladeHaushalt(): Promise<Haushaltsdaten> {
     supabase.from('einkauf_buchung').select('erstellt_am, preis_cent, rueckgaengig').gte('erstellt_am', ab),
     supabase.from('herstellung').select('datum, kosten_cent, kosten_unbekannt, rueckgaengig').gte('datum', ab),
     supabase.from('mahlzeit').select('datum, titel, portionen, kosten_cent, kosten_unbekannt, kcal, kcal_unbekannt, rueckgaengig').gte('datum', ab),
+    supabase.from('ausgabe').select('id, datum, betrag_cent, notiz, entfernt').gte('datum', ab).order('datum', { ascending: false }),
   ]);
   if (plaene.error) return LEER; // Migration fehlt (oder keine Verbindung) → ohne Planung weiter
   const protokoll = !mahlzeiten.error && !herstellungen.error;
@@ -88,8 +98,10 @@ export async function ladeHaushalt(): Promise<Haushaltsdaten> {
     einkaeufe: (einkaeufe.data ?? []) as EinkaufsBuchung[],
     herstellungen: protokoll ? (herstellungen.data ?? []) as HerstellungsZeile[] : [],
     mahlzeiten: protokoll ? (mahlzeiten.data ?? []) as MahlzeitZeile[] : [],
+    sonstige: sonstige.error ? [] : (sonstige.data ?? []) as SonstigeAusgabe[],
     planung: true,
     protokoll,
+    ausgaben: !sonstige.error,
   };
 }
 
@@ -320,4 +332,20 @@ export async function einkaufen(blockTypId: number, menge: number, ablaufAm: str
   });
   pruefe(error);
   return data as number;
+}
+
+// ───────── Sonstige Ausgaben (Migration „ausgaben“) ─────────
+
+/** Eine sonstige Ausgabe eintragen – echter, bezahlter Betrag, nichts geschätzt. */
+export async function ausgabeEintragen(betragCent: number, notiz: string | null, datum: string | null = null): Promise<void> {
+  const zeile: { betrag_cent: number; notiz: string | null; datum?: string } = { betrag_cent: betragCent, notiz: notiz?.trim().slice(0, 80) || null };
+  if (datum) zeile.datum = datum;
+  const { error } = await supabase.from('ausgabe').insert(zeile);
+  pruefe(error);
+}
+
+/** Nichts wird gelöscht: entfernen = ausblenden, zurückholen geht jederzeit. */
+export async function ausgabeEntfernen(id: number, entfernt: boolean): Promise<void> {
+  const { error } = await supabase.from('ausgabe').update({ entfernt }).eq('id', id);
+  pruefe(error);
 }

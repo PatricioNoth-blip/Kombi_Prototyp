@@ -17,7 +17,7 @@ import { Einkauf } from './Einkauf';
 import { Auftauen } from './Auftauen';
 import { KochAnsicht } from './KochAnsicht';
 import { Blatt } from './Blatt';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import { buchungsVerb } from './farben';
 import { heuteIso, mengeText } from './format';
 import { alsVorratSorte, einkaufen, einkaufRueckgaengig, eintragHinzufuegen, ladeHaushalt, LEER, naehrwerteGericht, planBedarf, type Haushaltsdaten } from './haushalt';
@@ -41,7 +41,8 @@ function anfangsNavigation() {
   return ladeNav(gemerkt, typeof location === 'undefined' ? '' : location.hash);
 }
 
-const TITEL: Record<Bereich, string> = { start: '', essen: 'Essen', vorrat: 'Dein Vorrat', produktion: 'Produktion', einkauf: 'Einkauf' };
+const TITEL: Record<Bereich, string> = { start: '', essen: 'Essen', vorrat: 'Vorrat', produktion: 'Produktion', einkauf: 'Einkauf' };
+const KOPF_ICON: Record<Bereich, IconName | null> = { start: null, essen: 'essen', vorrat: 'blatt', produktion: 'topf', einkauf: 'wagen' };
 
 export function Inventar() {
   const [bestand, setBestand] = useState<Sorte[] | null>(null);
@@ -249,6 +250,7 @@ export function Inventar() {
     !baukasten && '„baukasten“ (Art, Einheit, Ablaufdatum, geöffnet)',
     !h.planung && '„planung_einkauf“ (Einkaufsliste, Woche, Auftauen, Produktion)',
     h.planung && !h.protokoll && '„kosten_naehrwerte“ (Ausgaben, Kosten je Mahlzeit, Kalorien)',
+    h.planung && !h.ausgaben && '„ausgaben“ (sonstige Ausgaben)',
   ].filter((x): x is string => !!x);
 
   const datumText = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -258,30 +260,33 @@ export function Inventar() {
     : nav.bereich === 'start'
       ? `Dein Haushalt · ${datumText}`
       : nav.bereich === 'vorrat'
-        ? `${bestand.filter((s) => s.anzahl > 0).length} von ${bestand.length} Sorten da`
+        ? 'Alles im Blick · Weniger verschwenden'
         : nav.bereich === 'essen'
           ? nav.essen.ansicht === 'woche' ? 'Flexibel planen – entnommen wird erst beim Kochen' : 'Was möchtest du jetzt essen?'
           : nav.bereich === 'produktion'
-            ? 'Komponenten vorkochen und einlagern'
-            : '';
+            ? 'Aus vorhandenen Zutaten etwas Neues herstellen.'
+            : 'Was fehlt – verrechnet mit dem Vorrat';
+  const kopfIcon = KOPF_ICON[nav.bereich];
+  const abends = new Date().getHours() >= 18 || new Date().getHours() < 5;
 
   return (
     <div className={`app ansicht-${nav.bereich}`}>
       <header className={`kopf${gescrollt ? ' gescrollt' : ''}`}>
         <div className="kopf-zeile">
-          <div>
-            <h1>{titel}</h1>
+          {kopfIcon && <span className="kopf-icon" aria-hidden="true"><Icon name={kopfIcon} groesse={26} /></span>}
+          <div className="kopf-text">
+            <h1>{titel}{nav.bereich === 'start' && <Icon name={abends ? 'mond' : 'sonne'} groesse={30} />}</h1>
             {untertitel && <p className="kopf-unter">{untertitel}</p>}
           </div>
           {nav.bereich === 'vorrat' && bestand && (
             <button
               type="button"
-              className="icon-knopf akzent"
+              className="kopf-aktion"
               onClick={() => (bestand.length ? setPlusMenue(true) : setNeueSorte(true))}
               aria-label="Hinzufügen"
               title="Hinzufügen"
             >
-              <Icon name="plus" />
+              <Icon name="plus" groesse={24} />
             </button>
           )}
         </div>
@@ -321,6 +326,8 @@ export function Inventar() {
                 onKochen={(g, planId) => setKochen({ g, planId })}
                 onOeffnen={oeffneSorte}
                 onBereich={wechsle}
+                onMeldung={melde}
+                onGeaendert={() => void laden()}
               />
             </div>
             <div hidden={nav.bereich !== 'vorrat'}>
@@ -333,6 +340,7 @@ export function Inventar() {
                 laeuft={laeuft}
                 reserviert={liste.verteilung.reserviert}
                 auftauen={nav.bereich === 'vorrat' ? auftauenBereich : null}
+                nutzung={h.nutzung}
                 onOeffnen={oeffneSorte}
                 onEntnehmen={entnehmen}
               />
@@ -348,7 +356,9 @@ export function Inventar() {
                 nutzung={h.nutzung}
                 reserviert={liste.verteilung.reserviert}
                 ideen={ideen?.komponenten ?? null}
+                heute={heute}
                 onOeffnen={oeffneSorte}
+                onWoche={() => dispatch({ typ: 'route', route: { bereich: 'essen', ort: null, art: null, ansicht: 'woche', sorte: null } })}
                 onMeldung={melde}
                 onGeaendert={() => void laden()}
               />

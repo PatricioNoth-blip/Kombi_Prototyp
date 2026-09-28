@@ -11,6 +11,7 @@ import { Blatt, useScrollSperre } from './Blatt';
 import { Icon } from './Icon';
 import { euroKurz, kcalKurz, mengeText } from './format';
 import { PostenListe } from './PostenListe';
+import { Bild } from './Bild';
 
 type Props = {
   gericht: Gericht;
@@ -173,12 +174,12 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
 
       <div className="kochen-inhalt">
         <header className="kochen-kopf">
-          {!kochmodus && <div className={`gericht-bild gross f-${farbe}`} aria-hidden="true">{g.emoji}</div>}
+          {!kochmodus && <div className="kochen-foto"><Bild name={g.name} emoji={g.emoji} farbe={farbe === 'neutral' ? null : farbe} art="flaeche" /></div>}
           <h1>{g.name}</h1>
-          <p className="meta">
-            <span>{g.zeit_min} Min</span>
-            <span>{kcalKurz(n)}{n.kcal_portion !== null ? ' / Portion' : ''}</span>
-            <span>{euroKurz(g.kosten)}{g.kosten.pro_portion_cent !== null ? ' / Portion' : ''}</span>
+          <p className="meta-icons">
+            <span><Icon name="uhr" groesse={18} /> {g.zeit_min} Min</span>
+            <span><Icon name="flamme" groesse={18} className="flamme" /> {kcalKurz(n)}{n.kcal_portion !== null ? ' / Portion' : ''}</span>
+            <span><Icon name="preis" groesse={18} /> {euroKurz(g.kosten)}{g.kosten.pro_portion_cent !== null ? ' / Portion' : ''}</span>
           </p>
           {!kochmodus && g.beschreibung && <p className="leise klein">{g.beschreibung}</p>}
           {!kochmodus && hinweise.map((h) => (

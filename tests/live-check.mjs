@@ -246,6 +246,23 @@ if (protokoll) {
   console.log('ℹ Migration „kosten_naehrwerte“ noch nicht eingespielt – Ausgaben, Kosten je Mahlzeit und Kalorien sind ausgeblendet.');
 }
 
+// Migration „ausgaben“ (optional): sonstige Ausgaben – eintragen und als entfernt markieren, nie löschen.
+const ausgaben = !(await db.from('ausgabe').select('id').limit(1)).error;
+if (ausgaben) {
+  await pruefe('ausgabe lesen', async () => {
+    const { data, error } = await db.from('ausgabe').select('betrag_cent, entfernt').limit(1000);
+    if (error) throw new Error(fehlerText(error));
+    return `${data.filter((a) => !a.entfernt).length} Einträge`;
+  });
+  await pruefe('Ausgabe mit Betrag 0 wird abgelehnt', async () =>
+    // Die Prüfung greift vor dem Speichern – es entsteht kein Eintrag.
+    erwarteFehler(await db.from('ausgabe').insert({ betrag_cent: 0, notiz: '__live_check__' }), '23514'));
+  await pruefe('Ausgaben nicht löschbar', async () =>
+    erwarteFehler(await db.from('ausgabe').delete().eq('id', -1), '42501'));
+} else if (planung) {
+  console.log('ℹ Migration „ausgaben“ noch nicht eingespielt – „Sonstiges“ auf der Startseite ist ausgeblendet.');
+}
+
 // ───────── App im Browser ─────────
 const APP_URL = process.env.APP_URL;
 if (!APP_URL) {
@@ -271,7 +288,7 @@ if (!APP_URL) {
     const tabs = await page.locator('.tabbar button > span:last-child').allTextContents();
     if (tabs.map((t) => t.trim()).join(',') !== 'Start,Essen,Vorrat,Produktion,Einkauf') throw new Error(`Bereiche: ${tabs.join(', ')}`);
     const titel = await page.textContent('.kopf h1');
-    const abschnitte = await page.locator('main > div:not([hidden]) .abschnitt-kopf h2').allTextContents();
+    const abschnitte = await page.locator('main > div:not([hidden]) :is(.geld-titel, .box-kopf h2, .foto-karte .ueber)').allTextContents();
     const hinweis = await page.locator('main > .hinweisbox').allTextContents();
     return `„${titel}“; Abschnitte: ${abschnitte.join(', ') || '–'}` + (hinweis.length ? `; Hinweis: ${hinweis.join(' ')}` : '');
   });
@@ -279,7 +296,7 @@ if (!APP_URL) {
 
   await pruefe('Vorrat: Lagerorte und alle Sorten', async () => {
     await page.click('.tabbar button:has-text("Vorrat")');
-    const orte = await page.locator('.ort-zeile').allInnerTexts();
+    const orte = await page.locator('.ort-karte').allInnerTexts();
     await page.click('.alle-knopf');
     await page.waitForSelector('.ort-ansicht .vorrat-zeile');
     const zeilen = await page.locator('.ort-ansicht .vorrat-zeile').count();
@@ -316,12 +333,12 @@ if (!APP_URL) {
     const titel = await page.textContent('.ort-kopf h2');
     if (titel !== 'Gefrierfach') throw new Error(`Titel „${titel}“`);
     await page.click('.zurueck-knopf');
-    await page.waitForSelector('.ort-zeile');
+    await page.waitForSelector('.ort-karte');
     return `geöffnet über die Adresse, zurück zu den Lagerorten (${page.url().split('#')[1]})`;
   });
 
   await pruefe('Einbuchen-Dialog: Sorte → Menge (ohne zu buchen)', async () => {
-    await page.click('.kopf .icon-knopf.akzent');
+    await page.click('.kopf .kopf-aktion');
     await page.click('.blatt .zeile:has-text("Einbuchen")');
     const sorten = await page.locator('.sorte-knopf').count();
     await page.locator('.sorte-knopf').first().click();
@@ -332,7 +349,7 @@ if (!APP_URL) {
   });
 
   await pruefe('Neue Sorte: leeres Formular wird abgelehnt', async () => {
-    await page.click('.kopf .icon-knopf.akzent');
+    await page.click('.kopf .kopf-aktion');
     await page.click('.blatt .zeile:has-text("Neue Sorte")');
     await page.click('.formular button[type=submit]');
     const text = await page.textContent('.fehlertext');
@@ -359,13 +376,13 @@ if (!APP_URL) {
 
   await pruefe('Start: Kochansicht öffnen bucht nichts', async () => {
     await page.click('.tabbar button:has-text("Start")');
-    const knopf = page.locator('main > div:not([hidden]) .vorschlag .knopf.haupt');
+    const knopf = page.locator('main > div:not([hidden]) .foto-karte .pillen-knopf').first();
     if (!(await knopf.count())) return 'kein Vorschlag aus dem Vorrat';
     const vorher = JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl]));
-    const name = await page.textContent('main > div:not([hidden]) .vorschlag h3');
+    const name = await page.locator('main > div:not([hidden]) .foto-karte h3').first().textContent();
     await knopf.click();
     await page.waitForSelector('.kochen');
-    const meta = (await page.innerText('.kochen-kopf .meta')).replace(/\s+/g, ' ');
+    const meta = (await page.innerText('.kochen-kopf .meta-icons')).replace(/\s+/g, ' ');
     await page.click('.kochen [aria-label="Zurück"]');
     if (JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl])) !== vorher) throw new Error('Bestand hat sich geändert!');
     return `${name}: ${meta}`;
@@ -377,7 +394,7 @@ if (!APP_URL) {
     if (!planung) return (await page.textContent('main > div:not([hidden]) .leer-zustand p')) ?? '';
     await page.waitForSelector('.produktion section[aria-label="Empfohlen"]');
     await page.waitForFunction(() => !document.querySelector('.produktion section[aria-label="Empfohlen"]')?.textContent?.includes('rechnet'));
-    const ideen = await page.locator('.produktion section[aria-label="Empfohlen"] .zeile-titel').allTextContents();
+    const ideen = await page.locator('.produktion section[aria-label="Empfohlen"] .empf-text strong').allTextContents();
     if ((await ladeBestand()).length !== vorher) throw new Error('Sorten wurden angelegt!');
     return ideen.join(', ') || 'keine';
   });

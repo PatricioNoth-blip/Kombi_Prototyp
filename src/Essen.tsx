@@ -25,6 +25,7 @@ import { ARTEN_INFO, farbe as farbInfo } from './farben';
 import { kcalKurz } from './format';
 import { tagName } from './dashboard';
 import type { NavZustand } from './navigation';
+import { Bild } from './Bild';
 
 type Props = {
   bestand: Sorte[];
@@ -361,7 +362,7 @@ export function Essen({
             {heuteGeplant.map((p) => (
               <li key={p.id}>
                 <div className="zeile">
-                  <span className="gericht-bild klein" aria-hidden="true">{p.daten.gericht!.emoji}</span>
+                  <Bild name={p.titel} emoji={p.daten.gericht!.emoji} art="kachel" />
                   <span className="zeile-haupt">
                     <span className="zeile-meta">{p.datum === heute ? 'Heute geplant' : `Geplant: ${tagName(heute, p.datum!)}`}</span>
                     <span className="zeile-titel">{p.titel}</span>
@@ -523,7 +524,7 @@ export function Essen({
             {rezepte.map((r) => (
               <li key={r.id}>
                 <button type="button" className="zeile" onClick={() => setRezeptOffen(r)}>
-                  <span className="gericht-bild klein" aria-hidden="true">{r.daten.emoji}</span>
+                  <Bild name={r.name} emoji={r.daten.emoji} art="kachel" />
                   <span className="zeile-haupt">
                     <span className="zeile-titel">{r.name}</span>
                     <span className="zeile-meta">{r.daten.zeit_min} Min · {kcalKurz(naehrwerteGericht(r.daten, bestand))} / Portion</span>

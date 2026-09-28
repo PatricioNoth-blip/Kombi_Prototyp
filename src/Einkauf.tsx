@@ -10,6 +10,7 @@ import { eintragAendern, eintragHinzufuegen, einkaufBuchen, einkaufRueckgaengig,
 import { Blatt } from './Blatt';
 import { SorteFormular } from './Sorten';
 import { Icon } from './Icon';
+import { Bild } from './Bild';
 import { euroZuCent, heuteIso, mengeText } from './format';
 import { lagerort as lagerInfo } from './farben';
 
@@ -121,6 +122,7 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, onMeldung,
             {gekauft && <Icon name="haken" groesse={15} />}
           </button>
           <button type="button" className="zeile-knopf" onClick={() => setOffen(z)}>
+            <Bild name={z.name} farbe={z.kategorie === 'sonstiges' ? null : z.kategorie} art="klein" />
             <span className="zeile-haupt">
               <span className="zeile-titel">{z.name}</span>
               <span className="zeile-meta">{mengeZeile(z)}{gruende.length ? ` · ${gruende.join(', ')}` : ''}</span>
@@ -140,14 +142,14 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, onMeldung,
   const gruppe = (titel: string, zeilen: Einkaufszeile[], fuss?: string) => zeilen.length > 0 && (
     <section className="abschnitt" aria-label={titel}>
       <div className="abschnitt-kopf"><h2>{titel}</h2></div>
-      <ul className="liste">{zeilen.map(zeile)}</ul>
+      <ul className="liste mit-einkauf">{zeilen.map(zeile)}</ul>
       {fuss && <p className="abschnitt-fuss">{fuss}</p>}
     </section>
   );
 
   const k = liste.kosten;
   const summe = k.status === 'leer' ? '' : k.bekannt_cent === null ? 'Preis unbekannt'
-    : `≈ ${euroText(k.bekannt_cent)}${k.unbekannt > 0 ? ' · Preis teilweise bekannt' : ''}`;
+    : k.unbekannt > 0 ? `ab ${euroText(k.bekannt_cent)} · Preis teilweise bekannt` : `≈ ${euroText(k.bekannt_cent)}`;
 
   return (
     <div className="einkauf">

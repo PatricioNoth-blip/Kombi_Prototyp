@@ -118,18 +118,42 @@ describe('Startseite', () => {
     assert.equal(monatsbilanz({ einkaeufe: [], herstellungen: [], mahlzeiten: [] }, HEUTE_S).leer, true);
   });
 
+  test('Sonstiges zählt zu den Ausgaben, aber getrennt und nie mit dem Warenwert verrechnet; Entferntes zählt nicht', () => {
+    const b = monatsbilanz({
+      einkaeufe: [e('2026-09-10T10:00:00Z', 5280)],
+      herstellungen: [{ datum: '2026-09-10', kosten_cent: 842, kosten_unbekannt: 0, rueckgaengig: false }],
+      mahlzeiten: [],
+      sonstige: [{ datum: '2026-09-12', betrag_cent: 620, entfernt: false }, { datum: '2026-09-13', betrag_cent: 999, entfernt: true },
+        { datum: '2026-08-12', betrag_cent: 500, entfernt: false }],
+    }, HEUTE_S);
+    assert.deepEqual(b.sonstiges, { cent: 620, anzahl: 1 });
+    assert.equal(b.gesamt_cent, 5900, '52,80 € + 6,20 € – die 8,42 € Produktion sind schon in den Einkäufen');
+  });
+
+  test('Vormonat: nur bis zum gleichen Tag verglichen; ohne Ausgaben im Vormonat kein Vergleich', () => {
+    const d = {
+      einkaeufe: [e('2026-09-05T10:00:00Z', 4100), e('2026-08-05T10:00:00Z', 5000), e('2026-08-30T10:00:00Z', 9000), e('2026-08-06T10:00:00Z', null)],
+      herstellungen: [], mahlzeiten: [],
+    };
+    const b = monatsbilanz(d, HEUTE_S);
+    assert.deepEqual(b.vormonat, { cent: 5000, bis_tag: 28, aenderung_prozent: -18 }, 'der 30.08. liegt nach dem 28. und zählt nicht');
+    assert.equal(monatsbilanz({ ...d, einkaeufe: [e('2026-09-05T10:00:00Z', 4100)] }, HEUTE_S).vormonat, null);
+    assert.equal(monatsbilanz({ einkaeufe: [e('2025-12-03T10:00:00Z', 1000), e('2026-01-02T10:00:00Z', 1500)], herstellungen: [], mahlzeiten: [] },
+      '2026-01-10').vormonat?.aenderung_prozent, 50, 'Jahreswechsel');
+  });
+
   test('„Heute gekocht“: kcal nur, wenn sie erfasst und vollständig bekannt sind', () => {
     assert.deepEqual(heuteGekocht([m(HEUTE_S, 48, 0, 1240, 0)], HEUTE_S), { titel: ['x'], kcal: 1240, vollstaendig: true });
     assert.equal(heuteGekocht([m(HEUTE_S, 48, 0, 600, 1)], HEUTE_S).kcal, null);
     assert.equal(heuteGekocht([m('2026-09-27', 48, 0, 600, 0)], HEUTE_S).titel.length, 0, 'nur heute');
   });
 
-  test('Reihenfolge: Dringendes nach oben, sonst Essen zuerst; leere Bereiche entfallen', () => {
-    assert.deepEqual(startReihenfolge({ dringend: true, wichtig: 2, produktion: true, einkauf: true, geld: true }),
-      ['wichtig', 'essen', 'geld', 'produktion', 'einkauf']);
-    assert.deepEqual(startReihenfolge({ dringend: false, wichtig: 1, produktion: false, einkauf: true, geld: false }),
-      ['essen', 'wichtig', 'einkauf']);
-    assert.deepEqual(startReihenfolge({ dringend: false, wichtig: 0, produktion: false, einkauf: false, geld: false }), ['essen']);
+  test('Reihenfolge wie im Entwurf: Geld, Heute wichtig, Essen, Produktion, Einkauf; leere Bereiche entfallen', () => {
+    assert.deepEqual(startReihenfolge({ wichtig: 2, produktion: true, einkauf: true, geld: true }),
+      ['geld', 'wichtig', 'essen', 'produktion', 'einkauf']);
+    assert.deepEqual(startReihenfolge({ wichtig: 1, produktion: false, einkauf: true, geld: false }),
+      ['wichtig', 'essen', 'einkauf']);
+    assert.deepEqual(startReihenfolge({ wichtig: 0, produktion: false, einkauf: false, geld: false }), ['essen']);
   });
 
   test('dringend: abgelaufen, aufgetaut, läuft heute/morgen ab, Auftauen fällig – „noch 3 Tage“ nicht', () => {

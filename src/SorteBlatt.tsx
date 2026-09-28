@@ -14,6 +14,7 @@ import { auftauenVormerken } from './haushalt';
 import { fuellstand, plusTageIso, zustand } from './dashboard';
 import { zustandKlasse } from './Vorrat';
 import { naehrwertAus } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
+import { Bild } from './Bild';
 
 type Props = {
   sorte: Sorte;
@@ -127,6 +128,8 @@ export function SorteBlatt({
     <Blatt titel={sorte.name} onSchliessen={onSchliessen}>
       {/* Ebene 1: wie viel, wie dringend */}
       <div className={`sorte-kopf f-${sorte.farbe}`}>
+        <Bild name={sorte.name} farbe={sorte.farbe} art="rund" />
+        <div>
         <p className="sorte-art">
           <span className="punkt" aria-hidden="true" />
           {art.name}{art.id !== 'komplettgericht' ? ` · ${rolle}` : ''} · {lager.name}
@@ -142,6 +145,7 @@ export function SorteBlatt({
             {mengeText(Math.min(reserviert.menge, sorte.anzahl), einheit)} eingeplant für „{reserviert.plaene.join('“, „')}“ · {mengeText(frei, einheit)} frei
           </p>
         )}
+        </div>
       </div>
 
       {sorte.anzahl > 0 ? (
