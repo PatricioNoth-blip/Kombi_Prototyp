@@ -179,7 +179,8 @@ if (baukasten) {
 }
 
 // Migration „planung_einkauf“ ist ebenfalls optional: Ohne sie fehlen Einkaufsliste, Wochenplan, Auftauen, Herstellen.
-const planung = !(await db.from('plan').select('id', { head: true })).error;
+// Normale Abfrage statt HEAD: Bei HEAD liefert PostgREST für eine fehlende Tabelle keinen auswertbaren Fehler.
+const planung = !(await db.from('plan').select('id').limit(1)).error;
 if (planung) {
   for (const tabelle of ['plan', 'einkauf_eintrag', 'einkauf_status', 'einkauf_buchung', 'auftauen', 'nutzung']) {
     await pruefe(`${tabelle} lesen`, async () => {
