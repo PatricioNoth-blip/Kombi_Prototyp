@@ -1,10 +1,13 @@
--- Kombi – Datensicherung vor dem Einspielen weiterer Migrationen.
---
--- NUR LESEND: ändert nichts. Supabase-Dashboard → SQL Editor → einfügen → Run.
--- Ergebnis: eine Zelle „sicherung“ mit allen Daten der Tabellen aus den Dateien 1–3
--- (Sorten, Chargen, Bewegungen, „Was essen wir?“) als JSON. Den Inhalt kopieren und als
--- Datei speichern (z. B. kombi-sicherung-2026-09-28.json). Diese Tabellen bleiben durch
--- spätere Migrationen erhalten – das Skript läuft daher auch danach noch.
+/*
+  Kombi – Datensicherung vor dem Einspielen weiterer Migrationen.
+
+  NUR LESEND: ändert nichts. Supabase-Dashboard → SQL Editor → einfügen → Run.
+  Ergebnis: eine Zelle „sicherung“ mit allen Daten der Tabellen aus den Dateien 1–3
+  (Sorten, Chargen, Bewegungen, „Was essen wir?“) als JSON. Den Inhalt kopieren und als
+  Datei speichern (z. B. kombi-sicherung-2026-09-28.json). Diese Tabellen bleiben durch
+  spätere Migrationen erhalten – das Skript läuft daher auch danach noch.
+  Nur Block-Kommentare, damit es auch als eine Zeile funktioniert.
+*/
 
 select json_build_object(
   'stand',              now(),

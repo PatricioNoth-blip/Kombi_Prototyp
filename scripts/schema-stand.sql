@@ -1,24 +1,29 @@
--- Kombi – Welche Migration ist in dieser Datenbank wie weit eingespielt?
---
--- NUR LESEND: nur SELECT auf Systemkatalogen, ändert nichts, legt nichts an, markiert nichts als „applied“.
--- Supabase-Dashboard → SQL Editor → einfügen → Run. Ergebnis: eine Zeile je Migrationsdatei.
---
--- Warum nötig: Laut README werden die Migrationen im SQL-Editor eingespielt, nicht mit der CLI.
--- Deshalb kennt die Migrations-Historie der CLI sie nicht, und `supabase db push` würde Datei 1
--- erneut ausführen („relation block_typ already exists“). Dieses Skript prüft stattdessen die
--- Objekte selbst: Tabellen, Views, Spalten, Funktionen (Signatur, bei ersetzten auch Inhalt),
--- Trigger, Fremdschlüssel, RLS, Policies, Rechte der App-Rolle „anon“ und den Speicher-Bucket.
+/*
+  Kombi – Welche Migration ist in dieser Datenbank wie weit eingespielt?
+
+  NUR LESEND: nur SELECT auf Systemkatalogen, ändert nichts, legt nichts an, markiert nichts als „applied“.
+  Supabase-Dashboard → SQL Editor → einfügen → Run. Ergebnis: eine Zeile je Migrationsdatei.
+
+  Warum nötig: Laut README werden die Migrationen im SQL-Editor eingespielt, nicht mit der CLI.
+  Deshalb kennt die Migrations-Historie der CLI sie nicht, und „supabase db push“ würde Datei 1
+  erneut ausführen („relation block_typ already exists“). Dieses Skript prüft stattdessen die
+  Objekte selbst: Tabellen, Views, Spalten, Funktionen (Signatur, bei ersetzten auch Inhalt),
+  Trigger, Fremdschlüssel, RLS, Policies, Rechte der App-Rolle „anon“ und den Speicher-Bucket.
+
+  Nur Block-Kommentare: Das Skript funktioniert auch, wenn ein Editor den Text zu einer Zeile
+  zusammenzieht (ein Zeilenkommentar würde dann den ganzen Rest verschlucken).
+*/
 
 with erwartet(migration, art, objekt) as (
   values
-  -- ── 1 · 20260927120000_inventar.sql ──
+  /* ── 1 · 20260927120000_inventar.sql ── */
   ('20260927120000_inventar', 'tabelle', 'block_typ'),
   ('20260927120000_inventar', 'tabelle', 'charge'),
   ('20260927120000_inventar', 'tabelle', 'bewegung'),
   ('20260927120000_inventar', 'view', 'bestand'),
   ('20260927120000_inventar', 'funktion', 'heute()'),
   ('20260927120000_inventar', 'funktion', 'pruefe_charge_bewegungen()'),
-  ('20260927120000_inventar', 'funktion_name', 'einfrieren'),          -- Migration 4 ersetzt die Signatur
+  ('20260927120000_inventar', 'funktion_name', 'einfrieren'),          /* Migration 4 ersetzt die Signatur */
   ('20260927120000_inventar', 'funktion', 'entnehmen(bigint, integer)'),
   ('20260927120000_inventar', 'funktion', 'rueckgaengig(bigint[])'),
   ('20260927120000_inventar', 'trigger', 'charge.charge_bewegungen_pruefen'),
@@ -34,7 +39,7 @@ with erwartet(migration, art, objekt) as (
   ('20260927120000_inventar', 'policy', 'block_typ:WG bearbeitet Sorten'),
   ('20260927120000_inventar', 'policy', 'charge:WG liest Chargen'),
   ('20260927120000_inventar', 'policy', 'bewegung:WG liest Bewegungen'),
-  -- ── 2 · 20260927180000_ohne_login.sql (nur Rechte) ──
+  /* ── 2 · 20260927180000_ohne_login.sql (nur Rechte) ── */
   ('20260927180000_ohne_login', 'recht', 'select:block_typ'),
   ('20260927180000_ohne_login', 'recht', 'insert:block_typ'),
   ('20260927180000_ohne_login', 'recht', 'update:block_typ'),
@@ -49,7 +54,7 @@ with erwartet(migration, art, objekt) as (
   ('20260927180000_ohne_login', 'policy_anon', 'block_typ:WG bearbeitet Sorten'),
   ('20260927180000_ohne_login', 'policy_anon', 'charge:WG liest Chargen'),
   ('20260927180000_ohne_login', 'policy_anon', 'bewegung:WG liest Bewegungen'),
-  -- ── 3 · 20260928090000_was_essen.sql ──
+  /* ── 3 · 20260928090000_was_essen.sql ── */
   ('20260928090000_was_essen', 'spalte', 'block_typ.lagerort'),
   ('20260928090000_was_essen', 'spalte', 'bestand.lagerort'),
   ('20260928090000_was_essen', 'tabelle', 'koch_session'),
@@ -74,7 +79,7 @@ with erwartet(migration, art, objekt) as (
   ('20260928090000_was_essen', 'recht', 'select:vorschlag'),
   ('20260928090000_was_essen', 'recht', 'insert:vorschlag'),
   ('20260928090000_was_essen', 'recht', 'insert:rezept'),
-  -- ── 4 · 20260929090000_baukasten.sql ──
+  /* ── 4 · 20260929090000_baukasten.sql ── */
   ('20260929090000_baukasten', 'spalte', 'block_typ.art'),
   ('20260929090000_baukasten', 'spalte', 'block_typ.herkunft'),
   ('20260929090000_baukasten', 'spalte', 'block_typ.einheit'),
@@ -99,7 +104,7 @@ with erwartet(migration, art, objekt) as (
   ('20260929090000_baukasten', 'ausfuehren', 'einfrieren(bigint,integer,date)'),
   ('20260929090000_baukasten', 'ausfuehren', 'setze_geoeffnet(bigint,boolean)'),
   ('20260929090000_baukasten', 'ausfuehren', 'setze_ablauf(bigint,date)'),
-  -- ── 5 · 20260930090000_planung_einkauf.sql ──
+  /* ── 5 · 20260930090000_planung_einkauf.sql ── */
   ('20260930090000_planung_einkauf', 'spalte', 'block_typ.gerichtstypen'),
   ('20260930090000_planung_einkauf', 'spalte', 'block_typ.richtung'),
   ('20260930090000_planung_einkauf', 'tabelle', 'plan'),
@@ -146,7 +151,7 @@ with erwartet(migration, art, objekt) as (
   ('20260930090000_planung_einkauf', 'recht', 'select:nutzung'),
   ('20260930090000_planung_einkauf', 'ausfuehren', 'kochen(jsonb,uuid)'),
   ('20260930090000_planung_einkauf', 'ausfuehren', 'herstellen(jsonb,bigint,integer,date,uuid)'),
-  -- ── 6 · 20261001090000_kosten_naehrwerte.sql ──
+  /* ── 6 · 20261001090000_kosten_naehrwerte.sql ── */
   ('20261001090000_kosten_naehrwerte', 'spalte', 'block_typ.kcal'),
   ('20261001090000_kosten_naehrwerte', 'spalte', 'block_typ.protein_g'),
   ('20261001090000_kosten_naehrwerte', 'spalte', 'block_typ.kohlenhydrate_g'),
@@ -175,14 +180,14 @@ with erwartet(migration, art, objekt) as (
   ('20261001090000_kosten_naehrwerte', 'recht', 'select:mahlzeit'),
   ('20261001090000_kosten_naehrwerte', 'ausfuehren', 'essen(jsonb,uuid,text,integer)'),
   ('20261001090000_kosten_naehrwerte', 'ausfuehren', 'produzieren(jsonb,bigint,integer,date,uuid,integer)'),
-  -- ── 7 · 20261002090000_ausgaben.sql ──
+  /* ── 7 · 20261002090000_ausgaben.sql ── */
   ('20261002090000_ausgaben', 'tabelle', 'ausgabe'),
   ('20261002090000_ausgaben', 'rls', 'ausgabe'),
   ('20261002090000_ausgaben', 'policy', 'ausgabe:App liest Ausgaben'),
   ('20261002090000_ausgaben', 'policy', 'ausgabe:App trägt Ausgaben ein'),
   ('20261002090000_ausgaben', 'policy', 'ausgabe:App entfernt Ausgaben'),
   ('20261002090000_ausgaben', 'recht', 'select:ausgabe'),
-  -- ── 8 · 20261003090000_bilder_zutaten.sql ──
+  /* ── 8 · 20261003090000_bilder_zutaten.sql ── */
   ('20261003090000_bilder_zutaten', 'spalte', 'block_typ.image_url'),
   ('20261003090000_bilder_zutaten', 'spalte', 'block_typ.image_source'),
   ('20261003090000_bilder_zutaten', 'spalte', 'block_typ.image_status'),
@@ -198,7 +203,7 @@ with erwartet(migration, art, objekt) as (
   ('20261003090000_bilder_zutaten', 'policy', 'bild:App markiert Bilder'),
   ('20261003090000_bilder_zutaten', 'recht', 'select:bild'),
   ('20261003090000_bilder_zutaten', 'bucket', 'bilder'),
-  -- ── nur auf Branch claude/hopeful-carson-0yl2z6 (Bon-Import) – zeigt, ob davon etwas live ist ──
+  /* ── nur auf Branch claude/hopeful-carson-0yl2z6 (Bon-Import) – zeigt, ob davon etwas live ist ── */
   ('zz_bon_produktion (anderer Branch)', 'tabelle', 'bon_import'),
   ('zz_bon_produktion (anderer Branch)', 'tabelle', 'bon_position'),
   ('zz_bon_produktion (anderer Branch)', 'tabelle', 'produktion'),
@@ -249,13 +254,13 @@ geprueft as (
         select 1 from pg_policies p
         where p.schemaname = 'public' and p.tablename = split_part(e.objekt, ':', 1)
           and p.policyname = substr(e.objekt, strpos(e.objekt, ':') + 1) and 'anon' = any (p.roles))
-      -- Rechte der App-Rolle „anon“ (die Migrationen entziehen vorher alles – ein „ja“ kommt also aus ihren grants)
+      /* Rechte der App-Rolle „anon“ (die Migrationen entziehen vorher alles – ein „ja“ kommt also aus ihren grants) */
       when 'recht' then coalesce(has_table_privilege('anon',
         to_regclass('public.' || split_part(e.objekt, ':', 2)), split_part(e.objekt, ':', 1)), false)
       when 'ausfuehren' then coalesce(has_function_privilege('anon',
         to_regprocedure('public.' || e.objekt), 'execute'), false)
-      -- dynamisch abgefragt, damit das Skript auch ohne Supabase-Storage (z. B. Test-Datenbank) läuft;
-      -- kein Treffer ergibt ein leeres Ergebnis (nicht als XML parsen – das scheitert an leerem Inhalt)
+      /* dynamisch abgefragt, damit das Skript auch ohne Supabase-Storage (z. B. Test-Datenbank) läuft; */
+      /* kein Treffer ergibt ein leeres Ergebnis (nicht als XML parsen – das scheitert an leerem Inhalt) */
       when 'bucket' then case when to_regclass('storage.buckets') is null then false
         else length(query_to_xml(format('select 1 from storage.buckets where id = %L', e.objekt), false, true, '')::text) > 0 end
     end as vorhanden

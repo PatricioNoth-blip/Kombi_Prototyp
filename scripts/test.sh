@@ -89,3 +89,14 @@ sql -c "insert into storage.buckets (id, name, public) values ('bilder', 'bilder
 bilder="$(psql -X -q -t -A -F '|' -v ON_ERROR_STOP=1 "$URL" -f scripts/schema-stand.sql | awk -F'|' '$1 ~ /bilder_zutaten$/ {print $2}')"
 [[ "$bilder" == "vollständig" ]] || { echo "schema-stand.sql mit Bucket „bilder“: $bilder" >&2; exit 1; }
 echo "ok  schema-stand.sql mit Supabase-Storage: Bucket fehlt → teilweise, vorhanden → vollständig"
+
+# Die Skripte für den SQL-Editor müssen auch funktionieren, wenn ein Editor den Text zu einer Zeile
+# zusammenzieht und z. B. für eine Zeilenbegrenzung einwickelt (Zeilenkommentare würden dann alles verschlucken).
+for skript in scripts/schema-stand.sql scripts/daten-export.sql; do
+  zeile="$(tr '\n' ' ' < "$skript" | sed -E 's/;[[:space:]]*$//')"
+  for variante in "$zeile" "select * from ($zeile) t limit 100"; do
+    [[ -n "$(psql -X -q -t -A -v ON_ERROR_STOP=1 "$URL" -c "$variante")" ]] \
+      || { echo "$skript liefert als eine Zeile kein Ergebnis" >&2; exit 1; }
+  done
+done
+echo "ok  schema-stand.sql und daten-export.sql funktionieren auch als eine Zeile"
