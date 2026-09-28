@@ -14,10 +14,12 @@ grün = gut) und orangefarbene Pillen-Knöpfe; hell und dunkel. Wichtiges steht 
 oder gefiltert hat, bleibt beim Wechsel erhalten; jede Ansicht hat eine Adresse (z. B. `#/vorrat/gefrierfach`),
 „Zurück“ funktioniert wie gewohnt.
 
-- **🏠 Start:** Begrüßung, **Diesen Monat** (Einkäufe · Produktion · Sonstiges, Vergleich zum Vormonat, Ø pro Mahlzeit),
-  **Heute wichtig** als getönte Kacheln, **Was möchtest du essen?** – wischbare Vorschläge aus dem freien Vorrat mit
-  „18 Min · 0,63 € · 620 kcal / Portion“, Verfügbarkeit und **KOCHEN**, darunter **Produktion** (nur wenn gerade sinnvoll)
-  und **Einkauf** („2 Dinge fehlen“) nebeneinander. Ein Tipp auf die Geld-Karte zeigt alle Beträge und nimmt sonstige Ausgaben auf.
+- **🏠 Start (kompakt, iPhone-first):** kleiner Gruß, **Heute** („🍽️ 1.840 kcal · 2 Mahlzeiten · pro Person“, heutige
+  Essenskosten, Frühstück/Mittag/Abendessen, optional „1.840 / 2.200 kcal“ mit eigenem Tagesziel), höchstens **eine** dezente
+  Zeile wie „2 Lebensmittel bald verbrauchen“, **Was essen wir?** als kleine wischbare Karte (Bild, Name, Zeit · Kosten · kcal,
+  verfügbar, **KOCHEN**), **der Monat in einer Zeile** (Einkäufe · Sonstiges · Ø / Mahlzeit; Produktion nur als Warenwert, nie
+  addiert) und zwei Kacheln **Produktion** („2 geplant“) und **Einkauf** („5 offen“). „Heute wichtig“ steht nicht mehr als
+  Kachel-Liste auf dem Start – Ablauf und Reste steuern im Hintergrund die Vorschläge und stehen im Vorrat.
 - **🍽️ Essen:** „Heute“ – Vorschläge (KI oder Kombi-Regeln), „Reste zuerst verwerten“, Gefällt mir / Nicht meins /
   Ähnlich / Anderes, gespeicherte Rezepte; „Woche“ – flexibel planen, tauschen, verschieben, entfernen.
 - **🍳 Kochen:** großer Name, Zeit, kcal und Kosten je Portion, deine Zutaten mit Mengen, was fehlt, Zubereitung.
@@ -52,9 +54,11 @@ oder gefiltert hat, bleibt beim Wechsel erhalten; jede Ansicht hat eine Adresse 
    6. [`supabase/migrations/20260930090000_planung_einkauf.sql`](supabase/migrations/20260930090000_planung_einkauf.sql): Wochenplan, Einkaufsliste, Auftauen, Kochen/Herstellen in einem Schritt, Funktion der Komponenten, Nutzung
    7. [`supabase/migrations/20261001090000_kosten_naehrwerte.sql`](supabase/migrations/20261001090000_kosten_naehrwerte.sql): echte Kosten je Charge, Protokoll von Mahlzeiten und Produktion (Geld im Monat), Einkauf mit Preis, Nährwerte
    8. [`supabase/migrations/20261002090000_ausgaben.sql`](supabase/migrations/20261002090000_ausgaben.sql): sonstige Ausgaben (Kantine, Bäcker …) – eintragen und entfernen, nie löschen
+   9. [`supabase/migrations/20261003090000_bilder_zutaten.sql`](supabase/migrations/20261003090000_bilder_zutaten.sql): eigene Bilder je Sorte (`image_*`), semantische Zutat je Sorte, Bild-Cache (`bild`), Speicher-Bucket „bilder“
 
    Bereits ausgeführte Dateien einfach überspringen und mit der nächsten weitermachen. Jede Datei nur **einmal** ausführen.
-   Ohne Datei 5, 6, 7 bzw. 8 läuft die App wie bisher und zeigt auf dem Start einen ruhigen Hinweis; die neuen Teile sind dann ausgeblendet.
+   Ohne Datei 5, 6, 7, 8 bzw. 9 läuft die App wie bisher und zeigt auf dem Start einen ruhigen Hinweis; die neuen Teile sind dann ausgeblendet.
+   **Stand der echten Datenbank (Live-Check 28.09.2026):** nur Dateien 1–4 sind eingespielt – Planung, Einkauf, Kosten/Kalorien-Protokoll, Ausgaben und Bilder-Cache fehlen dort noch.
    Nach Datei 6 die Edge Function neu deployen (siehe „KI einrichten“), damit „Komponenten entdecken“, Woche und Reste die KI nutzen – sonst rechnet die App diese Teile lokal nach Kombi-Regeln.
 
 ### 2. App lokal starten
@@ -147,11 +151,33 @@ Für heute oder morgen geplante Mahlzeiten zeigt „Für heute auftauen“, was 
 | Nutzbarkeit, Reservierungen, Einkaufsliste, Auftau- und Batch-Regeln | Komponenten-Ideen und wofür sie taugen |
 | Datenbank, Feedback, harte Regeln | – |
 
-Die KI kennt nur, was ihr die App schickt – gegliedert nach Komplettgerichten, Komponenten, Zutaten, Resten, je mit Rolle, „passt in“, Richtung und „Zusammensetzung unbekannt“, wo nichts eingetragen ist. Ihr Auftrag lautet: **„Kombi ist KEINE normale Rezept-App … Finde sinnvolle Kombinationen dieser Bausteine.“** Bei einer TK-Pizza ohne bekannte Zusammensetzung darf sie also nicht annehmen, dass Tomaten, Käse oder Weizen darin sind. Jeder Vorschlag wird geprüft:
+Die KI kennt nur, was ihr die App schickt – als strukturiertes JSON (siehe „Was die KI bekommt und liefert“), geordnet nach Komplettgerichten, Komponenten, Zutaten, dazu Reste, je mit Rolle, Menge, Lagerort, Ablauf, „passt in“, Richtung, semantischer Zutat und `zusammensetzung: null` (= unbekannt), wo nichts eingetragen ist. Ihr Auftrag lautet: **„Kombi ist KEINE normale Rezept-App … Finde sinnvolle Kombinationen dieser Bausteine.“** Bei einer TK-Pizza ohne bekannte Zusammensetzung darf sie also nicht annehmen, dass Tomaten, Käse oder Weizen darin sind. Jeder Vorschlag wird geprüft:
 
 - Zutaten, die es nicht gibt, stehen nie unter „vorhanden“, sondern unter „fehlt“.
 - **Kreativität ja, Halluzination nein:** Name und Beschreibung dürfen nur Zutaten nennen, die im Gericht wirklich stecken (verwendete Einträge, deren bekannte Zusammensetzung, „fehlt“). Aus einer „Pizza“ ohne bekannten Belag wird also keine „Salami-Pizza“ – so ein Vorschlag wird verworfen, erfundene Sätze werden entfernt. Braucht die Zubereitung etwas, das es im Haushalt nicht gibt, steht es ehrlich unter „fehlt“.
 - Preisangaben der KI, „vegan/glutenfrei“ und „hausgemacht“ ohne Grundlage werden entfernt.
+
+## 🖼️ Bilder
+
+Rezepte, Komponenten, Zutaten und Lagerorte bekommen Bilder – aber **nie eine erfundene Bildquelle**. Priorität:
+
+**eigenes Bild → echt gefundenes Foto → generiertes Bild → lokales Fallback → kein Bild**
+
+- **Bildanforderung:** Für jedes Gericht und jede Komponente baut die Software aus den strukturierten Daten (verwendete Sorten, bekannte Zusammensetzung, Gerichtstyp, semantische Zutaten) einen Suchbegriff und eine Bildbeschreibung. Den Vorschlag der KI („tomato cucumber yogurt bowl“) übernimmt sie nur, wenn er keine Zutat nennt, die nicht im Gericht steckt („steak with fries“ bei einer Gurken-Bowl wird verworfen) und keine URL enthält.
+- **Bildsuche (Wikimedia Commons, ohne Key):** nur Fotos (jpeg/png/webp) mit **freier Lizenz** (CC0, CC BY, CC BY-SA, gemeinfrei), deren Titel/Beschreibung das Gesuchte nennt (bei zusammengesetzten Gerichten mindestens zwei Begriffe), **keine fremden Zutaten** zeigt (kein „Falafel mit Hähnchen“) und kein Logo/keine Pflanze/Grafik ist. Die URL wird vor dem Speichern abgerufen (erreichbar, wirklich ein Bild). Gespeichert werden URL, Quelle, Suchbegriff, Zeitpunkt, Lizenz und Urheber; die Kochansicht zeigt den Nachweis („Foto: … · CC BY-SA 4.0 · Wikimedia Commons“). Live-Check 28.09.2026: Falafel (CC BY-SA 3.0) und Tomaten (CC0) gefunden und erreichbar.
+- **Bildgenerierung (optional):** Nur wenn kein passendes Foto gefunden wurde **und** eingerichtet: `BILD_API_KEY` (Standard-Anbieter `openai`, Modell `gpt-image-1`; `BILD_ANBIETER=together` oder `eigen` mit `BILD_BASIS_URL`, `BILD_MODELL`). Die Beschreibung entsteht nur aus dem geprüften Motiv (Katalog-Zutaten, Gerichtstyp; unbekannter Inhalt wird als „nicht angegeben“ beschrieben – aus einer Pizza ohne bekannten Belag wird keine Salami-Pizza). Das Bild wird im öffentlichen Supabase-Bucket „bilder“ dauerhaft abgelegt (kein Hotlink auf temporäre Anbieter-URLs). Die Edge Function baut die Beschreibung selbst neu – ein mitgeschickter Freitext wird nie verwendet. Einrichten: `npx.cmd supabase secrets set BILD_API_KEY=… --project-ref …`; Kosten beim Bild-Anbieter mit einem Budget-Limit begrenzen, da die Function öffentlich erreichbar ist.
+- **Nie Pflicht:** Ist nichts eingerichtet, nicht erreichbar oder unpassend, zeigt die App ein lokales Foto (`src/bilder/`) oder eine warme Kachel mit passendem Symbol (nach Name, sonst nach Zutat-Kategorie oder Rolle). Lädt ein Bild nicht, springt die Anzeige sofort auf das Fallback – kein kaputtes Bild-Symbol; der Cache-Eintrag wird als „fehler“ markiert (nichts wird gelöscht).
+- **Cache & Performance:** Tabelle `bild` (Migration 9) – gleicher Inhalt (z. B. `gericht:bowl:gurke+joghurt+tomate`, unabhängig vom kreativen Namen) wird nie erneut gesucht oder generiert. Gesucht wird nur für sichtbare Hauptkarten (Start, Essen, Kochansicht, Produktion „Jetzt sinnvoll“, Sorten-Details), höchstens zwei Anfragen gleichzeitig, einmal je Sitzung. Listen bekommen kleinere Varianten (Commons 160–320 px), Bilder laden lazy.
+- **Eigene Bilder:** Sorte bearbeiten → Mehr Details → „Eigenes Bild“ (https-Adresse). Lagerorte haben lokale Fotos.
+- Gefundene und generierte Bilder dürfen nur von `upload.wikimedia.org` bzw. dem eigenen Supabase-Speicher kommen (App **und** Datenbank prüfen das).
+
+## 🥕 Zutaten: Produkt → Zutat → Verwendung
+
+Die Sorte bleibt das gekaufte Produkt („REWE Strauchtomaten 500 g“, mit Preis, Menge, Lagerort). Was es als Lebensmittel **ist**, steht getrennt im Katalog `supabase/functions/_shared/kombi/zutaten.ts`: „Tomate“ – Gemüse, frisch, roh/gekocht, passt in Soße, Salat, Pasta, Bowl, Curry. Rund 80 normale Lebensmittel (Tomate, Gurke, Joghurt, Zwiebel, Knoblauch, Paprika, Kartoffeln, Karotten, Spinat, Brokkoli, Reis, Pasta, Brot, Wraps, Haferflocken, Linsen, Kichererbsen, Bohnen, Käse, Tofu, Seitan …).
+
+- Erkannt wird deterministisch aus dem Produktnamen (Marke, Größe, Beiwörter werden ignoriert); Spezielles vor Allgemeinem („Tomatensoße“ ist keine rohe Tomate, „Gehackte Tomaten (Dose)“ sind Dosentomaten). **Unbekanntes bleibt unbekannt** – es wird nichts geraten. Optional überschreibt die Spalte `block_typ.zutat` die Erkennung.
+- Genutzt für: das JSON an die KI (Kategorie, Verwendung), Bildsuche/-beschreibung (englische Begriffe), die Prüfung gefundener Fotos und die Regel-Vorschläge ohne KI.
+- **Ohne KI (Demo/Regeln):** Neben dem Baukasten (Basis + Protein + Sattmacher + Gemüse) gibt es eine Stufe „frische Küche“ für normale Zutaten: Salat, Bowl, Toast, Auflauf, Frühstück – z. B. „Sommer-Crunch mit Joghurt“ aus Tomate, Gurke, Joghurt oder „Überbackene Brokkoli-Pasta“. Belag wird nie über den Bestand hinaus eingeplant.
 
 ### Kosten
 
@@ -172,6 +198,8 @@ Eine zentrale, deterministische Funktion (`supabase/functions/_shared/kombi/kost
 
 ### Kalorien
 
+- **Heute auf dem Start:** kcal **pro Person** = kcal der tatsächlich entnommenen Mengen ÷ Portionen, summiert über die heute gekochten Mahlzeiten; dazu die heutigen Essenskosten (Warenwert der gekochten Mahlzeiten + sonstige Ausgaben von heute, z. B. Kantine) und Frühstück/Mittag/Abendessen nach Uhrzeit. „ab …“, wenn für manche Sorten Nährwerte fehlen, „kcal unbekannt“, wenn keine bekannt sind. Ein **persönliches Tagesziel** (500–8.000 kcal) lässt sich über einen Tipp auf „Heute“ setzen – es bleibt nur auf diesem Gerät; der Balken erscheint nur bei vollständig bekannten Werten.
+- **Komponenten** haben eigene Nährwerte (z. B. Tomaten-Basis 45 kcal / Portion). Wird eine Portion gegessen, zählen diese 45 kcal – die Tomaten darin nicht noch einmal.
 - Nur aus hinterlegten Nährwerten (von der Packung): kcal, Eiweiß, Kohlenhydrate, Fett – **je 100 g/ml** oder je Portion/Stück. Leer = **unbekannt, nicht 0**.
 - Gerichte rechnen aus den echten Mengen: „620 kcal / Portion“, „ab 450 kcal“, wenn nur ein Teil bekannt ist, sonst „kcal unbekannt“. Wasser, Salz und Pfeffer zählen als 0 kcal, Öl ohne Menge bleibt unbekannt.
 - Die KI liefert keine Kalorien; Angaben von ihr werden ignoriert. „Heute gekocht … kcal“ erscheint nur für wirklich gekochte Mahlzeiten mit vollständig bekannten Werten.
@@ -209,6 +237,33 @@ npx.cmd supabase functions deploy was-essen --project-ref yjjgfdvpqmclocgejrhz -
 Beispiel: `npx.cmd supabase secrets set KI_ANBIETER=gemini KI_API_KEY=… --project-ref …`.
 Modelle ändern sich bei den Anbietern gelegentlich. Meldet die App „Modell nicht verfügbar“, ein aktuelles Modell als `KI_MODELL` setzen.
 
+### KI-Verbindung prüfen (Health-Check)
+
+Die Kette ist nachvollziehbar: **App → Edge Function `was-essen` → KI-Anbieter → Modell → JSON → Kombi-Prüfung → Rezeptkarte.**
+
+- `GET …/functions/v1/was-essen` liefert **ohne Keys**: Engine-Version, ob die KI eingerichtet ist, Anbieter, Modell, Host und die Bild-Einrichtung.
+- `GET …/functions/v1/was-essen?probe=1` macht zusätzlich **einen echten, kleinen Aufruf** mit einem festen Beispiel-Haushalt (keine echten Daten, nichts wird gespeichert) und meldet Antwortzeit, JSON gültig, Format gültig, wie viele Vorschläge die Prüfung bestanden, was verworfen wurde und ob die Bildanforderungen passten.
+- In der App: **Essen → Ändern → KI** zeigt dasselbe; „Testen“ startet den Probelauf. Ist keine KI eingerichtet, steht dort ehrlich „Nicht eingerichtet – Vorschläge nach Kombi-Regeln“.
+- App und Function tragen dieselbe Engine-Version (`ENGINE_VERSION` in `gesundheit.ts`). Weicht sie ab, bittet die App um ein neues Deployment.
+- Der **Live-Check** (GitHub Actions, bei jedem Push) ruft den Health-Check auf, bei eingerichteter KI den Probelauf – bei einer älteren Function einen kleinen POST-Probelauf. Fehler externer Dienste (Kontingent, Wikimedia) erscheinen als ⚠, nicht als Code-Fehler.
+- **Live-Stand 28.09.2026:** Die Function ist deployt, aber noch eine **ältere Version ohne Health-Check** → bitte neu deployen (Befehl oben). Erst danach zeigen Health-Check und Probelauf Anbieter, Modell und Antwortzeit.
+
+### Was die KI bekommt und liefert
+
+- **Strukturiertes JSON statt Stichworten:** `{"inventar":[{"id":"b31","name":"Strauchtomaten","typ":"zutat","rolle":"Gemüse","menge":500,"einheit":"g","portionen":5,"lagerort":"kuehlschrank","ablauf_in_tagen":null,"geoeffnet":false,…,"zutat":{"id":"tomate","kategorie":"gemuese","verwendung":["sosse","salat","pasta","bowl","curry"]},"preisklasse":"€€"}],"kuehlschrank_reste":[{"id":"k1","name":"halbe Paprika","menge":null}],"immer_da":[…]}` – `menge: null` heißt **unbekannt** (nie eine Zahl behaupten), `zusammensetzung: null` heißt **unbekannt** (nichts über den Inhalt behaupten).
+- Die KI liefert Gerichte mit Namen, Beschreibung, Zubereitung, Eigenschaften und höchstens eine **Bildanforderung** `{"image_request":{"needed":true,"query":"tomato cucumber yogurt bowl","style":"appetizing food photography","aspect_ratio":"4:3"}}` – **nie eine URL**.
+- **Kreative Namen erwünscht** („Rote Samt-Pasta“, „Sommer-Crunch mit Zitronenjoghurt“), langweilige Standardnamen („Tomaten-Pasta“, „Gemüse-Reis“) nicht – aber jedes Zutat-Wort im Namen muss im Gericht stecken.
+- Die Software entfernt aus KI-Texten: Preise, **Kalorien-/Nährwertbehauptungen** („nur 450 kcal“, „proteinreich“), **Bestandsmengen** („Du hast noch 3 Tomaten“), **Links und Bild-URLs**, Diät-Behauptungen und „hausgemacht“ ohne Grundlage. Mengen, Kosten und kcal rechnet ausschließlich die Software.
+- Die KI verändert nichts: keine Entnahme, keine Buchung, nichts wird gespeichert – Vorschläge werden erst nach Bestätigung zu Plänen, Sorten oder Buchungen.
+
+### KI-Benchmark
+
+`npm run benchmark` misst 30 reproduzierbare Szenarien (`scripts/benchmark/szenarien.ts`: frische Zutaten, Komponenten, Komplettgerichte, unbekannte Zusammensetzung, Ablauf, Kühlschrank-Reste, Notfall, leerer Haushalt, Feedback, Abwechslung, Reste, Komponenten-Ideen, Woche, 4 Personen, Abgelaufenes …). Je Anbieter/Modell und Szenario: Antwortzeit, JSON gültig, Format gültig, bestanden/verworfen, **Halluzinationen aus der Rohantwort** (erfundene Zutaten, Mengen über dem Bestand, Preise, kcal, Bestandsmengen, Bild-URLs), Anteil aus dem Vorrat, Komponenten, Dringendes genutzt, Kreativität, generische Namen, Vielfalt, Bildanforderung vorhanden/plausibel.
+
+- **Fair:** Punkte gibt es nur für geprüfte Vorschläge; jede erfundene Tatsache kostet 5 Punkte. Wo „nichts“ richtig ist (leerer Haushalt, Reste ohne Dringendes), wird Zurückhaltung belohnt.
+- Ohne Keys laufen nur die Kombi-Regeln (und mit `--attrappe` eine absichtlich halluzinierende Attrappe, die zeigt, dass Erfundenes bestraft wird). Mit Keys: `GROQ_API_KEY=… GEMINI_API_KEY=… BENCH_ANBIETER=groq,gemini npm run benchmark` (Modelle über `BENCH_MODELL_GROQ` usw.) – oder in GitHub: **Actions → KI-Benchmark → Run workflow** (Keys als Repository-Secrets `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`).
+- Stand 28.09.2026, lokal gemessen (ohne KI-Keys): Kombi-Regeln Ø 71 Punkte, 66/78 Vorschläge bestanden, **0 Halluzinationen**; Attrappe Ø 5 Punkte, 378 gezählte erfundene Fakten. **Echte KI-Modelle wurden noch nicht verglichen** – dafür fehlen hier die Keys.
+
 > **Datenschutz:** An die KI gehen nur Sortennamen, Mengen, Preisklassen (keine Beträge), bekannte Zusammensetzungen, Notizen, Namen gespeicherter Rezepte und euer Kühlschrank-Text. Gratis-Stufen dürfen Eingaben laut ihren Bedingungen teils zur Verbesserung ihrer Modelle nutzen.
 
 ### So ist es gebaut
@@ -240,6 +295,7 @@ Die Tests prüfen die Akzeptanzkriterien direkt in der Datenbank:
 - Planung & Einkauf: `kochen()` alles oder nichts (Plan erledigt, nicht doppelt, Rückgängig), `herstellen()` in einem Schritt, Auftauen ändert keinen Bestand, Einkauf → Vorrat mit tatsächlicher Menge und ohne Doppelbuchung, Nutzung ohne Rückgängig-Buchungen, Rechte ohne Login.
 - Sonstige Ausgaben: eintragen, als entfernt markieren und zurückholen, nicht löschbar, Betrag nachträglich nicht änderbar, unplausible Beträge und Daten abgelehnt.
 - Kosten & Nährwerte: Einkauf 1000 g für 3,00 € → Produktion → 6 Portionen für 1,44 € → 2 Portionen gegessen = 0,48 € (nicht doppelt gezählt, spätere Preisänderung ohne Wirkung), tatsächliche Menge (7 statt 8), unvollständige Preise lernen keinen Preis, Rückgängig nur für unberührte Chargen, kcal aus Nährwerten, Protokolle ohne direkten Schreibzugriff.
+- Bilder & Zutaten: eigenes Bild nur https, keine zufälligen Hotlinks im Cache, gefundenes Bild nur mit Lizenz und Quelle, generiert = `image_generated`, Status beim Anlegen nicht setzbar, kaputt markieren statt löschen (Zeitstempel aktualisiert), URL nachträglich nicht änderbar, Zutat nur als Katalog-id.
 
 ```bash
 npm test            # alles
@@ -247,7 +303,13 @@ npm run test:ki     # nur „Was essen wir?“ – läuft überall, auch unter W
 npm run test:db     # nur Datenbank
 ```
 
-Die 214 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+Die 271 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+- Bilder: nur sichere https-URLs, keine Hotlinks, Priorität eigen → gefunden → generiert → lokal → keins, kaputte Quelle (Status „fehler“) und fehlendes Bild → Fallback, Bildanforderung der KI (übernommen / „steak“ verworfen / URL verworfen / fehlt), Beschreibung nur aus Rezeptdaten, unbekannte Pizza bleibt Pizza, Commons-Auswertung (Lizenz, Motiv, fremde Zutaten, Pflanze statt Lebensmittel), Pipeline gefunden/generiert/nichts/offline, Keys nie im Ergebnis, jede App-Anfrage besteht die Prüfung der Function
+- Semantische Zutaten: „REWE Strauchtomaten 500 g“ → Tomate, Spezielles vor Allgemeinem, Unbekanntes bleibt unbekannt
+- KI-Verbindung: Health-Check ohne Keys, Probelauf (JSON gültig/ungültig, nur Halluzinationen → nicht ok), Edge Function GET/POST/Bild
+- Wahrheit: keine Bestandsmengen, kcal-/Nährwertbehauptungen, Links in KI-Texten; Prompt als strukturiertes JSON
+- Startseite „Heute“: kcal pro Person, teilweise/unbekannt ≠ 0, Kosten inkl. Sonstiges, Ziel, Komponente ohne Doppelzählung; ein Hinweis statt Kacheln; Produktionsgründe aus Daten
+- Benchmark: 30 Szenarien, Halluzinationen werden gezählt, die Attrappe verliert deutlich, Regeln ohne erfundene Fakten, normale Zutaten ergeben Gerichte
 - die Kostenfunktion (2,00 € für 4 Portionen, Gramm/ml/Stück, unbekannt, teilweise, Rundung am Ende)
 - keine erfundenen Bestände, Zutaten, Inhalte oder Preise (z. B. keine „Salami-Pizza“ bei unbekanntem Belag) – und keine falschen Alarme bei guten Namen
 - Komplettgericht / Komplettgericht mit Beilage / Rezept und „Heute kochen“ in Einheiten
@@ -266,7 +328,9 @@ Für `test:db` müssen die Postgres-Programme installiert sein (macOS: `brew ins
 Bei jedem Push laufen alle Tests, der App-Build und eine Deno-Prüfung der Edge Function automatisch in GitHub Actions (Workflow „CI“).
 
 **Live-Check:** Der Workflow „Live-Check (echte Supabase)“ prüft bei jedem Push die echte Datenbank
-aus der `.env` (Migrationen, Seed, Rechte, Buchungsfunktionen) und klickt die gebaute App im Browser durch.
+aus der `.env` (Migrationen, Seed, Rechte, Buchungsfunktionen), die KI-Verbindung (Health-Check, Probelauf), die Bildsuche
+(Wikimedia Commons) und klickt die gebaute App im Browser durch – auf 390 px und 375 px Breite (kein horizontaler Überlauf,
+Reiter vollständig, keine kaputten Bilder), im Dunkelmodus und mit Höhenangaben der kompakten Startseite. Außerdem prüft er die Lesbarkeit hell und dunkel (Kontrast nach WCAG AA, keine per „…“ abgeschnittenen Texte).
 Er **ändert keine Daten**: Buchungen werden nur mit Werten aufgerufen, die garantiert abgelehnt werden.
 Über **Actions → Live-Check → Run workflow** lässt er sich auch von Hand starten, z. B. wenn die App
 plötzlich nichts mehr anzeigt.
@@ -311,6 +375,7 @@ supabase/migrations/…_baukasten.sql  Art, Einheit, Preisbezug, Zusammensetzung
 supabase/migrations/…_planung_einkauf.sql  Plan, Einkauf, Auftauen, Nutzung, kochen()/herstellen()/einkauf_buchen()
 supabase/migrations/…_kosten_naehrwerte.sql  Kosten je Charge, Mahlzeit/Herstellung, essen()/produzieren()/einkaufen(), Nährwerte
 supabase/migrations/…_ausgaben.sql   sonstige Ausgaben
+supabase/migrations/…_bilder_zutaten.sql  Bilder je Sorte, semantische Zutat, Bild-Cache, Speicher-Bucket
 supabase/functions/was-essen/        Edge Function: KI-Aufruf mit Prüfung (API-Key nur hier)
 supabase/functions/_shared/kombi/    Kombi-Engine: Snapshot, Prüfung, Kosten (kosten.ts), Mengen,
                                      Wahrheitsprüfung (wahrheit.ts), Abwechslung, Lernen, Einkauf, KI-Anbieter,
@@ -339,15 +404,21 @@ src/Essen.tsx, src/essenApi.ts       „Heute essen“: Session, Karte, Entschei
 src/GerichtKarte.tsx                 Rezeptkarte
 src/Blatt.tsx, src/Icon.tsx          Dialog von unten, Zahlenknöpfe, Linien-Icons
 src/Karten.tsx                       Abschnitts-Karte, „Heute wichtig“-Kacheln, Angaben mit Icons, Zustands-Pillen
-src/Bild.tsx, src/bilder/            Fotos vom Essen (aus den Design-Entwürfen) – passend zum Namen, sonst eine
-                                     warme Kachel mit Lebensmittel-Symbol. Eigene Fotos: WebP in src/bilder/ legen
-                                     und in Bild.tsx einem Suchwort zuordnen.
+src/Bild.tsx, src/bilder/            Bild mit Fallback-Kette: eigenes/gefundenes/generiertes Bild → lokales Foto
+                                     (src/bilder/) → warme Kachel mit Lebensmittel-Symbol; kaputte Bilder springen weiter
+src/bildApi.ts                       Bild-Cache (Tabelle „bild“), einmalige Suche je Inhalt, useBild(), sortenBild()
+src/KiStatus.tsx                     KI-Status und „Verbindung testen“ (Essen → Ändern)
+supabase/functions/_shared/kombi/bilder.ts      Bildmodell, sichere URLs, Bildanforderung, Commons-Auswertung
+supabase/functions/_shared/kombi/bild_dienst.ts Bildsuche, optionale Generierung, Ablage im Speicher (Edge Function)
+supabase/functions/_shared/kombi/zutaten.ts     semantische Zutaten: Produkt → Zutat → Verwendung
+supabase/functions/_shared/kombi/gesundheit.ts  Health-Check, Probelauf, ENGINE_VERSION
+scripts/benchmark.ts, scripts/benchmark/        KI-Benchmark (30 Szenarien, Messung, Punkte)
 src/farben.ts, src/format.ts         Farbsystem, Begriffe, Mengen-, Datums- und Euro-Anzeige
 ```
 
 ## Noch nicht enthalten
 
-Login, dauerhafte Vorlieben über Sessions hinweg (außer gespeicherten Rezepten), Push-Benachrichtigungen, Platz im Gefrierfach und Fotos der Gerichte gibt es noch nicht.
+Login, dauerhafte Vorlieben über Sessions hinweg (außer gespeicherten Rezepten), Push-Benachrichtigungen und Platz im Gefrierfach gibt es noch nicht. Eigene Fotos lassen sich als https-Adresse hinterlegen, aber noch nicht hochladen.
 **Kassenbon-Import** ist als Idee vorgesehen (Foto → erkannte Positionen → Zuordnung zu Sorten → Mengen, Preise, MHD prüfen → erst nach Bestätigung einbuchen), aber noch nicht gebaut – er braucht eine Texterkennung.
-Fotos gibt es für die Lebensmittel aus den Design-Entwürfen (Tomaten, Tomatensoße, Pasta, Curry, Falafel, Ofengemüse, Pizza, Spinat, Käse, Haferflocken); alles andere zeigt ein Symbol. Eigene Fotos je Sorte hochladen geht noch nicht.
+Lokale Fotos gibt es für die Lebensmittel aus den Design-Entwürfen (Tomaten, Tomatensoße, Pasta, Curry, Falafel, Ofengemüse, Pizza, Spinat, Käse, Haferflocken); weitere kommen über die Bildsuche (nach Migration 9 und neuem Deployment der Function) oder als Symbol.
 Ein Login lässt sich später ohne Umbau der Datenbank wieder einschalten, siehe Kommentar in der Migration „ohne_login“.

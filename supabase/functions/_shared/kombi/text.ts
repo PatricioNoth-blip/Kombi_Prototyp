@@ -21,7 +21,9 @@ export function ausListe<T extends string>(wert: unknown, erlaubt: readonly T[],
 
 export function kuerze(text: unknown, max: number): string {
   if (typeof text !== 'string') return '';
-  const t = text.replace(/\s+/g, ' ').trim();
+  // Modelle schreiben gern geschützte Bindestriche (U+2011): dann bricht „Linsen‑Gurken‑Wraps“ auf dem
+  // Handy nicht um und gilt für die Namensprüfung als ein Wort → normaler Bindestrich.
+  const t = text.replace(/[\u2010\u2011]/g, '-').replace(/\s+/g, ' ').trim();
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 

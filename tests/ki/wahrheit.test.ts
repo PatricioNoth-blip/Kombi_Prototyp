@@ -157,3 +157,11 @@ describe('Keine erfundenen Mengen, Nährwerte oder Bildquellen in KI-Texten', ()
     assert.ok('fehler' in pruefeName('Bowl www.example.com', deckung, r));
   });
 });
+
+describe('Schreibweise von KI-Namen', () => {
+  test('geschützte Bindestriche (U+2011) werden normal – Umbruch möglich, Namensqualität prüfbar', async () => {
+    const { kuerze } = await import('../../supabase/functions/_shared/kombi/text.ts');
+    assert.equal(kuerze('Linsen\u2011Gurken\u2011Wraps mit Tomaten\u2011Joghurt\u2011Füllung', 80), 'Linsen-Gurken-Wraps mit Tomaten-Joghurt-Füllung');
+    assert.ok(namensQualitaet(kuerze('Linsen\u2011Gurken\u2011Tomaten\u2011Wrap', 80), []) < 1, 'mechanischer Name wird erkannt');
+  });
+});

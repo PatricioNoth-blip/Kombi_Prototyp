@@ -383,14 +383,48 @@ if (!APP_URL) {
     return `${hoehen.join(' · ')}; Ende bei ${ende} px (Bildschirm 844 px)`;
   });
 
-  /** Nur bei manuellem Start mit „screenshots_im_log“: Screenshot als Base64 ins Log (für Umgebungen ohne Artefakt-Zugriff). */
-  async function screenshotInsLog(name) {
-    if (process.env.LIVE_CHECK_SCREENSHOT_LOG !== '1') return;
-    const bild = (await page.screenshot({ type: 'jpeg', quality: 55, fullPage: true })).toString('base64');
-    const teile = bild.match(/.{1,2000}/g) ?? [];
-    teile.forEach((t, i) => console.log(`SCREENSHOT ${name} ${i + 1}/${teile.length} ${t}`));
-  }
-  await screenshotInsLog('start-hell');
+
+  /**
+   * Lesbarkeit: Kontrast jedes sichtbaren Texts gegen seinen (deckenden) Hintergrund nach WCAG
+   * (4,5:1, große/fette Schrift 3:1) und Texte, die per „…“ abgeschnitten werden.
+   */
+  const lesbarkeit = () => page.evaluate(() => {
+    // „rgb(…)“, „rgba(…)“ oder „color(srgb r g b / a)“ (color-mix) → [r, g, b, a] mit r, g, b in 0–255
+    const zahlen = (t) => {
+      const z = (t.match(/[\d.]+/g) ?? []).map(Number);
+      if (/^color\(srgb/.test(t)) return [z[0] * 255, z[1] * 255, z[2] * 255, z[3] ?? 1];
+      if (/^(oklab|oklch|lab|lch)/.test(t)) return [0, 0, 0, 0]; // nicht auswertbar → wie transparent
+      return z;
+    };
+    const lum = ([r, g, b]) => [r, g, b].map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; })
+      .reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+    // Hintergrund: erste deckende Farbe; bei Verläufen (Knöpfe) alle Verlaufsfarben – gewertet wird die schwächste
+    const gruende = (el) => {
+      for (let e = el; e; e = e.parentElement) {
+        const st = getComputedStyle(e);
+        if (st.backgroundImage.includes('gradient')) {
+          const farben = [...st.backgroundImage.matchAll(/rgba?\([^)]*\)/g)].map((m) => zahlen(m[0])).filter((f) => (f[3] ?? 1) > 0.9);
+          if (farben.length) return farben;
+        }
+        const [r, g, b, a = 1] = zahlen(st.backgroundColor);
+        if (a > 0.9) return [[r, g, b]];
+      }
+      return [zahlen(getComputedStyle(document.body).backgroundColor)];
+    };
+    const schwach = new Set();
+    const abgeschnitten = new Set();
+    for (const el of document.querySelectorAll('main > div:not([hidden]) *, .kopf *, .tabbar *')) {
+      if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+      const st = getComputedStyle(el);
+      if (st.visibility === 'hidden' || el.getBoundingClientRect().width === 0 || el.closest('[aria-hidden="true"]')) continue;
+      const l1 = lum(zahlen(st.color));
+      const k = Math.min(...gruende(el).map((f) => { const l2 = lum(f); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); }));
+      const gross = parseFloat(st.fontSize) >= 18.66 || (parseFloat(st.fontSize) >= 14 && Number(st.fontWeight) >= 700);
+      if (k < (gross ? 3 : 4.5) && !el.closest('button:disabled')) schwach.add(`„${el.textContent.trim().slice(0, 24)}“ ${k.toFixed(1)}:1`);
+      if (st.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1) abgeschnitten.add(`„${el.textContent.trim().slice(0, 40)}“`);
+    }
+    return { schwach: [...schwach].slice(0, 10), abgeschnitten: [...abgeschnitten].slice(0, 10) };
+  });
 
   /** Mobile Darstellung: kein horizontales Scrollen, keine abgeschnittenen Reiter, keine kaputten Bilder. */
   const layoutFehler = () => page.evaluate(() => {
@@ -431,12 +465,39 @@ if (!APP_URL) {
     if (fehler.length) throw new Error(fehler.join(' | '));
     return 'Start, Essen, Vorrat, Produktion, Einkauf bei 390 px; Start, Vorrat, Essen bei 375 px';
   });
+  await pruefe('Lesbarkeit hell: Kontrast (WCAG) und abgeschnittene Texte', async () => {
+    const teile = [];
+    for (const b of ['Start', 'Vorrat', 'Essen']) {
+      await page.click(`.tabbar button:has-text("${b}")`);
+      await page.waitForTimeout(300);
+      const l = await lesbarkeit();
+      if (l.schwach.length) teile.push(`${b}: Kontrast zu schwach ${l.schwach.join(', ')}`);
+      if (l.abgeschnitten.length) teile.push(`${b}: abgeschnitten ${l.abgeschnitten.join(', ')}`);
+    }
+    await page.click('.tabbar button:has-text("Start")');
+    if (teile.length) throw new Error(teile.join(' | '));
+    return 'Start, Vorrat, Essen: alle Texte ≥ WCAG AA, nichts abgeschnitten';
+  });
+  await pruefe('Lesbarkeit dunkel: Kontrast (WCAG) und abgeschnittene Texte', async () => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const teile = [];
+    for (const b of ['Start', 'Vorrat', 'Essen']) {
+      await page.click(`.tabbar button:has-text("${b}")`);
+      await page.waitForTimeout(300);
+      const l = await lesbarkeit();
+      if (l.schwach.length) teile.push(`${b}: Kontrast zu schwach ${l.schwach.join(', ')}`);
+      if (l.abgeschnitten.length) teile.push(`${b}: abgeschnitten ${l.abgeschnitten.join(', ')}`);
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.click('.tabbar button:has-text("Start")');
+    if (teile.length) throw new Error(teile.join(' | '));
+    return 'Start, Vorrat, Essen: alle Texte ≥ WCAG AA, nichts abgeschnitten';
+  });
   await pruefe('Dunkelmodus: Start ohne Überlauf, Hintergrund dunkel', async () => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.waitForTimeout(300);
     const grund = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     await page.screenshot({ path: 'live-check-dunkel.png', fullPage: true });
-    await screenshotInsLog('start-dunkel');
     const fehler = await layoutFehler();
     await page.emulateMedia({ colorScheme: 'light' });
     const [r, g, b] = (grund.match(/\d+/g) ?? []).map(Number);
@@ -448,7 +509,6 @@ if (!APP_URL) {
   await pruefe('Vorrat: Lagerorte und alle Sorten', async () => {
     await page.click('.tabbar button:has-text("Vorrat")');
     await page.waitForTimeout(300);
-    await screenshotInsLog('vorrat');
     const orte = await page.locator('.ort-karte').allInnerTexts();
     await page.click('.alle-knopf');
     await page.waitForSelector('.ort-ansicht .vorrat-zeile');
@@ -536,7 +596,6 @@ if (!APP_URL) {
     await knopf.click();
     await page.waitForSelector('.kochen');
     await page.waitForTimeout(300);
-    await screenshotInsLog('kochansicht');
     const meta = (await page.innerText('.kochen-kopf .meta-icons')).replace(/\s+/g, ' ');
     await page.click('.kochen [aria-label="Zurück"]');
     if (JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl])) !== vorher) throw new Error('Bestand hat sich geändert!');

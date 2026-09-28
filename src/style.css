@@ -20,25 +20,26 @@
   --text-3: #a79f94;
   --trenn: rgb(60 45 30 / 0.09);
 
-  --akzent: #c24e1b;
-  --akzent-2: #d8693a;
+  /* Hellmodus: alle Textfarben ≥ 4,5:1 (WCAG AA) auf Fläche, Grund und getönten Kacheln */
+  --akzent: #a8420f;
+  --akzent-2: #bd5424;
   --akzent-weich: #fbe6da;
   --akzent-text: #ffffff;
   --gruen: #2b6a44;
   --gruen-weich: #e4eee1;
 
-  --ok: #2e8a58;
+  --ok: #1f7244;
   --ok-weich: #e3f1e5;
-  --achtung: #a86e06;
+  --achtung: #855600;
   --achtung-weich: #fbf0d2;
-  --kritisch: #c4411f;
+  --kritisch: #ab3517;
   --kritisch-weich: #fde5dd;
-  --info: #2f69b0;
+  --info: #2a5f9f;
   --info-weich: #e3ebf9;
 
   --karte-schatten: 0 1px 2px rgb(70 45 20 / 0.04), 0 8px 28px rgb(70 45 20 / 0.07);
   --schatten-schwebend: 0 2px 6px rgb(70 45 20 / 0.06), 0 14px 36px rgb(70 45 20 / 0.14);
-  --knopf-schatten: 0 6px 16px rgb(194 78 27 / 0.28);
+  --knopf-schatten: 0 6px 16px rgb(168 66 15 / 0.28);
   --geld-grund: linear-gradient(100deg, #e6eddf 0%, #edf0e4 42%, rgb(237 240 228 / 0) 70%);
   --vorrat-grund: linear-gradient(100deg, #e9eee3 0%, #eef0e6 44%, rgb(238 240 230 / 0) 72%);
 
@@ -483,7 +484,7 @@ span.chip { cursor: default; }
 .ziel-balken > span { display: block; height: 100%; border-radius: 3px; background: var(--ok); transition: width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .ziel-balken > span.drueber { background: var(--achtung); }
 .mahlzeit-arten { display: flex; gap: 6px; flex-wrap: wrap; }
-.mahlzeit-arten span { padding: 2px 9px; border-radius: 10px; background: var(--flaeche-2); color: var(--text-3); font-size: 12px; font-weight: 600; }
+.mahlzeit-arten span { padding: 2px 9px; border-radius: 10px; background: var(--flaeche-2); color: var(--text-2); font-size: 12px; font-weight: 600; }
 .mahlzeit-arten span.an { background: var(--ok-weich); color: var(--ok); }
 
 .start-hinweis { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--kritisch-weich); color: var(--kritisch); font-size: var(--t-meta); font-weight: 600; text-align: left; }
