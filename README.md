@@ -64,7 +64,7 @@ oder gefiltert hat, bleibt beim Wechsel erhalten; jede Ansicht hat eine Adresse 
 
    **Nicht `supabase db push` verwenden:** Die Dateien werden im SQL-Editor eingespielt, deshalb kennt die Migrations-Historie der CLI sie nicht – `db push` würde Datei 1 erneut ausführen und mit `relation "block_typ" already exists` abbrechen.
    **Vor dem Einspielen sichern:** [`scripts/daten-export.sql`](scripts/daten-export.sql) im SQL-Editor ausführen (nur lesend) und das JSON-Ergebnis als Datei speichern – Sorten, Chargen, Bewegungen und „Was essen wir?“-Daten.
-   **Welche Dateien fehlen?** [`scripts/schema-stand.sql`](scripts/schema-stand.sql) im SQL-Editor ausführen (nur lesend): je Migrationsdatei „vollständig / teilweise / fehlt“ mit Liste des Fehlenden – Tabellen, Spalten, Funktionen, Trigger, Fremdschlüssel, RLS, Policies, Rechte, Bucket. Der Live-Check zeigt einen Teil davon bei jedem Lauf.
+   **Welche Dateien fehlen?** [`scripts/schema-stand.sql`](scripts/schema-stand.sql) im SQL-Editor ausführen (nur lesend): je Migrationsdatei „komplett / teilweise / fehlt“ mit Liste des Fehlenden – Tabellen, Spalten, Funktionen, Trigger, Fremdschlüssel, RLS, Policies, Rechte, Bucket. Der Live-Check zeigt einen Teil davon bei jedem Lauf.
 
 ### 2. App lokal starten
 
@@ -332,7 +332,7 @@ Die 276 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasi
 - Kalorien: Summe aus echten Mengen, je Portion, unbekannt ≠ 0, teilweise („ab …“), Makros nur wenn vollständig, KI-Angaben ignoriert; Produktion skalieren (vorhanden / benötigt / fehlt)
 - Oberfläche ohne Browser: fünf Bereiche, Zustand beim Wechsel, Adressen und Zurück, Start immer zuerst; Startseite: Ausgaben ohne Doppelzählung, Monatskosten, Ø pro Mahlzeit, heute gekocht, Reihenfolge, Dringendes; „Heute wichtig“, Lagerorte, Füllstand, Vorratswert, Suche
 
-Für `test:db` müssen die Postgres-Programme installiert sein (macOS: `brew install postgresql`, Ubuntu/WSL: `sudo apt install postgresql`). Das Skript startet eine Wegwerf-Datenbank und löscht sie danach wieder. Die echte Supabase-Datenbank wird nie angefasst. Zum Schluss prüft es, dass `scripts/schema-stand.sql` nach allen Migrationen „vollständig“ meldet – so bleibt die Diagnose für die echte Datenbank aktuell.
+Für `test:db` müssen die Postgres-Programme installiert sein (macOS: `brew install postgresql`, Ubuntu/WSL: `sudo apt install postgresql`). Das Skript startet eine Wegwerf-Datenbank und löscht sie danach wieder. Die echte Supabase-Datenbank wird nie angefasst. Zum Schluss prüft es, dass `scripts/schema-stand.sql` nach allen Migrationen „komplett“ meldet – so bleibt die Diagnose für die echte Datenbank aktuell. Die beiden Skripte für den SQL-Editor (`schema-stand.sql`, `daten-export.sql`) sind bewusst schlicht gehalten: reines ASCII, keine Kommentare, eine einzige Anweisung – der Supabase-SQL-Editor lehnte frühere Fassungen mit Kommentaren und Umlauten mit „syntax error at end of input“ ab.
 Bei jedem Push laufen alle Tests, der App-Build und eine Deno-Prüfung der Edge Function automatisch in GitHub Actions (Workflow „CI“).
 
 **Live-Check:** Der Workflow „Live-Check (echte Supabase)“ prüft bei jedem Push die echte Datenbank

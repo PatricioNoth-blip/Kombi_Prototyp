@@ -68,17 +68,17 @@ done
 echo "→ Tests"
 sql -f tests/inventar_test.sql
 
-# Das Diagnose-Skript für die echte Datenbank muss nach allen Migrationen „vollständig“ melden
+# Das Diagnose-Skript für die echte Datenbank muss nach allen Migrationen „komplett“ melden
 # (einzige Ausnahme hier: Speicher-Bucket – die Test-Datenbank hat kein Supabase-Storage).
 echo "→ scripts/schema-stand.sql"
 abweichung="$(psql -X -q -t -A -F '|' -v ON_ERROR_STOP=1 "$URL" -f scripts/schema-stand.sql \
-  | awk -F'|' '$1 !~ /^zz_/ && $2 != "vollständig" && !($1 ~ /bilder_zutaten$/ && $4 == "bucket bilder")')"
+  | awk -F'|' '$1 !~ /^zz_/ && $2 != "komplett" && !($1 ~ /bilder_zutaten$/ && $4 == "bucket bilder")')"
 if [[ -n "$abweichung" ]]; then
-  echo "schema-stand.sql erkennt eingespielte Migrationen nicht als vollständig:" >&2
+  echo "schema-stand.sql erkennt eingespielte Migrationen nicht als komplett:" >&2
   echo "$abweichung" >&2
   exit 1
 fi
-echo "ok  schema-stand.sql erkennt alle Migrationen als vollständig"
+echo "ok  schema-stand.sql erkennt alle Migrationen als komplett"
 
 # Wie bei Supabase: storage.buckets vorhanden – erst ohne, dann mit Bucket „bilder“
 # (ohne Treffer darf die dynamische Abfrage nicht scheitern).
@@ -87,8 +87,8 @@ bilder="$(psql -X -q -t -A -F '|' -v ON_ERROR_STOP=1 "$URL" -f scripts/schema-st
 [[ "$bilder" == "teilweise|bucket bilder" ]] || { echo "schema-stand.sql mit leerem storage.buckets: $bilder" >&2; exit 1; }
 sql -c "insert into storage.buckets (id, name, public) values ('bilder', 'bilder', true);"
 bilder="$(psql -X -q -t -A -F '|' -v ON_ERROR_STOP=1 "$URL" -f scripts/schema-stand.sql | awk -F'|' '$1 ~ /bilder_zutaten$/ {print $2}')"
-[[ "$bilder" == "vollständig" ]] || { echo "schema-stand.sql mit Bucket „bilder“: $bilder" >&2; exit 1; }
-echo "ok  schema-stand.sql mit Supabase-Storage: Bucket fehlt → teilweise, vorhanden → vollständig"
+[[ "$bilder" == "komplett" ]] || { echo "schema-stand.sql mit Bucket „bilder“: $bilder" >&2; exit 1; }
+echo "ok  schema-stand.sql mit Supabase-Storage: Bucket fehlt → teilweise, vorhanden → komplett"
 
 # Die Skripte für den SQL-Editor müssen auch funktionieren, wenn ein Editor den Text zu einer Zeile
 # zusammenzieht und z. B. für eine Zeilenbegrenzung einwickelt (Zeilenkommentare würden dann alles verschlucken).
