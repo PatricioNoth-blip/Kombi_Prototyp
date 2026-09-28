@@ -59,7 +59,7 @@ oder gefiltert hat, bleibt beim Wechsel erhalten; jede Ansicht hat eine Adresse 
 
    Bereits ausgeführte Dateien einfach überspringen und mit der nächsten weitermachen. Jede Datei nur **einmal** ausführen.
    Ohne Datei 5, 6, 7, 8 bzw. 9 läuft die App wie bisher und zeigt auf dem Start einen ruhigen Hinweis; die neuen Teile sind dann ausgeblendet.
-   **Stand der echten Datenbank (Live-Check 28.09.2026):** nur Dateien 1–4 sind eingespielt – Planung, Einkauf, Kosten/Kalorien-Protokoll, Ausgaben und Bilder-Cache fehlen dort noch.
+   **Stand der echten Datenbank (Live-Check 28.09.2026, 17:52 UTC):** alle Dateien eingespielt – die Schema-Prüfung meldet jede Migrationsdatei „vollständig“; 18 Sorten und 97 Blöcke blieben erhalten. Nährwerte sind noch bei keiner Sorte hinterlegt (0 von 18) – bis dahin zeigt die App „kcal unbekannt“.
    Nach Datei 6 die Edge Function neu deployen (siehe „KI einrichten“), damit „Komponenten entdecken“, Woche und Reste die KI nutzen – sonst rechnet die App diese Teile lokal nach Kombi-Regeln.
 
    **Nicht `supabase db push` verwenden:** Die Dateien werden im SQL-Editor eingespielt, deshalb kennt die Migrations-Historie der CLI sie nicht – `db push` würde Datei 1 erneut ausführen und mit `relation "block_typ" already exists` abbrechen.
@@ -254,7 +254,7 @@ Die Kette ist nachvollziehbar: **App → Edge Function `was-essen` → KI-Anbiet
 - In der App: **Essen → Ändern → KI** zeigt dasselbe; „Testen“ startet den Probelauf. Ist keine KI eingerichtet, steht dort ehrlich „Nicht eingerichtet – Vorschläge nach Kombi-Regeln“.
 - App und Function tragen dieselbe Engine-Version (`ENGINE_VERSION` in `gesundheit.ts`). Weicht sie ab, bittet die App um ein neues Deployment.
 - Der **Live-Check** (GitHub Actions, bei jedem Push) ruft den Health-Check auf, bei eingerichteter KI den Probelauf – bei einer älteren Function einen kleinen POST-Probelauf. Fehler externer Dienste (Kontingent, Wikimedia) erscheinen als ⚠, nicht als Code-Fehler.
-- **Live-Stand 28.09.2026, 17:28 UTC:** Function aus `main` deployt – `GET` → 200, `x-kombi-version: 2026-09-28.2`, KI eingerichtet (groq · openai/gpt-oss-120b). Probelauf: 4,7 s, JSON und Format gültig, 2 von 2 Vorschlägen bestanden, 2/2 Bildanforderungen passend. In der App: „Testen“ → „Live getestet: 5,2 s“. Die Bildpipeline der Function findet Commons-Fotos (Generierung nicht eingerichtet).
+- **Live-Stand 28.09.2026, 17:52 UTC:** Function aus `main` deployt – `GET` → 200, `x-kombi-version: 2026-09-28.3`, KI eingerichtet (groq · openai/gpt-oss-120b). Probelauf: 4,9 s, JSON und Format gültig, 2 von 2 Vorschlägen bestanden, 2/2 Bildanforderungen passend. In der App: „Testen“ → „Live getestet: 7,1 s“. Die Bildpipeline der Function findet Commons-Fotos (Generierung nicht eingerichtet). Ist das kostenlose groq-Kontingent kurzzeitig erschöpft, meldet die App das als Grund – der Live-Check wertet es als ⚠ extern.
 
 ### Was die KI bekommt und liefert
 
