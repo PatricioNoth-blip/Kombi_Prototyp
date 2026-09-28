@@ -2,14 +2,16 @@ import { useState } from 'react';
 import type { Einheit, Sorte } from './api';
 import { Blatt, AnzahlWahl } from './Blatt';
 import { ARTEN_INFO, buchungsVerb } from './farben';
-import { artVon, einheitVon, heuteIso, mengeKurz, mengeText } from './format';
+import { artVon, einheitVon, euroZuCent, heuteIso, mengeKurz, mengeText } from './format';
 import { Icon } from './Icon';
 
 type Props = {
   bestand: Sorte[];
   baukasten: boolean;
   startSorte: Sorte | null;
-  onEinfrieren: (sorte: Sorte, menge: number, ablaufAm: string | null) => void;
+  /** Migration „kosten_naehrwerte“: bezahlter Betrag wird als Einkauf gezählt */
+  mitPreis: boolean;
+  onEinfrieren: (sorte: Sorte, menge: number, ablaufAm: string | null, preisCent: number | null) => void;
   /** Sorte fehlt noch → anlegen */
   onNeueSorte: () => void;
   onSchliessen: () => void;
@@ -24,30 +26,45 @@ const MENGEN: Record<Einheit, number[]> = {
 };
 
 /** Einbuchen in 3 Taps: „Einbuchen“ → Sorte → Menge (bucht sofort). Ablaufdatum optional. */
-export function Einfrieren({ bestand, baukasten, startSorte, onEinfrieren, onNeueSorte, onSchliessen }: Props) {
+export function Einfrieren({ bestand, baukasten, startSorte, mitPreis, onEinfrieren, onNeueSorte, onSchliessen }: Props) {
   const [sorte, setSorte] = useState<Sorte | null>(startSorte);
   const [ablauf, setAblauf] = useState('');
+  const [preis, setPreis] = useState('');
+  const preisCent = euroZuCent(preis);
+  const preisFehler = preisCent !== null && Number.isNaN(preisCent);
 
   if (sorte) {
     const einheit = einheitVon(sorte);
     const verb = buchungsVerb(sorte.lagerort);
     return (
-      <Blatt titel={`${sorte.name} ${verb.infinitiv}`} untertitel={`Wie viel? Ein Tap bucht sofort.`} onSchliessen={onSchliessen}>
-        {baukasten && (
-          <label className="feld feld-inline">
-            <span>Haltbar bis <small>(optional, z. B. MHD)</small></span>
-            <input type="date" value={ablauf} min={heuteIso()} onChange={(e) => setAblauf(e.target.value)} />
-          </label>
+      <Blatt titel={`${sorte.name} ${verb.infinitiv}`} untertitel="Wie viel? Ein Tap bucht." onSchliessen={onSchliessen}>
+        {(baukasten || mitPreis) && (
+          <div className="formular">
+            {baukasten && (
+              <label className="feld feld-inline">
+                <span>Haltbar bis <small>(optional)</small></span>
+                <input type="date" value={ablauf} min={heuteIso()} onChange={(e) => setAblauf(e.target.value)} />
+              </label>
+            )}
+            {mitPreis && (
+              <label className="feld feld-inline preis-zeile">
+                <span>Bezahlt <small>(optional, zählt als Einkauf)</small></span>
+                <input type="text" inputMode="decimal" placeholder="0,00 €" value={preis} onChange={(e) => setPreis(e.target.value)} aria-invalid={preisFehler} />
+              </label>
+            )}
+            {preisFehler && <p className="fehlertext">Bitte einen Betrag wie 2,49 eingeben.</p>}
+          </div>
         )}
         <AnzahlWahl
           werte={MENGEN[einheit]}
+          deaktiviert={preisFehler}
           aktion={verb.infinitiv.replace(/^./, (b) => b.toUpperCase())}
           beschriftung={einheit === 'g' || einheit === 'ml' ? (n) => mengeText(n, einheit) : undefined}
           platzhalter={einheit === 'portion' ? 'Andere Anzahl' : `Andere Menge (${einheit === 'stueck' ? 'Stück' : einheit})`}
-          onWahl={(n) => onEinfrieren(sorte, n, ablauf || null)}
+          onWahl={(n) => onEinfrieren(sorte, n, ablauf || null, preisCent === null || Number.isNaN(preisCent) ? null : preisCent)}
         />
-        <button type="button" className="link zurueck" onClick={() => setSorte(null)}>
-          ← andere Sorte
+        <button type="button" className="link breit" onClick={() => setSorte(null)}>
+          Andere Sorte wählen
         </button>
       </Blatt>
     );
@@ -68,14 +85,14 @@ export function Einfrieren({ bestand, baukasten, startSorte, onEinfrieren, onNeu
           .sort((a, b) => a.name.localeCompare(b.name, 'de'));
         if (sorten.length === 0) return null;
         return (
-          <section key={art.id} className="abschnitt">
-            <h3>{art.mehrzahl}</h3>
+          <section key={art.id}>
+            <h3 className="unterkopf">{art.mehrzahl}</h3>
             <div className="sorten-raster">
               {sorten.map((s) => {
                 const m = mengeKurz(s.anzahl, einheitVon(s));
                 return (
                   <button key={s.id} type="button" className={`sorte-knopf f-${s.farbe}`} onClick={() => setSorte(s)}>
-                    <span className="farbpunkt" aria-hidden="true" />
+                    <span className="punkt" aria-hidden="true" />
                     <span className="sorte-knopf-name">{s.name}</span>
                     <small>{m.zahl} {m.einheit} da</small>
                   </button>

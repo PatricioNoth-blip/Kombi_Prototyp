@@ -3,14 +3,14 @@ import type { Gericht, GerichtKurz, Optionen } from '../supabase/functions/_shar
 import type { PlanStand } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
 import { mussAuftauen, reserviertAusser, restSnapshot, type AuftauEintrag } from '../supabase/functions/_shared/kombi/planung.ts';
 import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
-import { euroText, kostenText } from '../supabase/functions/_shared/kombi/kosten.ts';
+import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { fehlerText, ladeBestand, type Sorte } from './api';
 import { baueSnapshotAus, holeVorschlaege, holeWoche, type Quelle } from './essenApi';
-import { aenderePlan, alsVorratSorte, entfernePlan, planeGericht, type Plan } from './haushalt';
+import { aenderePlan, alsVorratSorte, entfernePlan, naehrwerteGericht, planeGericht, type Plan } from './haushalt';
 import { Blatt } from './Blatt';
 import { GerichtKarte } from './GerichtKarte';
 import { Icon } from './Icon';
-import { mengeText, portionenText } from './format';
+import { kcalKurz } from './format';
 import { freieTage, plusTageIso, tagName } from './dashboard';
 
 type Props = {
@@ -45,7 +45,7 @@ export function TagWahl({ heute, titel, untertitel, aktuell, onWahl, onSchliesse
         ))}
         <button type="button" className={`zahl${aktuell === null ? ' gewaehlt' : ''}`} onClick={() => onWahl(null)}>Flexibel</button>
       </div>
-      <p className="leise klein abstand-oben">Geplantes reserviert nur – entnommen wird erst beim Kochen.</p>
+      <p className="abschnitt-fuss">Geplantes reserviert nur – entnommen wird erst beim Kochen.</p>
     </Blatt>
   );
 }
@@ -171,12 +171,12 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
 
   return (
     <div className="woche">
-      <section className="gruppe">
-        <h2 className="abschnitt-titel">Geplant</h2>
+      <section className="abschnitt" aria-label="Geplant">
+        <div className="abschnitt-kopf"><h2>Geplant</h2></div>
         {mahlzeiten.length === 0 ? (
-          <p className="leise klein gruppe-leer">Noch nichts geplant. Unten eine Woche vorschlagen lassen – oder bei einem Vorschlag „Einplanen“ tippen.</p>
+          <p className="leise">Noch nichts geplant. Unten ein paar Tage vorschlagen lassen – oder bei einem Vorschlag „Einplanen“ tippen.</p>
         ) : (
-          <ul className="plan-liste">
+          <ul className="liste mit-icon">
             {mahlzeiten.map((p) => {
               const g = p.daten.gericht!;
               const stand = proPlan.get(p.id) ?? [];
@@ -188,40 +188,25 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
               const auftau = auftauEintraege.filter((a) => a.plan_id === p.id);
               const vorbei = p.datum !== null && p.datum < heute;
               return (
-                <li key={p.id} className="plan-karte">
-                  <div className="plan-kopf">
-                    <span className="plan-emoji" aria-hidden="true">{g.emoji}</span>
-                    <span className="plan-titel">
-                      <span className={`plan-tag${vorbei ? ' vorbei' : p.datum === heute ? ' heute' : ''}`}>{p.datum ? tagName(heute, p.datum) : 'Flexibel'}</span>
-                      <strong>{p.titel}</strong>
-                      <small>{g.zeit_min} Min. · {portionenText(p.portionen)} · {kostenText(g.kosten)}</small>
+                <li key={p.id}>
+                  <div className="zeile">
+                    <span className="gericht-bild klein" aria-hidden="true">{g.emoji}</span>
+                    <span className="zeile-haupt">
+                      <span className={`zeile-meta${vorbei ? ' status-achtung' : ''}`}>{p.datum ? tagName(heute, p.datum) : 'Flexibel'}</span>
+                      <span className="zeile-titel">{p.titel}</span>
+                      <span className="zeile-meta">
+                        {g.zeit_min} Min · {kcalKurz(naehrwerteGericht(g, bestand))} / Portion · {fehlt.length
+                          ? <span className="status-achtung">fehlt: {fehlt.map((s) => s.name).join(', ')}</span>
+                          : <span className="status-ok">alles da</span>}
+                        {tk.length > 0 && ` · ${auftau.some((a) => a.status === 'aufgetaut') ? 'aufgetaut' : auftau.length ? 'Auftauen vorgemerkt' : 'vorher auftauen'}`}
+                      </span>
                     </span>
+                    <button type="button" className="knopf klein akzent" onClick={() => onKochen(g, p.id)}>Kochen</button>
                   </div>
-                  <p className={`plan-status ${fehlt.length ? 'fehlt' : 'ok'}`}>
-                    {fehlt.length
-                      ? <><Icon name="wagen" groesse={15} /> Fehlt: {fehlt.map((s) => (s.fehlt ? `${mengeText(s.fehlt, s.einheit ?? 'stueck')} ${s.name}` : s.name)).join(', ')}</>
-                      : <><Icon name="haken" groesse={15} /> Alles da – reserviert</>}
-                  </p>
-                  {tk.length > 0 && (
-                    <p className="plan-status tk">
-                      <Icon name="schneeflocke" groesse={15} />{' '}
-                      {tk.map((s) => `${mengeText(s.reserviert, s.einheit ?? 'portion')} ${s.name}`).join(', ')} auftauen
-                      {auftau.some((a) => a.status === 'aufgetaut') ? ' · ist aufgetaut' : auftau.length ? ' · vorgemerkt' : ' · einen Tag vorher'}
-                    </p>
-                  )}
-                  <div className="plan-aktionen">
-                    <button type="button" className="knopf klein-knopf haupt-klein" onClick={() => onKochen(g, p.id)}>
-                      <Icon name="pfanne" groesse={16} /> Kochen
-                    </button>
-                    <button type="button" className="mini-knopf" aria-label={`Tag für ${p.titel} ändern`} onClick={() => setTagFuer(p)}>
-                      <Icon name="kalender" groesse={16} />
-                    </button>
-                    <button type="button" className="mini-knopf" aria-label={`${p.titel} tauschen`} onClick={() => void tauschen(p)}>
-                      <Icon name="tauschen" groesse={16} />
-                    </button>
-                    <button type="button" className="mini-knopf" aria-label={`${p.titel} entfernen`} disabled={laeuft === p.id} onClick={() => void entfernen(p)}>
-                      <Icon name="muell" groesse={16} />
-                    </button>
+                  <div className="knopf-reihe plan-aktionen">
+                    <button type="button" className="link" onClick={() => setTagFuer(p)}>Tag ändern</button>
+                    <button type="button" className="link" onClick={() => void tauschen(p)}>Tauschen</button>
+                    <button type="button" className="link" disabled={laeuft === p.id} onClick={() => void entfernen(p)}>Entfernen</button>
                   </div>
                 </li>
               );
@@ -233,58 +218,64 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
       {auftauen}
 
       {!vorschau ? (
-        <section className="woche-planen karte-flach">
-          <h3>Mehrere Tage planen</h3>
-          <p className="leise klein">Kombi verteilt euren <strong>freien</strong> Vorrat auf mehrere Mahlzeiten – abwechslungsreich und ohne eine Portion doppelt zu verplanen. Nichts wird entnommen.</p>
-          <div className="segment" role="group" aria-label="Wie viele Mahlzeiten?">
-            {[3, 5, 7].map((n) => (
-              <button key={n} type="button" className={anzahl === n ? 'gewaehlt' : ''} aria-pressed={anzahl === n} onClick={() => setAnzahl(n)}>
-                {n} Mahlzeiten
-              </button>
-            ))}
+        <section className="abschnitt" aria-label="Mehrere Tage planen">
+          <div className="abschnitt-kopf"><h2>Mehrere Tage planen</h2></div>
+          <div className="flaeche formular">
+            <div className="segment" role="group" aria-label="Wie viele Mahlzeiten?">
+              {[3, 5, 7].map((n) => (
+                <button key={n} type="button" className={anzahl === n ? 'gewaehlt' : ''} aria-pressed={anzahl === n} onClick={() => setAnzahl(n)}>
+                  {n} Mahlzeiten
+                </button>
+              ))}
+            </div>
+            <button type="button" className="knopf haupt" disabled={laedt} onClick={() => void planen()}>
+              {laedt ? 'Kombi plant …' : 'Vorschlagen'}
+            </button>
+            {fehler && <p className="fehlertext">{fehler}</p>}
           </div>
-          <button type="button" className="knopf haupt" disabled={laedt} onClick={() => void planen()}>
-            <Icon name="funken" /> {laedt ? 'Kombi plant …' : 'Vorschlagen'}
-          </button>
-          {fehler && <p className="fehlertext">{fehler}</p>}
+          <p className="abschnitt-fuss">Verteilt den freien Vorrat ohne eine Portion doppelt zu verplanen. Entnommen wird erst beim Kochen.</p>
         </section>
       ) : (
-        <section className="woche-planen karte-flach">
-          <h3>Vorschlag</h3>
+        <section className="abschnitt" aria-label="Vorschlag">
+          <div className="abschnitt-kopf">
+            <h2>Vorschlag</h2>
+            <button type="button" className="link" onClick={() => setVorschau(null)}>Verwerfen</button>
+          </div>
           {vorschau.gerichte.length === 0 ? (
             <p className="leise">{vorschau.hinweis ?? 'Mit dem freien Vorrat passt gerade keine Mahlzeit.'}</p>
           ) : (
-            <ul className="vorschau-liste">
+            <ul className="liste mit-icon">
               {vorschau.gerichte.map((g, i) => (
                 <li key={g.id}>
-                  <span className="plan-tag">{vorschau.tage[i] ? tagName(heute, vorschau.tage[i]) : 'Flexibel'}</span>
-                  <span className="plan-emoji klein" aria-hidden="true">{g.emoji}</span>
-                  <span className="plan-titel">
-                    <strong>{g.name}</strong>
-                    <small>{g.fehlt.length ? `fehlt: ${g.fehlt.map((f) => f.name).join(', ')}` : 'alles da'} · {kostenText(g.kosten)}</small>
-                  </span>
-                  <button type="button" className="mini-knopf" aria-label={`${g.name} aus dem Vorschlag nehmen`}
-                    onClick={() => setVorschau({ ...vorschau, gerichte: vorschau.gerichte.filter((_, j) => j !== i), tage: vorschau.tage.filter((_, j) => j !== i) })}>
-                    <Icon name="schliessen" groesse={14} />
-                  </button>
+                  <div className="zeile">
+                    <span className="gericht-bild klein" aria-hidden="true">{g.emoji}</span>
+                    <span className="zeile-haupt">
+                      <span className="zeile-meta">{vorschau.tage[i] ? tagName(heute, vorschau.tage[i]) : 'Flexibel'}</span>
+                      <span className="zeile-titel">{g.name}</span>
+                      <span className="zeile-meta">
+                        {g.fehlt.length ? <span className="status-achtung">fehlt: {g.fehlt.map((f) => f.name).join(', ')}</span> : 'alles da'} · {kcalKurz(naehrwerteGericht(g, bestand))}
+                      </span>
+                    </span>
+                    <button type="button" className="icon-knopf klein" aria-label={`${g.name} aus dem Vorschlag nehmen`}
+                      onClick={() => setVorschau({ ...vorschau, gerichte: vorschau.gerichte.filter((_, j) => j !== i), tage: vorschau.tage.filter((_, j) => j !== i) })}>
+                      <Icon name="schliessen" groesse={14} />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
-          {vorschau.hinweis && vorschau.gerichte.length > 0 && <p className="leise klein">{vorschau.hinweis}</p>}
           {vorschau.gerichte.length > 0 && (
-            <p className="klein">
-              {fehltGesamt.length ? <>Einkaufen: {fehltGesamt.join(', ')}. </> : 'Kein Einkauf nötig. '}
-              {kostenVorschau > 0 && <>Aus dem Vorrat ≈ {euroText(kostenVorschau)} (bekannte Preise).</>}
+            <p className="abschnitt-fuss">
+              {fehltGesamt.length ? `Einkaufen: ${fehltGesamt.join(', ')}. ` : 'Kein Einkauf nötig. '}
+              {kostenVorschau > 0 && `Aus dem Vorrat ≈ ${euroText(kostenVorschau)} (bekannte Preise). `}
+              {vorschau.quelle === 'ki' ? 'Ideen von der KI, geprüft und verteilt von Kombi.' : 'Nach Kombi-Regeln.'}
+              {vorschau.hinweis && ` ${vorschau.hinweis}`}
             </p>
           )}
-          <p className="leise klein">{vorschau.quelle === 'ki' ? 'Ideen von der KI, geprüft und verteilt von Kombi.' : 'Demo ohne KI: nach Kombi-Regeln.'}</p>
-          <div className="knopf-reihe">
-            <button type="button" className="knopf haupt" disabled={laedt || vorschau.gerichte.length === 0} onClick={() => void uebernehmen()}>
-              <Icon name="kalender" /> {vorschau.gerichte.length} einplanen
-            </button>
-            <button type="button" className="link" onClick={() => setVorschau(null)}>Verwerfen</button>
-          </div>
+          <button type="button" className="knopf haupt abstand-oben" disabled={laedt || vorschau.gerichte.length === 0} onClick={() => void uebernehmen()}>
+            {vorschau.gerichte.length} einplanen
+          </button>
         </section>
       )}
 
@@ -295,16 +286,16 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
       {tausch && (
         <Blatt titel={`Statt ${tausch.plan.titel}`} untertitel="Aus dem freien Vorrat – die Reservierung wird neu berechnet." onSchliessen={() => setTausch(null)}>
           {tausch.alternativen === null ? (
-            <p className="leise laden">Kombi sucht Alternativen …</p>
+            <p className="leise">Kombi sucht Alternativen …</p>
           ) : tausch.alternativen.length === 0 ? (
             <p className="leise">Gerade keine passende Alternative.</p>
           ) : (
-            <div className="tausch-liste">
+            <div className="essen">
               {tausch.alternativen.map((g) => (
-                <div key={g.id} className="tausch-eintrag">
-                  <GerichtKarte g={g} kompakt />
-                  <button type="button" className="knopf haupt" onClick={() => void nimm(tausch.plan, g)}>
-                    <Icon name="tauschen" /> {g.name} nehmen
+                <div key={g.id} className="essen">
+                  <GerichtKarte g={g} naehrwerte={naehrwerteGericht(g, bestand)} kompakt />
+                  <button type="button" className="knopf breit" onClick={() => void nimm(tausch.plan, g)}>
+                    {g.name} nehmen
                   </button>
                 </div>
               ))}

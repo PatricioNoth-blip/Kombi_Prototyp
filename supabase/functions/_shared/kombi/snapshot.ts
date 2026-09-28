@@ -1,5 +1,6 @@
 // Baut den kontrollierten Daten-Snapshot, den die KI zu sehen bekommt.
 // Nur was hier steht, gilt als vorhanden. Unbekanntes bleibt null – es wird nichts ergänzt.
+import { naehrwertAus } from './naehrwerte.ts';
 import type {
   Art, Einheit, Farbe, Gerichtstyp, Gewuerzrichtung, Herkunft, Lagerort, PreisInfo, Snapshot, SnapshotZutat,
 } from './typen.ts';
@@ -37,6 +38,12 @@ export type BestandZeile = {
   richtung?: string | null;
   /** aufgetaute Menge (Auftau-Status) */
   aufgetaut?: number | null;
+  // ab Migration „kosten_naehrwerte“: Werte für naehrwert_menge Einheiten
+  kcal?: number | string | null;
+  protein_g?: number | string | null;
+  kohlenhydrate_g?: number | string | null;
+  fett_g?: number | string | null;
+  naehrwert_menge?: number | null;
 };
 
 /** Nur bekannte Gerichtstypen; leer = nicht hinterlegt (null). */
@@ -149,6 +156,7 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       gerichtstypen: saubereGerichtstypen(z.gerichtstypen),
       richtung: saubereRichtung(z.richtung),
       block_typ_id: z.id,
+      naehrwert: naehrwertAus(z, einheit),
     });
   }
 
@@ -178,6 +186,7 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       gerichtstypen: null,
       richtung: null,
       block_typ_id: null,
+      naehrwert: null,
     });
   });
 
@@ -206,6 +215,7 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       gerichtstypen: null,
       richtung: null,
       block_typ_id: null,
+      naehrwert: null,
     });
   }
 

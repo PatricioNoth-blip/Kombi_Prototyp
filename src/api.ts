@@ -45,6 +45,12 @@ export type Sorte = {
   start_menge?: number;
   aufgetaut?: number;
   auftauen_geplant?: number;
+  // ab Migration „kosten_naehrwerte“: Nährwerte für naehrwert_menge Einheiten (NULL = unbekannt)
+  kcal?: number | string | null;
+  protein_g?: number | string | null;
+  kohlenhydrate_g?: number | string | null;
+  fett_g?: number | string | null;
+  naehrwert_menge?: number | null;
 };
 
 export type SorteDaten = Pick<
@@ -52,6 +58,7 @@ export type SorteDaten = Pick<
   | 'name' | 'farbe' | 'groesse_g' | 'mindestbestand' | 'haltbar_tage' | 'kosten_cent' | 'lagerort'
   | 'art' | 'herkunft' | 'einheit' | 'portion_menge' | 'kosten_menge' | 'zusammensetzung' | 'notiz'
   | 'gerichtstypen' | 'richtung'
+  | 'kcal' | 'protein_g' | 'kohlenhydrate_g' | 'fett_g' | 'naehrwert_menge'
 >;
 
 export type Charge = {

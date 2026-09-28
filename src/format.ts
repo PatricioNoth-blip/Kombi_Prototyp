@@ -92,3 +92,17 @@ export function heuteIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+// ───────── Kurzformen für die Zeile „18 Min · 0,64 € · 620 kcal“ (je Portion) ─────────
+
+/** „0,64 €“, „ab 0,40 €“ oder „Preis unbekannt“ – je Portion, nur aus bekannten Preisen */
+export function euroKurz(k: { status: 'berechnet' | 'teilweise' | 'unbekannt'; pro_portion_cent: number | null }): string {
+  if (k.status === 'unbekannt' || k.pro_portion_cent === null) return 'Preis unbekannt';
+  return `${k.status === 'teilweise' ? 'ab ' : ''}${(k.pro_portion_cent / 100).toFixed(2).replace('.', ',')} €`;
+}
+
+/** „620 kcal“, „ab 450 kcal“ oder „kcal unbekannt“ – je Portion, nur aus hinterlegten Nährwerten */
+export function kcalKurz(n: { status: 'berechnet' | 'teilweise' | 'unbekannt'; kcal_portion: number | null } | null | undefined): string {
+  if (!n || n.status === 'unbekannt' || n.kcal_portion === null) return 'kcal unbekannt';
+  return `${n.status === 'teilweise' ? 'ab ' : ''}${n.kcal_portion.toLocaleString('de-DE')} kcal`;
+}

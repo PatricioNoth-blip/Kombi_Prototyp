@@ -212,6 +212,40 @@ if (planung) {
   console.log('ℹ Migration „planung_einkauf“ noch nicht eingespielt – Einkaufsliste, Wochenplan, Auftauen und Herstellen sind ausgeblendet.');
 }
 
+// Migration „kosten_naehrwerte“ (optional): Kosten je Charge, Protokoll von Mahlzeiten/Produktion, Nährwerte.
+const protokoll = planung && !(await db.from('mahlzeit').select('id').limit(1)).error;
+if (protokoll) {
+  for (const tabelle of ['mahlzeit', 'herstellung']) {
+    await pruefe(`${tabelle} lesen`, async () => {
+      const { data, error } = await db.from(tabelle).select('*').limit(1000);
+      if (error) throw new Error(fehlerText(error));
+      return `${data.length} Zeilen`;
+    });
+  }
+  await pruefe('Bestand kennt Nährwerte (leer = unbekannt)', async () => {
+    if (!('kcal' in bestand[0]) || !('naehrwert_menge' in bestand[0])) throw new Error('Spalten fehlen in der View „bestand“');
+    return `${bestand.filter((s) => s.kcal !== null).length} von ${bestand.length} Sorten mit kcal`;
+  });
+  await pruefe('essen() erreichbar', async () =>
+    erwarteFehler(await db.rpc('essen', { p_posten: [], p_plan_id: null, p_titel: '', p_portionen: 1 }), 'P0001', 'Name des Gerichts fehlt'));
+  await pruefe('essen_rueckgaengig() erreichbar', async () =>
+    erwarteFehler(await db.rpc('essen_rueckgaengig', { p_mahlzeit_id: -1 }), 'P0001', 'nicht gefunden'));
+  await pruefe('produzieren() erreichbar', async () =>
+    erwarteFehler(await db.rpc('produzieren', {
+      p_posten: [], p_block_typ_id: -1, p_menge: 1, p_ablauf_am: null, p_plan_id: null, p_nicht_erfasst: 0,
+    }), 'P0001', 'gibt es nicht'));
+  await pruefe('produzieren_rueckgaengig() erreichbar', async () =>
+    erwarteFehler(await db.rpc('produzieren_rueckgaengig', { p_herstellung_id: -1 }), 'P0001', 'nicht gefunden'));
+  await pruefe('einkaufen() verlangt einen Preis', async () =>
+    erwarteFehler(await db.rpc('einkaufen', { p_block_typ_id: sorteId, p_menge: 1, p_ablauf_am: null, p_preis_cent: null }), 'P0001', 'gültigen Preis'));
+  await pruefe('Mahlzeiten nicht direkt beschreibbar', async () =>
+    erwarteFehler(await db.from('mahlzeit').insert({ titel: '__live_check__', portionen: 1 }), '42501'));
+  await pruefe('Kosten einer Charge nicht direkt änderbar', async () =>
+    erwarteFehler(await db.from('charge').update({ kosten_cent: 1 }).eq('id', -1), '42501'));
+} else if (planung) {
+  console.log('ℹ Migration „kosten_naehrwerte“ noch nicht eingespielt – Ausgaben, Kosten je Mahlzeit und Kalorien sind ausgeblendet.');
+}
+
 // ───────── App im Browser ─────────
 const APP_URL = process.env.APP_URL;
 if (!APP_URL) {
@@ -228,32 +262,41 @@ if (!APP_URL) {
     if (m.type() === 'error' && !m.text().startsWith('Failed to load resource')) jsFehler.push(m.text());
   });
 
-  await pruefe('App startet mit dem Vorrat', async () => {
+  await pruefe('App startet mit der Startseite und fünf Bereichen', async () => {
     await page.goto(APP_URL);
-    await page.waitForSelector('.ort-kachel, .fehlerbox, .karte', { timeout: 20000 });
+    await page.waitForSelector('.tabbar, .karte', { timeout: 20000 });
     if (await page.isVisible('.karte')) throw new Error('„Supabase ist noch nicht eingerichtet“ – .env fehlt beim Build');
+    await page.waitForSelector('main .abschnitt, main .leer-zustand, .fehlerbox', { timeout: 20000 });
     if (await page.isVisible('.fehlerbox')) throw new Error(await page.textContent('.fehlerbox'));
-    const kacheln = await page.locator('.ort-kachel').allInnerTexts();
-    const wichtig = await page.locator('.wichtig-karte .wk-name').allTextContents();
+    const tabs = await page.locator('.tabbar button > span:last-child').allTextContents();
+    if (tabs.map((t) => t.trim()).join(',') !== 'Start,Essen,Vorrat,Produktion,Einkauf') throw new Error(`Bereiche: ${tabs.join(', ')}`);
+    const titel = await page.textContent('.kopf h1');
+    const abschnitte = await page.locator('main > div:not([hidden]) .abschnitt-kopf h2').allTextContents();
     const hinweis = await page.locator('main > .hinweisbox').allTextContents();
-    return `Lagerorte: ${kacheln.map((k) => k.replace(/\s+/g, ' ')).join(' | ')}; Heute wichtig: ${wichtig.join(', ') || '–'}` +
-      (hinweis.length ? `; Hinweis: ${hinweis.join(' ')}` : '');
+    return `„${titel}“; Abschnitte: ${abschnitte.join(', ') || '–'}` + (hinweis.length ? `; Hinweis: ${hinweis.join(' ')}` : '');
   });
   await page.screenshot({ path: 'live-check-uebersicht.png', fullPage: true });
 
-  await pruefe('Alle Sorten als Karten', async () => {
+  await pruefe('Vorrat: Lagerorte und alle Sorten', async () => {
+    await page.click('.tabbar button:has-text("Vorrat")');
+    const orte = await page.locator('.ort-zeile').allInnerTexts();
     await page.click('.alle-knopf');
-    await page.waitForSelector('.ort-ansicht .vorrat-karte');
-    const karten = await page.locator('.ort-ansicht .vorrat-karte').count();
-    if (karten !== bestand.length) throw new Error(`${karten} Karten statt ${bestand.length}`);
-    return `${karten} Sorten`;
+    await page.waitForSelector('.ort-ansicht .vorrat-zeile');
+    const zeilen = await page.locator('.ort-ansicht .vorrat-zeile').count();
+    if (zeilen !== bestand.length) throw new Error(`${zeilen} Zeilen statt ${bestand.length}`);
+    return `${orte.map((o) => o.replace(/\s+/g, ' ')).join(' | ')}; ${zeilen} Sorten`;
   });
 
   if (sorte && sorte.anzahl > 0) {
-    await pruefe(`Detail ${sorte.name}: Chargen werden geladen`, async () => {
+    await pruefe(`Detail ${sorte.name}: Anzeigen ändert nichts, Chargen unter „Details“`, async () => {
       const exakt = new RegExp(`^${sorte.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
-      await page.locator('.ort-ansicht .vorrat-karte').filter({ has: page.locator('.vk-name', { hasText: exakt }) }).locator('.vk-oeffnen').click();
+      await page.locator('.ort-ansicht .vorrat-zeile').filter({ has: page.locator('.zeile-titel', { hasText: exakt }) }).locator('.zeile-knopf').click();
+      await page.waitForSelector('.blatt');
+      if (!page.url().includes(`sorte=${sorte.id}`)) throw new Error(`Adresse ohne Sorte: ${page.url()}`);
+      await page.click('.blatt details.mehr-infos summary');
       await page.waitForSelector('.chargen li', { timeout: 10000 });
+      const nachher = (await ladeBestand()).find((s) => s.id === sorte.id);
+      if (nachher.anzahl !== sorte.anzahl) throw new Error(`Bestand ${sorte.anzahl} → ${nachher.anzahl}`);
       return `${await page.locator('.chargen li').count()} Charge(n)`;
     });
     await pruefe('Überentnahme in der App: verständliche Meldung, nichts ändert sich', async () => {
@@ -267,8 +310,19 @@ if (!APP_URL) {
     });
   }
 
+  await pruefe('Adresse und Zurück: #/vorrat/gefrierfach', async () => {
+    await page.goto(`${APP_URL.replace(/#.*$/, '')}#/vorrat/gefrierfach`);
+    await page.waitForSelector('.ort-kopf h2');
+    const titel = await page.textContent('.ort-kopf h2');
+    if (titel !== 'Gefrierfach') throw new Error(`Titel „${titel}“`);
+    await page.click('.zurueck-knopf');
+    await page.waitForSelector('.ort-zeile');
+    return `geöffnet über die Adresse, zurück zu den Lagerorten (${page.url().split('#')[1]})`;
+  });
+
   await pruefe('Einbuchen-Dialog: Sorte → Menge (ohne zu buchen)', async () => {
-    await page.click('.aktion-knopf');
+    await page.click('.kopf .icon-knopf.akzent');
+    await page.click('.blatt .zeile:has-text("Einbuchen")');
     const sorten = await page.locator('.sorte-knopf').count();
     await page.locator('.sorte-knopf').first().click();
     const zahlen = await page.locator('.zahl').count();
@@ -278,8 +332,8 @@ if (!APP_URL) {
   });
 
   await pruefe('Neue Sorte: leeres Formular wird abgelehnt', async () => {
-    await page.click('.aktion-knopf');
-    await page.click('.neue-sorte-knopf');
+    await page.click('.kopf .icon-knopf.akzent');
+    await page.click('.blatt .zeile:has-text("Neue Sorte")');
     await page.click('.formular button[type=submit]');
     const text = await page.textContent('.fehlertext');
     await page.keyboard.press('Escape');
@@ -287,13 +341,14 @@ if (!APP_URL) {
     return 'nichts gespeichert';
   });
 
-  await pruefe('Zustand bleibt beim Wechsel zwischen Essen, Vorrat, Komponenten, Einkauf', async () => {
-    // Vorrat: „Alle Sorten“ ist noch offen; Essen: Text im Feld „Was muss weg?“ (nur im Browser, nicht in der DB)
+  await pruefe('Zustand bleibt beim Wechsel zwischen den Bereichen', async () => {
+    // Vorrat: „Alle Sorten“ offen; Essen: Text im Feld „Reste“ (nur im Browser, nicht in der DB)
+    await page.click('.alle-knopf');
     await page.click('.tabbar button:has-text("Essen")');
-    await page.fill('.essen-start textarea', 'Live-Check Rest');
-    for (const b of ['Komponenten', 'Einkauf', 'Vorrat', 'Essen']) await page.click(`.tabbar button:has-text("${b}")`);
-    const text = await page.inputValue('.essen-start textarea');
-    await page.fill('.essen-start textarea', '');
+    await page.fill('.essen textarea', 'Live-Check Rest');
+    for (const b of ['Start', 'Produktion', 'Einkauf', 'Vorrat', 'Essen']) await page.click(`.tabbar button:has-text("${b}")`);
+    const text = await page.inputValue('.essen textarea');
+    await page.fill('.essen textarea', '');
     await page.click('.tabbar button:has-text("Vorrat")');
     const offen = await page.isVisible('.ort-ansicht');
     if (text !== 'Live-Check Rest') throw new Error(`Essen-Feld: „${text}“`);
@@ -302,28 +357,36 @@ if (!APP_URL) {
     return 'Essen-Feld und geöffnete Vorratsansicht erhalten';
   });
 
-  await pruefe('Komponenten: Funktionen und eigene Komponenten', async () => {
-    await page.click('.tabbar button:has-text("Komponenten")');
-    const rollen = await page.locator('.rollen-kachel').allInnerTexts();
-    if (rollen.length !== 4) throw new Error(`${rollen.length} Funktionen statt 4`);
-    return rollen.map((r) => r.replace(/\s+/g, ' ')).join(' | ');
+  await pruefe('Start: Kochansicht öffnen bucht nichts', async () => {
+    await page.click('.tabbar button:has-text("Start")');
+    const knopf = page.locator('main > div:not([hidden]) .vorschlag .knopf.haupt');
+    if (!(await knopf.count())) return 'kein Vorschlag aus dem Vorrat';
+    const vorher = JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl]));
+    const name = await page.textContent('main > div:not([hidden]) .vorschlag h3');
+    await knopf.click();
+    await page.waitForSelector('.kochen');
+    const meta = (await page.innerText('.kochen-kopf .meta')).replace(/\s+/g, ' ');
+    await page.click('.kochen [aria-label="Zurück"]');
+    if (JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl])) !== vorher) throw new Error('Bestand hat sich geändert!');
+    return `${name}: ${meta}`;
   });
 
-  await pruefe('Komponenten entdecken (KI oder Demo, speichert nichts)', async () => {
+  await pruefe('Produktion: Empfehlungen (speichert nichts)', async () => {
     const vorher = (await ladeBestand()).length;
-    await page.click('.entdecken-start .knopf.haupt');
-    await page.waitForSelector('.idee-karte, .komponenten p.leise:not(.laden)', { timeout: 60000 });
-    const ideen = await page.locator('.idee-karte .idee-name').allTextContents();
-    const quelle = await page.locator('.komponenten .abstand-oben.leise').first().textContent().catch(() => '');
+    await page.click('.tabbar button:has-text("Produktion")');
+    if (!planung) return (await page.textContent('main > div:not([hidden]) .leer-zustand p')) ?? '';
+    await page.waitForSelector('.produktion section[aria-label="Empfohlen"]');
+    await page.waitForFunction(() => !document.querySelector('.produktion section[aria-label="Empfohlen"]')?.textContent?.includes('rechnet'));
+    const ideen = await page.locator('.produktion section[aria-label="Empfohlen"] .zeile-titel').allTextContents();
     if ((await ladeBestand()).length !== vorher) throw new Error('Sorten wurden angelegt!');
-    return `${ideen.join(', ') || 'keine'} – ${quelle}`;
+    return ideen.join(', ') || 'keine';
   });
 
   await pruefe('Einkauf', async () => {
     await page.click('.tabbar button:has-text("Einkauf")');
     if (planung) {
       await page.waitForSelector('.einkauf-kopf');
-      return (await page.textContent('.einkauf-kopf')).replace(/\s+/g, ' ');
+      return (await page.innerText('.einkauf-kopf')).replace(/\s+/g, ' ');
     }
     return (await page.textContent('main > div:not([hidden]) .leer-zustand p')) ?? '';
   });

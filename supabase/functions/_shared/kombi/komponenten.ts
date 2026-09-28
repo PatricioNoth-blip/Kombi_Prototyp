@@ -16,7 +16,8 @@ import { mengeAusPortionen } from './mengen.ts';
 import { type KostenPosten, summiereKosten, verbrauchswert } from './kosten.ts';
 import { bereinigeText, deckungstext, pruefeName } from './wahrheit.ts';
 import { fehlendeRollen, GERICHT_NAME, partnerVon, ROLLEN, TYPISCHE_GERICHTE } from './rollen.ts';
-import { produktSchluessel } from './einkaufsliste.ts';
+import { findeSorte, inSorteneinheit, produktSchluessel, verwendbar, type VorratSorte } from './einkaufsliste.ts';
+import { summiereNaehrwerte } from './naehrwerte.ts';
 import { ausListe, kuerze, normalisiere } from './text.ts';
 
 const FARBEN: Farbe[] = ['rot', 'braun', 'gruen', 'gelb', 'weiss', 'schwarz', 'blau'];
@@ -205,6 +206,11 @@ export function pruefeKomponente(roh: RohKomponente | null | undefined, snapshot
       .slice(0, 10),
     nutzbarkeit,
     kosten: summiereKosten(posten, portionen),
+    naehrwerte: summiereNaehrwerte(zutaten.map((z) => ({
+      name: z.name,
+      menge: z.quelle === 'bestand' || (z.quelle === 'einkauf' && z.block_typ_id !== null) ? z.menge : null,
+      naehrwert: z.block_typ_id !== null ? bestand.find((b) => b.block_typ_id === z.block_typ_id)?.naehrwert ?? null : null,
+    })), portionen),
     einkauf: summiereKosten(einkauf, 1),
     verwertet,
     partner,
@@ -335,4 +341,88 @@ export function katalogVorschlaege(snapshot: Snapshot, max = 6): RohKomponente[]
 export function schonVorhanden(name: string, snapshot: Snapshot): boolean {
   const k = produktSchluessel(name);
   return snapshot.zutaten.some((z) => z.quelle === 'bestand' && produktSchluessel(z.name) === k);
+}
+
+// ───────── Produktion: Menge wählen, Zutaten skalieren, gegen den Vorrat prüfen ─────────
+
+export type ProduktionsZeile = {
+  name: string;
+  /** passende Sorte im Vorrat (sonst wird die Zutat nicht gebucht) */
+  sorte: VorratSorte | null;
+  /** benötigte Menge – in der Einheit der Sorte, sonst in der Einheit des Rezepts; null = unbekannt */
+  benoetigt: number | null;
+  einheit: Einheit | null;
+  vorhanden: number | null;
+  /** was eingekauft werden müsste; null = Menge unbekannt */
+  fehlt: number | null;
+  status: 'da' | 'teilweise' | 'fehlt' | 'nicht_erfasst' | 'immer_da';
+};
+
+export type Produktion = {
+  portionen: number;
+  zeilen: ProduktionsZeile[];
+  /** wird beim Bestätigen entnommen (höchstens, was da ist) */
+  posten: { block_typ_id: number; name: string; menge: number; einheit: Einheit; art: VorratSorte['art'] }[];
+  /** Zutaten, die nicht als Sorte geführt werden – ihre Kosten sind unbekannt */
+  nicht_erfasst: string[];
+  fehlt: { name: string; menge: number | null; einheit: Einheit | null }[];
+};
+
+/** Rezeptmenge auf andere Portionen umrechnen (g/ml gerundet, Portionen/Stück aufgerundet). */
+export function skaliereMenge(menge: number, einheit: Einheit | null, von: number, auf: number): number {
+  const roh = (menge * auf) / Math.max(1, von);
+  return einheit === 'g' || einheit === 'ml' ? Math.max(1, Math.round(roh)) : Math.max(1, Math.ceil(roh - 1e-9));
+}
+
+/**
+ * Produktion vorbereiten: Zutaten der Komponente für `portionen` skalieren und gegen den AKTUELLEN
+ * Vorrat prüfen – vorhanden, benötigt, fehlt. Ändert nichts; gebucht wird erst nach Bestätigung.
+ */
+export function bereiteProduktionVor(k: Pick<KomponentenVorschlag, 'zutaten' | 'portionen'>, portionen: number, sorten: VorratSorte[], zielId: number | null): Produktion {
+  // Rezeptmengen je Zutat zusammenfassen (ein Teil aus dem Vorrat + Rest aus dem Einkauf = eine Zutat)
+  const zutaten: { name: string; block_typ_id: number | null; menge: number | null; einheit: Einheit | null; quelle: KomponentenZutat['quelle'] }[] = [];
+  for (const z of k.zutaten) {
+    const schon = zutaten.find((x) => x.name === z.name && x.einheit === z.einheit);
+    if (schon) {
+      schon.menge = schon.menge !== null && z.menge !== null ? schon.menge + z.menge : null;
+      if (z.quelle === 'bestand') schon.quelle = 'bestand';
+      schon.block_typ_id = schon.block_typ_id ?? z.block_typ_id;
+      continue;
+    }
+    zutaten.push({ name: z.name, block_typ_id: z.block_typ_id, menge: z.menge, einheit: z.einheit, quelle: z.quelle });
+  }
+
+  const p = Math.max(1, Math.round(portionen));
+  const ergebnis: Produktion = { portionen: p, zeilen: [], posten: [], nicht_erfasst: [], fehlt: [] };
+  for (const z of zutaten) {
+    if (z.quelle === 'grundausstattung') {
+      ergebnis.zeilen.push({ name: z.name, sorte: null, benoetigt: null, einheit: null, vorhanden: null, fehlt: null, status: 'immer_da' });
+      continue;
+    }
+    const benoetigt = z.menge === null ? null : skaliereMenge(z.menge, z.einheit, k.portionen, p);
+    const sorte = z.quelle === 'kuehlschrank' ? null : findeSorte({ name: z.name, block_typ_id: z.block_typ_id }, sorten);
+    const inSorte = sorte && benoetigt !== null ? inSorteneinheit(benoetigt, z.einheit, sorte) : null;
+    if (!sorte || sorte.id === zielId || (benoetigt !== null && inSorte === null)) {
+      ergebnis.nicht_erfasst.push(z.name);
+      ergebnis.fehlt.push({ name: z.name, menge: benoetigt, einheit: z.einheit });
+      ergebnis.zeilen.push({ name: z.name, sorte: null, benoetigt, einheit: z.einheit, vorhanden: null, fehlt: benoetigt, status: 'nicht_erfasst' });
+      continue;
+    }
+    const da = verwendbar(sorte);
+    if (inSorte === null) {
+      // Menge unbekannt: ist etwas da, gilt es als gedeckt – gebucht wird dann nichts (keine erfundene Menge)
+      ergebnis.zeilen.push({ name: sorte.name, sorte, benoetigt: null, einheit: sorte.einheit, vorhanden: da, fehlt: da > 0 ? 0 : null, status: da > 0 ? 'da' : 'fehlt' });
+      if (da <= 0) ergebnis.fehlt.push({ name: sorte.name, menge: null, einheit: sorte.einheit });
+      continue;
+    }
+    const nimm = Math.min(inSorte, da);
+    const rest = inSorte - nimm;
+    if (nimm > 0) ergebnis.posten.push({ block_typ_id: sorte.id, name: sorte.name, menge: nimm, einheit: sorte.einheit, art: sorte.art });
+    if (rest > 0) ergebnis.fehlt.push({ name: sorte.name, menge: rest, einheit: sorte.einheit });
+    ergebnis.zeilen.push({
+      name: sorte.name, sorte, benoetigt: inSorte, einheit: sorte.einheit, vorhanden: da, fehlt: rest,
+      status: rest === 0 ? 'da' : nimm > 0 ? 'teilweise' : 'fehlt',
+    });
+  }
+  return ergebnis;
 }

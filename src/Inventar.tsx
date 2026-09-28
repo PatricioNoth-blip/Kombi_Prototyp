@@ -1,48 +1,60 @@
-// Rahmen der App: vier Bereiche (Essen, Vorrat, Komponenten, Einkauf), die beim Wechsel ihren
+// Rahmen der App: fünf Bereiche (Start, Essen, Vorrat, Produktion, Einkauf), die beim Wechsel ihren
 // Zustand behalten, plus die gemeinsamen Daten. Einkaufsliste, Reservierungen und Auftau-Hinweise
 // werden hier EINMAL aus Vorrat und Plänen berechnet und an alle Bereiche weitergegeben –
-// so rechnen alle mit denselben Zahlen.
+// so rechnen alle mit denselben Zahlen. Adressen (#/vorrat/gefrierfach) und „Zurück“ funktionieren wie gewohnt.
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import * as api from './api';
 import { fehlerText, type Sorte } from './api';
+import type { Gericht } from '../supabase/functions/_shared/kombi/typen.ts';
+import { Start, useLokaleIdeen } from './Start';
 import { Vorrat } from './Vorrat';
 import { SorteBlatt } from './SorteBlatt';
 import { Einfrieren } from './Einfrieren';
 import { SorteFormular } from './Sorten';
 import { Essen } from './Essen';
-import { Komponenten } from './Komponenten';
-import { Einkauf, kostenText as einkaufKosten } from './Einkauf';
+import { Produktion } from './Produktion';
+import { Einkauf } from './Einkauf';
 import { Auftauen } from './Auftauen';
+import { KochAnsicht } from './KochAnsicht';
+import { Blatt } from './Blatt';
 import { Icon } from './Icon';
 import { buchungsVerb } from './farben';
-import { artVon, heuteIso, mengeText } from './format';
-import { alsVorratSorte, ladeHaushalt, LEER, planBedarf, type Haushaltsdaten } from './haushalt';
-import { berechneEinkaufsliste } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
-import { auftauVorschlaege, reserviertAusser } from '../supabase/functions/_shared/kombi/planung.ts';
-import { BEREICHE, ladeNav, navigiere, speichereNav, type Bereich } from './navigation';
+import { heuteIso, mengeText } from './format';
+import { alsVorratSorte, einkaufen, einkaufRueckgaengig, eintragHinzufuegen, ladeHaushalt, LEER, naehrwerteGericht, planBedarf, type Haushaltsdaten } from './haushalt';
+import { berechneEinkaufsliste, kategorieFuer } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
+import { auftauVorschlaege, heuteAuftauen, reserviertAusser } from '../supabase/functions/_shared/kombi/planung.ts';
+import { gruss } from './startseite';
+import {
+  BEREICHE, hashVon, ladeNav, navigiere, neuerEintrag, routeAus, speichereNav, type Bereich, type NavAktion,
+} from './navigation';
 
 type Meldung = { text: string; fehler?: boolean; rueckgaengig?: () => Promise<unknown> };
 const SPEICHER = 'kombi-ansicht';
 
-function gemerkteNavigation() {
+function anfangsNavigation() {
+  let gemerkt: string | null = null;
   try {
-    return ladeNav(localStorage.getItem(SPEICHER));
+    gemerkt = localStorage.getItem(SPEICHER);
   } catch {
-    return ladeNav(null);
+    // ohne Speicher: einfach beim Start beginnen
   }
+  return ladeNav(gemerkt, typeof location === 'undefined' ? '' : location.hash);
 }
+
+const TITEL: Record<Bereich, string> = { start: '', essen: 'Essen', vorrat: 'Dein Vorrat', produktion: 'Produktion', einkauf: 'Einkauf' };
 
 export function Inventar() {
   const [bestand, setBestand] = useState<Sorte[] | null>(null);
   const [baukasten, setBaukasten] = useState(true);
   const [haushalt, setHaushalt] = useState<Haushaltsdaten | null>(null);
   const [ladefehler, setLadefehler] = useState<string | null>(null);
-  const [nav, dispatch] = useReducer(navigiere, undefined, gemerkteNavigation);
-  const [offeneSorteId, setOffeneSorteId] = useState<number | null>(null);
+  const [nav, dispatch] = useReducer(navigiere, undefined, anfangsNavigation);
   const [bearbeiteSorteId, setBearbeiteSorteId] = useState<number | null>(null);
   const [neueSorte, setNeueSorte] = useState(false);
+  const [plusMenue, setPlusMenue] = useState(false);
   // null = Dialog zu; sorteId null = Sorte muss noch gewählt werden
   const [einfrierenDialog, setEinfrierenDialog] = useState<{ sorteId: number | null } | null>(null);
+  const [kochen, setKochen] = useState<{ g: Gericht; planId: string | null } | null>(null);
   const [laeuft, setLaeuft] = useState<Set<number>>(new Set());
   const [meldung, setMeldung] = useState<Meldung | null>(null);
   const [gescrollt, setGescrollt] = useState(false);
@@ -83,7 +95,41 @@ export function Inventar() {
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  // Bereich, Filter und geöffneter Lagerort bleiben für den nächsten Start gemerkt.
+  // ───────── Adresse und Verlauf ─────────
+  // Jede Ansicht hat eine Adresse. Neuer Bereich, Lagerort oder geöffnete Sorte = neuer Verlaufseintrag
+  // (Zurück führt dorthin zurück); Filter und Suche ersetzen nur die Adresse.
+  const vorher = useRef(nav);
+  const ersetzen = useRef(false);
+  useEffect(() => {
+    const alt = vorher.current;
+    vorher.current = nav;
+    const hash = hashVon(nav);
+    const nurErsetzen = ersetzen.current;
+    ersetzen.current = false;
+    if (hash === window.location.hash) return;
+    if (alt !== nav && !nurErsetzen && neuerEintrag(alt, nav)) window.history.pushState({ kombi: true }, '', hash);
+    else window.history.replaceState(window.history.state, '', hash);
+  }, [nav]);
+
+  useEffect(() => {
+    const beiZurueck = () => {
+      ersetzen.current = true;
+      dispatch({ typ: 'route', route: routeAus(window.location.hash) });
+    };
+    window.addEventListener('popstate', beiZurueck);
+    return () => window.removeEventListener('popstate', beiZurueck);
+  }, []);
+
+  /** Eine Ebene zurück: über den Verlauf, wenn wir ihn selbst angelegt haben – sonst direkt. */
+  function zurueck(ersatz: NavAktion) {
+    if (window.history.state?.kombi) window.history.back();
+    else {
+      ersetzen.current = true;
+      dispatch(ersatz);
+    }
+  }
+
+  // Filter (Essen/Woche) bleiben für den nächsten Start gemerkt.
   useEffect(() => {
     try {
       localStorage.setItem(SPEICHER, speichereNav(nav));
@@ -108,11 +154,12 @@ export function Inventar() {
   }
   const melde = (text: string, rueckgaengig?: () => Promise<unknown>) => zeige({ text, rueckgaengig });
 
-  async function buchen(sorte: Sorte, aktion: () => Promise<number[]>, text: string) {
+  /** Bucht und bietet „Rückgängig“ an; aktion liefert die passende Rücknahme. */
+  async function buchen(sorte: Sorte, aktion: () => Promise<() => Promise<unknown>>, text: string) {
     setLaeuft((l) => new Set(l).add(sorte.id));
     try {
-      const ids = await aktion();
-      zeige({ text, rueckgaengig: () => api.rueckgaengig(ids) });
+      const rueck = await aktion();
+      zeige({ text, rueckgaengig: rueck });
     } catch (e) {
       zeige({ text: fehlerText(e), fehler: true });
     } finally {
@@ -138,19 +185,30 @@ export function Inventar() {
     }
   }
 
+  const oeffneSorte = (s: Sorte) => dispatch({ typ: 'sorte', id: s.id });
+  const schliesseSorte = () => zurueck({ typ: 'sorte', id: null });
+
   /** menge in der Einheit der Sorte (Portionen, Stück, g, ml) */
   function entnehmen(sorte: Sorte, menge: number) {
-    setOffeneSorteId(null);
-    void buchen(sorte, () => api.entnehmen(sorte.id, menge), `−${mengeText(menge, sorte.einheit ?? 'portion')} ${sorte.name}`);
+    if (nav.sorte === sorte.id) schliesseSorte();
+    void buchen(sorte, async () => {
+      const ids = await api.entnehmen(sorte.id, menge);
+      return () => api.rueckgaengig(ids);
+    }, `−${mengeText(menge, sorte.einheit ?? 'portion')} ${sorte.name}`);
   }
 
-  function einfrieren(sorte: Sorte, menge: number, ablaufAm: string | null) {
+  function einfrieren(sorte: Sorte, menge: number, ablaufAm: string | null, preisCent: number | null) {
     setEinfrierenDialog(null);
-    void buchen(
-      sorte,
-      () => api.einfrieren(sorte.id, menge, ablaufAm),
-      `+${mengeText(menge, sorte.einheit ?? 'portion')} ${sorte.name} ${buchungsVerb(sorte.lagerort).partizip}`,
-    );
+    const text = `+${mengeText(menge, sorte.einheit ?? 'portion')} ${sorte.name} ${buchungsVerb(sorte.lagerort).partizip}`;
+    void buchen(sorte, async () => {
+      // mit Preis: zählt als Einkauf (Ausgaben) und gibt der Charge ihre echten Kosten
+      if (preisCent !== null && h.protokoll) {
+        const id = await einkaufen(sorte.id, menge, ablaufAm, preisCent);
+        return () => einkaufRueckgaengig(id);
+      }
+      const ids = await api.einfrieren(sorte.id, menge, ablaufAm);
+      return () => api.rueckgaengig(ids);
+    }, text);
   }
 
   // ───────── Gemeinsame Berechnungen ─────────
@@ -164,39 +222,68 @@ export function Inventar() {
   );
   const reserviertMitPlan = useMemo(() => reserviertAusser(liste.verteilung.pro_plan, h.plaene, null), [liste, h.plaene]);
   const auftauHinweise = useMemo(() => auftauVorschlaege(planBedarfe, sorten, h.auftauen, heute), [planBedarfe, sorten, h.auftauen, heute]);
+  const ideen = useLokaleIdeen(bestand, liste.verteilung.reserviert);
   const offeneEinkaeufe = liste.zeilen.filter((z) => z.status === 'offen').length;
+  const auftauFaellig = heuteAuftauen(h.auftauen, heute).length + auftauHinweise.filter((v) => v.auftauen_am <= heute).length;
 
   const finde = (id: number | null) => bestand?.find((s) => s.id === id) ?? null;
-  const offeneSorte = finde(offeneSorteId);
+  const offeneSorte = finde(nav.sorte);
   const bearbeiteSorte = finde(bearbeiteSorteId);
-  const bereich = BEREICHE.find((b) => b.id === nav.bereich)!;
 
   const auftauenBereich = h.planung && bestand ? (
     <Auftauen bestand={bestand} plaene={h.plaene} vorschlaege={auftauHinweise} eintraege={h.auftauen} heute={heute}
       onMeldung={(t) => zeige({ text: t })} onGeaendert={() => void laden()} />
   ) : null;
 
+  async function fehlendesMerken(g: Gericht) {
+    for (const f of g.fehlt) {
+      await eintragHinzufuegen({
+        name: f.name, menge: f.menge, einheit: f.einheit, kategorie: kategorieFuer(f.name), quelle: 'rezept', grund: `für ${g.name}`,
+      });
+    }
+    void laden();
+  }
+
+  // Migrationen, die in Supabase noch fehlen – ruhig auf dem Start erklärt, alles andere läuft weiter
+  const fehlend = !bestand || !haushalt ? [] : [
+    !baukasten && '„baukasten“ (Art, Einheit, Ablaufdatum, geöffnet)',
+    !h.planung && '„planung_einkauf“ (Einkaufsliste, Woche, Auftauen, Produktion)',
+    h.planung && !h.protokoll && '„kosten_naehrwerte“ (Ausgaben, Kosten je Mahlzeit, Kalorien)',
+  ].filter((x): x is string => !!x);
+
+  const datumText = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+  const titel = nav.bereich === 'start' ? gruss(new Date().getHours()) : TITEL[nav.bereich];
   const untertitel = !bestand
     ? ''
-    : nav.bereich === 'vorrat'
-      ? `${bestand.filter((s) => s.anzahl > 0).length} von ${bestand.length} Sorten da`
-      : nav.bereich === 'essen'
-        ? nav.essen.ansicht === 'woche' ? 'Flexibel planen – entnommen wird erst beim Kochen' : 'Was machen wir aus dem, was da ist?'
-        : nav.bereich === 'komponenten'
-          ? `${bestand.filter((s) => artVon(s) === 'komponente').length} Komponenten im Baukasten`
-          : h.planung ? `${offeneEinkaeufe} offen · verrechnet mit dem Vorrat` : '';
+    : nav.bereich === 'start'
+      ? `Dein Haushalt · ${datumText}`
+      : nav.bereich === 'vorrat'
+        ? `${bestand.filter((s) => s.anzahl > 0).length} von ${bestand.length} Sorten da`
+        : nav.bereich === 'essen'
+          ? nav.essen.ansicht === 'woche' ? 'Flexibel planen – entnommen wird erst beim Kochen' : 'Was möchtest du jetzt essen?'
+          : nav.bereich === 'produktion'
+            ? 'Komponenten vorkochen und einlagern'
+            : '';
 
   return (
     <div className={`app ansicht-${nav.bereich}`}>
       <header className={`kopf${gescrollt ? ' gescrollt' : ''}`}>
         <div className="kopf-zeile">
           <div>
-            <h1>{bereich.titel}</h1>
+            <h1>{titel}</h1>
             {untertitel && <p className="kopf-unter">{untertitel}</p>}
           </div>
-          <button type="button" className="icon-knopf" onClick={() => void laden()} aria-label="Neu laden">
-            <Icon name="neu" />
-          </button>
+          {nav.bereich === 'vorrat' && bestand && (
+            <button
+              type="button"
+              className="icon-knopf akzent"
+              onClick={() => (bestand.length ? setPlusMenue(true) : setNeueSorte(true))}
+              aria-label="Hinzufügen"
+              title="Hinzufügen"
+            >
+              <Icon name="plus" />
+            </button>
+          )}
         </div>
       </header>
 
@@ -204,55 +291,64 @@ export function Inventar() {
         {ladefehler && (
           <p className="fehlerbox">
             {ladefehler}{' '}
-            <button type="button" className="link" onClick={() => void laden()}>
+            <button type="button" className="link inline" onClick={() => void laden()}>
               Nochmal versuchen
             </button>
           </p>
         )}
-        {!baukasten && bestand && nav.bereich !== 'essen' && (
-          <p className="hinweisbox">
-            Neu: Art, Einheit, Zusammensetzung, Ablaufdatum und „geöffnet“. Dafür in Supabase die Migration „baukasten“
-            einspielen (siehe README). Bis dahin läuft alles wie bisher.
-          </p>
-        )}
-        {baukasten && haushalt && !haushalt.planung && bestand && (nav.bereich === 'vorrat' || nav.bereich === 'komponenten') && (
-          <p className="hinweisbox">
-            Neu: Einkaufsliste, Wochenplanung, Auftauen und Herstellen. Dafür in Supabase die Migration „planung_einkauf“
-            einspielen (siehe README). Alles andere läuft schon.
-          </p>
+        {nav.bereich === 'start' && fehlend.length > 0 && (
+          <details className="hinweisbox">
+            <summary>Noch nicht alles eingerichtet</summary>
+            <p className="klein abstand-oben">
+              In Supabase fehlen noch Migrationen: {fehlend.join(', ')}. Bis dahin läuft der Rest wie gewohnt – siehe README.
+            </p>
+          </details>
         )}
         {bestand === null ? (
-          !ladefehler && <p className="leise laden">Lade Vorrat …</p>
+          !ladefehler && <p className="leise laden">Lade …</p>
         ) : (
           <>
+            <div hidden={nav.bereich !== 'start'}>
+              <Start
+                bestand={bestand}
+                heute={heute}
+                h={h}
+                liste={liste}
+                proPlan={liste.verteilung.pro_plan}
+                auftauen={nav.bereich === 'start' ? auftauenBereich : null}
+                auftauFaellig={auftauFaellig}
+                ideen={ideen}
+                onKochen={(g, planId) => setKochen({ g, planId })}
+                onOeffnen={oeffneSorte}
+                onBereich={wechsle}
+              />
+            </div>
             <div hidden={nav.bereich !== 'vorrat'}>
               <Vorrat
                 bestand={bestand}
                 heute={heute}
                 nav={nav.vorrat}
                 onNav={(teil) => dispatch({ typ: 'vorrat', teil })}
+                onZurueck={() => zurueck({ typ: 'vorrat', teil: { ort: null, suche: '' } })}
                 laeuft={laeuft}
                 reserviert={liste.verteilung.reserviert}
-                einkauf={h.planung ? { offen: offeneEinkaeufe, kosten: einkaufKosten(liste.kosten) } : null}
-                auftauen={auftauenBereich}
-                onOeffnen={(s) => setOffeneSorteId(s.id)}
+                auftauen={nav.bereich === 'vorrat' ? auftauenBereich : null}
+                onOeffnen={oeffneSorte}
                 onEntnehmen={entnehmen}
-                onZumEinkauf={() => wechsle('einkauf')}
               />
             </div>
-            <div hidden={nav.bereich !== 'komponenten'}>
-              <Komponenten
+            <div hidden={nav.bereich !== 'produktion'}>
+              <Produktion
                 bestand={bestand}
                 sorten={sorten}
-                baukasten={baukasten}
                 planung={h.planung}
+                protokoll={h.protokoll}
                 plaene={h.plaene}
                 proPlan={liste.verteilung.pro_plan}
                 nutzung={h.nutzung}
                 reserviert={liste.verteilung.reserviert}
-                nav={nav.komponenten}
-                onNav={(teil) => dispatch({ typ: 'komponenten', teil })}
-                onOeffnen={(s) => setOffeneSorteId(s.id)}
+                ideen={ideen?.komponenten ?? null}
+                onOeffnen={oeffneSorte}
                 onMeldung={melde}
                 onGeaendert={() => void laden()}
               />
@@ -264,15 +360,13 @@ export function Inventar() {
                 bestand={bestand}
                 baukasten={baukasten}
                 planung={h.planung}
-                nav={nav.einkauf}
-                onNav={(teil) => dispatch({ typ: 'einkauf', teil })}
                 onMeldung={melde}
                 onGeaendert={() => void laden()}
               />
             </div>
           </>
         )}
-        {/* bleibt beim Reiterwechsel erhalten, damit die Session nicht verloren geht */}
+        {/* bleibt beim Bereichswechsel erhalten, damit die Vorschlags-Session nicht verloren geht */}
         <div hidden={nav.bereich !== 'essen'}>
           <Essen
             bestand={bestand ?? []}
@@ -283,9 +377,10 @@ export function Inventar() {
             proPlan={liste.verteilung.pro_plan}
             reserviert={liste.verteilung.reserviert}
             auftauEintraege={h.auftauen}
-            auftauen={auftauenBereich}
+            auftauen={nav.bereich === 'essen' ? auftauenBereich : null}
             nav={nav.essen}
             onNav={(teil) => dispatch({ typ: 'essen', teil })}
+            onKochen={(g, planId) => setKochen({ g, planId })}
             onMeldung={melde}
             onGeaendert={() => void laden()}
           />
@@ -310,24 +405,45 @@ export function Inventar() {
             </button>
           ))}
         </nav>
-        {nav.bereich === 'vorrat' && bestand && (
-          <button
-            type="button"
-            className="aktion-knopf"
-            onClick={() => (bestand.length ? setEinfrierenDialog({ sorteId: null }) : setNeueSorte(true))}
-            aria-label={bestand.length ? 'Einbuchen' : 'Neue Sorte'}
-            title={bestand.length ? 'Einbuchen' : 'Neue Sorte'}
-          >
-            <Icon name="plus" groesse={28} />
-          </button>
-        )}
       </div>
+
+      {plusMenue && (
+        <Blatt titel="Hinzufügen" onSchliessen={() => setPlusMenue(false)}>
+          <ul className="liste mit-icon">
+            <li>
+              <button type="button" className="zeile" onClick={() => {
+                setPlusMenue(false);
+                setEinfrierenDialog({ sorteId: null });
+              }}>
+                <span className="icon-kachel"><Icon name="plus" groesse={18} /></span>
+                <span className="zeile-haupt">
+                  <span className="zeile-titel">Einbuchen</span>
+                  <span className="zeile-meta">Gekauftes oder Vorgekochtes in den Vorrat</span>
+                </span>
+              </button>
+            </li>
+            <li>
+              <button type="button" className="zeile" onClick={() => {
+                setPlusMenue(false);
+                setNeueSorte(true);
+              }}>
+                <span className="icon-kachel"><Icon name="sorten" groesse={18} /></span>
+                <span className="zeile-haupt">
+                  <span className="zeile-titel">Neue Sorte</span>
+                  <span className="zeile-meta">Zutat, Komponente oder Komplettgericht anlegen</span>
+                </span>
+              </button>
+            </li>
+          </ul>
+        </Blatt>
+      )}
 
       {neueSorte && (
         <SorteFormular
           sorte={null}
           baukasten={baukasten}
           planung={h.planung}
+          naehrwerte={h.protokoll}
           onFertig={(text) => {
             setNeueSorte(false);
             zeige({ text });
@@ -349,20 +465,20 @@ export function Inventar() {
           nutzung={h.nutzung.find((n) => n.block_typ_id === offeneSorte.id) ?? null}
           onEntnehmen={(n) => entnehmen(offeneSorte, n)}
           onEinfrieren={() => {
-            setOffeneSorteId(null);
+            schliesseSorte();
             setEinfrierenDialog({ sorteId: offeneSorte.id });
           }}
           onBearbeiten={() => {
-            setOffeneSorteId(null);
+            schliesseSorte();
             setBearbeiteSorteId(offeneSorte.id);
           }}
-          onOeffnen={(s) => setOffeneSorteId(s.id)}
+          onOeffnen={oeffneSorte}
           onGeaendert={(text) => {
             zeige({ text });
             void laden();
           }}
           onFehler={(text) => zeige({ text, fehler: true })}
-          onSchliessen={() => setOffeneSorteId(null)}
+          onSchliessen={schliesseSorte}
         />
       )}
 
@@ -371,6 +487,7 @@ export function Inventar() {
           sorte={bearbeiteSorte}
           baukasten={baukasten}
           planung={h.planung}
+          naehrwerte={h.protokoll}
           onFertig={(text) => {
             setBearbeiteSorteId(null);
             zeige({ text });
@@ -385,12 +502,29 @@ export function Inventar() {
           bestand={bestand}
           baukasten={baukasten}
           startSorte={finde(einfrierenDialog.sorteId)}
+          mitPreis={h.protokoll}
           onEinfrieren={einfrieren}
           onNeueSorte={() => {
             setEinfrierenDialog(null);
             setNeueSorte(true);
           }}
           onSchliessen={() => setEinfrierenDialog(null)}
+        />
+      )}
+
+      {kochen && bestand && (
+        <KochAnsicht
+          gericht={kochen.g}
+          naehrwerte={naehrwerteGericht(kochen.g, bestand)}
+          planId={kochen.planId}
+          bestand={bestand}
+          reserviert={reserviertAusser(liste.verteilung.pro_plan, h.plaene, kochen.planId)}
+          planung={h.planung}
+          protokoll={h.protokoll}
+          onGekocht={() => void laden()}
+          onMeldung={melde}
+          onFehlendesMerken={h.planung ? () => fehlendesMerken(kochen.g) : undefined}
+          onSchliessen={() => setKochen(null)}
         />
       )}
 

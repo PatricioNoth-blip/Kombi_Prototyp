@@ -35,6 +35,8 @@ const PFADE = {
   zurueck: 'M15 6l-6 6 6 6',
   muell: 'M4 7h16 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3',
   tauschen: 'M7 4 3 8l4 4 M3 8h14 M17 20l4-4-4-4 M21 16H7',
+  haus: 'M4 10.5 12 4l8 6.5V20h-5v-5.5h-6V20H4z',
+  topf: 'M4 10h16v5.5A4.5 4.5 0 0 1 15.5 20h-7A4.5 4.5 0 0 1 4 15.5V10Z M2 10h20 M9 6.5c0-1 1-1.4 1-2.5 M14 6.5c0-1 1-1.4 1-2.5',
 } as const;
 
 export type IconName = keyof typeof PFADE;

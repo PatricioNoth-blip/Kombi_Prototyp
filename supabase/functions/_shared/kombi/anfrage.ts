@@ -1,6 +1,7 @@
 // Prüft eine eingehende Anfrage (z. B. in der Edge Function), bevor sie zur KI geht:
 // feste Struktur, begrenzte Größen, nur erwartete Felder. So kann die Funktion nicht als
 // allgemeiner KI-Zugang missbraucht werden.
+import { naehrwertAus } from './naehrwerte.ts';
 import type {
   Aktion, FeedbackEintrag, GerichtKurz, KiAnfrage, Modus, Optionen, PreisInfo, Snapshot, SnapshotZutat,
 } from './typen.ts';
@@ -59,7 +60,22 @@ function zutat(x: unknown): SnapshotZutat | null {
     gerichtstypen: saubereGerichtstypen(z.gerichtstypen),
     richtung: saubereRichtung(z.richtung),
     block_typ_id: zahlOderNull(z.block_typ_id, 1, Number.MAX_SAFE_INTEGER),
+    naehrwert: naehrwertVon(z.naehrwert, einheit),
   };
+}
+
+/** Nährwerte aus der Anfrage: nur Zahlen ≥ 0, ohne kcal kein Nährwert. */
+function naehrwertVon(x: unknown, einheit: SnapshotZutat['einheit']): SnapshotZutat['naehrwert'] {
+  const n = x as Record<string, unknown> | null;
+  if (!n || typeof n !== 'object') return null;
+  // Nährwerte haben Nachkommastellen (0,4 g Fett) – nicht auf ganze Zahlen runden
+  const w = (v: unknown) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 && n <= 100_000 ? Math.round(n * 10) / 10 : null;
+  };
+  return naehrwertAus({ kcal: w(n.kcal), protein_g: w(n.protein_g), kohlenhydrate_g: w(n.kohlenhydrate_g), fett_g: w(n.fett_g),
+    naehrwert_menge: zahlOderNull(n.menge, 1, MAX_MENGE) }, einheit);
 }
 
 function preis(x: unknown): PreisInfo | null {

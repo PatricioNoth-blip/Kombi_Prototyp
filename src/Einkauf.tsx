@@ -11,7 +11,9 @@ import { Blatt } from './Blatt';
 import { SorteFormular } from './Sorten';
 import { Icon } from './Icon';
 import { euroZuCent, heuteIso, mengeText } from './format';
-import type { EinkaufFilter, NavZustand } from './navigation';
+import { lagerort as lagerInfo } from './farben';
+
+const lagerortName = (l: VorratSorte['lagerort']) => lagerInfo(l).name;
 
 type Props = {
   liste: Einkaufsliste;
@@ -19,8 +21,6 @@ type Props = {
   bestand: Sorte[];
   baukasten: boolean;
   planung: boolean;
-  nav: NavZustand['einkauf'];
-  onNav: (teil: Partial<NavZustand['einkauf']>) => void;
   onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void;
   onGeaendert: () => void;
 };
@@ -30,14 +30,6 @@ export const KATEGORIE_NAME: Record<Farbe | 'sonstiges', string> = {
   weiss: 'Gewürze & Booster', blau: 'Komplettgerichte', sonstiges: 'Sonstiges',
 };
 
-const FILTER: { id: EinkaufFilter; name: string; passt: (a: Quelle['art']) => boolean }[] = [
-  { id: 'alle', name: 'Alle', passt: () => true },
-  { id: 'geplant', name: 'Geplant', passt: (a) => a === 'mahlzeit' || a === 'rezept' },
-  { id: 'komponente', name: 'Komponenten', passt: (a) => a === 'komponente' },
-  { id: 'manuell', name: 'Von Hand', passt: (a) => a === 'manuell' },
-  { id: 'mangel', name: 'Mangel', passt: (a) => a === 'mangel' || a === 'notfall' },
-];
-
 export function mengeZeile(z: Einkaufszeile): string {
   if (z.menge === null) return 'Menge offen';
   return `${mengeText(z.menge, z.einheit ?? 'stueck')}${z.menge_offen ? ' + ?' : ''}`;
@@ -46,20 +38,19 @@ export function mengeZeile(z: Einkaufszeile): string {
 function quelleText(q: Quelle): string {
   switch (q.art) {
     case 'mahlzeit': return `für ${q.titel}`;
-    case 'komponente': return `für Komponente ${q.titel}`;
+    case 'komponente': return `für ${q.titel}`;
     case 'manuell': return 'von Hand';
     default: return q.titel;
   }
 }
 
-export function kostenText(k: Einkaufsliste['kosten']): string | null {
-  if (k.status === 'leer') return null;
-  if (k.bekannt_cent === null) return `Preise unbekannt (${k.unbekannt})`;
-  return `≈ ${euroText(k.bekannt_cent)}${k.unbekannt ? ` + ${k.unbekannt} ohne Preis` : ''}`;
-}
+const fuerGeplantes = (z: Einkaufszeile) => z.quellen.some((q) => q.art === 'mahlzeit' || q.art === 'komponente');
 
-/** Die Einkaufsliste: aus Plänen berechnet, mit eigenen Einträgen zusammengeführt, gegen den Vorrat verrechnet. */
-export function Einkauf({ liste, sorten, bestand, baukasten, planung, nav, onNav, onMeldung, onGeaendert }: Props) {
+/**
+ * Die Einkaufsliste – bewusst schlicht: was fehlt, was für geplante Gerichte gebraucht wird, was im Wagen liegt.
+ * Abhaken bucht nichts; erst „Einbuchen“ bringt die TATSÄCHLICH gekaufte Menge in den Vorrat.
+ */
+export function Einkauf({ liste, sorten, bestand, baukasten, planung, onMeldung, onGeaendert }: Props) {
   const [eingabe, setEingabe] = useState('');
   const [offen, setOffen] = useState<Einkaufszeile | null>(null);
   const [uebernahme, setUebernahme] = useState<Einkaufszeile | null>(null);
@@ -75,15 +66,12 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, nav, onNav
   }
 
   const key = (z: Einkaufszeile) => `${z.schluessel}|${z.einheit_schluessel}`;
-  const filter = FILTER.find((f) => f.id === nav.filter)!;
-  const sichtbar = (z: Einkaufszeile) => z.quellen.some((q) => filter.passt(q.art));
-  const sortiert = (zs: Einkaufszeile[]) => (nav.sortierung === 'name' ? [...zs].sort((a, b) => a.name.localeCompare(b.name, 'de')) : zs);
-  const offenZ = sortiert(liste.zeilen.filter((z) => z.status === 'offen' && sichtbar(z)));
-  const wagen = sortiert(liste.zeilen.filter((z) => z.status === 'gekauft' && sichtbar(z)));
-  const spaeter = liste.zeilen.filter((z) => z.status === 'zurueckgestellt');
-  const ignoriert = liste.zeilen.filter((z) => z.status === 'ignoriert');
-  const mangel = mangelVorschlaege(sorten, liste.zeilen);
-  const alleOffen = liste.zeilen.filter((z) => z.status === 'offen').length;
+  const offenZ = liste.zeilen.filter((z) => z.status === 'offen');
+  const heute = offenZ.filter((z) => !fuerGeplantes(z));
+  const geplant = offenZ.filter(fuerGeplantes);
+  const wagen = liste.zeilen.filter((z) => z.status === 'gekauft');
+  const spaeter = liste.zeilen.filter((z) => z.status === 'zurueckgestellt' || z.status === 'ignoriert');
+  const mangel = mangelVorschlaege(sorten, liste.zeilen).filter((m) => m.aktion === 'kaufen');
 
   async function tu(schluessel: string, f: () => Promise<unknown>, text?: string) {
     setLaeuft(schluessel);
@@ -120,156 +108,119 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, nav, onNav
     const gruende = [...new Set(z.quellen.map(quelleText))];
     return (
       <li key={key(z)} className={`einkauf-zeile f-${z.kategorie}${gekauft ? ' gekauft' : ''}`}>
-        <button
-          type="button"
-          className="haken-knopf"
-          role="checkbox"
-          aria-checked={gekauft}
-          aria-label={`${z.name} ${gekauft ? 'wieder offen' : 'abhaken'}`}
-          disabled={laeuft === key(z)}
-          onClick={() => abhaken(z, !gekauft)}
-        >
-          {gekauft && <Icon name="haken" groesse={16} />}
-        </button>
-        <button type="button" className="ez-info" onClick={() => setOffen(z)}>
-          <span className="ez-kopf">
-            <span className="ez-name">{z.name}</span>
-            <strong className="ez-menge">{mengeZeile(z)}</strong>
-          </span>
-          <span className="ez-grund">{gruende.join(' · ')}</span>
-          {z.vom_vorrat > 0 && z.bedarf_plaene !== null && z.einheit && (
-            <span className="ez-netto">Bedarf {mengeText(z.bedarf_plaene, z.einheit)} · {mengeText(z.vom_vorrat, z.einheit)} aus dem Vorrat</span>
-          )}
-        </button>
-        <span className="ez-preis">
-          {z.preis ? <><strong>{euroText(z.preis.cent)}</strong><small>{z.preis.text}</small></> : <small>–</small>}
-        </span>
-        {gekauft && (
-          <button type="button" className="knopf klein-knopf ez-vorrat" onClick={() => setUebernahme(z)}>
-            In den Vorrat
+        <div className="zeile">
+          <button
+            type="button"
+            className="haken"
+            role="checkbox"
+            aria-checked={gekauft}
+            aria-label={`${z.name} ${gekauft ? 'wieder offen' : 'abhaken'}`}
+            disabled={laeuft === key(z)}
+            onClick={() => abhaken(z, !gekauft)}
+          >
+            {gekauft && <Icon name="haken" groesse={15} />}
           </button>
-        )}
+          <button type="button" className="zeile-knopf" onClick={() => setOffen(z)}>
+            <span className="zeile-haupt">
+              <span className="zeile-titel">{z.name}</span>
+              <span className="zeile-meta">{mengeZeile(z)}{gruende.length ? ` · ${gruende.join(', ')}` : ''}</span>
+            </span>
+            {!gekauft && <span className="zeile-wert">{z.preis ? euroText(z.preis.cent) : ''}</span>}
+          </button>
+          {gekauft && (
+            <button type="button" className="knopf klein akzent" onClick={() => setUebernahme(z)}>
+              Einbuchen
+            </button>
+          )}
+        </div>
       </li>
     );
   };
 
-  const gruppen = nav.sortierung === 'name'
-    ? [{ kategorie: null as Farbe | 'sonstiges' | null, zeilen: offenZ }]
-    : [...new Set(offenZ.map((z) => z.kategorie))].map((k) => ({ kategorie: k as Farbe | 'sonstiges' | null, zeilen: offenZ.filter((z) => z.kategorie === k) }));
+  const gruppe = (titel: string, zeilen: Einkaufszeile[], fuss?: string) => zeilen.length > 0 && (
+    <section className="abschnitt" aria-label={titel}>
+      <div className="abschnitt-kopf"><h2>{titel}</h2></div>
+      <ul className="liste">{zeilen.map(zeile)}</ul>
+      {fuss && <p className="abschnitt-fuss">{fuss}</p>}
+    </section>
+  );
+
+  const k = liste.kosten;
+  const summe = k.status === 'leer' ? '' : k.bekannt_cent === null ? 'Preis unbekannt'
+    : `≈ ${euroText(k.bekannt_cent)}${k.unbekannt > 0 ? ' · Preis teilweise bekannt' : ''}`;
 
   return (
     <div className="einkauf">
       <div className="einkauf-kopf">
-        <div>
-          <strong>{alleOffen === 0 ? 'Alles erledigt' : `${alleOffen} ${alleOffen === 1 ? 'Sache' : 'Sachen'} offen`}</strong>
-          <span>{wagen.length > 0 ? `${wagen.length} im Wagen` : 'Abhaken bucht noch nichts ein'}</span>
-        </div>
-        <div className="einkauf-summe">
-          <strong>{liste.kosten.bekannt_cent !== null ? `≈ ${euroText(liste.kosten.bekannt_cent)}` : liste.kosten.status === 'leer' ? '0,00 €' : 'Preis unbekannt'}</strong>
-          <span>
-            {liste.kosten.bekannt_cent === null && liste.kosten.unbekannt > 0
-              ? `${liste.kosten.unbekannt} ${liste.kosten.unbekannt === 1 ? 'Position' : 'Positionen'} ohne Preis`
-              : liste.kosten.unbekannt > 0 ? `+ ${liste.kosten.unbekannt} ohne Preis` : 'aus euren Preisen'}
-          </span>
-        </div>
+        <strong>{offenZ.length === 0 ? 'Alles erledigt' : `${offenZ.length} ${offenZ.length === 1 ? 'Ding' : 'Dinge'} zu kaufen`}</strong>
+        {summe && <span>{summe}</span>}
       </div>
 
       <form className="einkauf-eingabe" onSubmit={hinzufuegen}>
-        <input type="text" value={eingabe} onChange={(e) => setEingabe(e.target.value)} placeholder="Hinzufügen, z. B. 500 g Zwiebeln"
+        <input type="text" value={eingabe} onChange={(e) => setEingabe(e.target.value)} placeholder="z. B. 500 g Zwiebeln"
           aria-label="Etwas zur Einkaufsliste hinzufügen" maxLength={90} />
         <button type="submit" className="icon-knopf" aria-label="Hinzufügen" disabled={!eingabe.trim() || laeuft === 'neu'}>
           <Icon name="plus" />
         </button>
       </form>
 
-      <div className="einkauf-werkzeug">
-        <div className="filter-chips" role="group" aria-label="Nach Grund filtern">
-          {FILTER.map((f) => (
-            <button key={f.id} type="button" className={nav.filter === f.id ? 'gewaehlt' : ''} aria-pressed={nav.filter === f.id} onClick={() => onNav({ filter: f.id })}>
-              {f.name}
-            </button>
-          ))}
-        </div>
-        <button type="button" className="sortier-knopf" onClick={() => onNav({ sortierung: nav.sortierung === 'name' ? 'kategorie' : 'name' })}
-          aria-label={nav.sortierung === 'name' ? 'Sortiert nach Name – nach Bereich sortieren' : 'Sortiert nach Bereich – nach Name sortieren'}>
-          <Icon name="sorten" groesse={16} /> {nav.sortierung === 'name' ? 'A–Z' : 'Bereich'}
-        </button>
-      </div>
-
       {offenZ.length === 0 && wagen.length === 0 && (
         <div className="leer-zustand">
           <Icon name="wagen" groesse={40} />
-          <p>{alleOffen === 0 ? 'Nichts einzukaufen. Geplante Mahlzeiten und Komponenten landen hier automatisch – verrechnet mit dem Vorrat.' : 'Nichts in diesem Filter.'}</p>
+          <p>Nichts einzukaufen. Was für geplante Gerichte fehlt, landet hier automatisch – verrechnet mit dem Vorrat.</p>
         </div>
       )}
 
-      {gruppen.map((g) => (
-        <section key={g.kategorie ?? 'alle'} className="gruppe">
-          {g.kategorie && (
-            <h2 className={`abschnitt-titel mit-punkt f-${g.kategorie}`}>
-              <span className="farbpunkt" aria-hidden="true" /> {KATEGORIE_NAME[g.kategorie]}
-            </h2>
-          )}
-          <ul className="einkauf-liste">{g.zeilen.map(zeile)}</ul>
-        </section>
-      ))}
-
-      {wagen.length > 0 && (
-        <section className="gruppe">
-          <h2 className="abschnitt-titel"><Icon name="wagen" groesse={14} /> Im Wagen</h2>
-          <ul className="einkauf-liste">{wagen.map(zeile)}</ul>
-          <p className="leise klein abstand-oben">Erst „In den Vorrat“ bucht ein – mit der Menge, die wirklich gekauft wurde.</p>
-        </section>
-      )}
+      {gruppe('Zum Einkaufen', heute)}
+      {gruppe('Für geplante Gerichte', geplant)}
+      {gruppe('Im Wagen', wagen, '„Einbuchen“ übernimmt die tatsächlich gekaufte Menge und den Preis in den Vorrat.')}
 
       {mangel.length > 0 && (
-        <section className="gruppe">
-          <h2 className="abschnitt-titel">Unter Mindestbestand</h2>
+        <section className="abschnitt" aria-label="Wird knapp">
+          <div className="abschnitt-kopf"><h2>Wird knapp</h2></div>
           <ul className="liste">
             {mangel.map((m) => (
-              <li key={m.sorte.id} className={`zeile f-${m.sorte.farbe}`}>
-                <span className="farbpunkt" aria-hidden="true" />
-                <span className="zeile-info">
-                  <span className="zeile-name">{m.sorte.name}</span>
-                  <span className="zeile-details">
-                    {m.aktion === 'kaufen'
-                      ? `${mengeText(m.menge, m.sorte.einheit)} fehlen bis zum Mindestbestand (${m.sorte.mindestbestand})`
-                      : `${mengeText(m.sorte.anzahl, m.sorte.einheit)} da, mind. ${m.sorte.mindestbestand} – ${m.sorte.art === 'komplettgericht' ? 'nachkochen oder nachkaufen' : 'nachkochen statt einkaufen'}`}
+              <li key={m.sorte.id} className={`f-${m.sorte.farbe}`}>
+                <div className="zeile">
+                  <span className="punkt" aria-hidden="true" />
+                  <span className="zeile-haupt">
+                    <span className="zeile-titel">{m.sorte.name}</span>
+                    <span className="zeile-meta">{mengeText(m.menge, m.sorte.einheit)} bis zum Mindestbestand</span>
                   </span>
-                </span>
-                {m.aktion === 'kaufen' && (
                   <button
                     type="button"
-                    className="knopf klein-knopf"
+                    className="knopf klein"
                     disabled={laeuft === `m-${m.sorte.id}`}
                     onClick={() => void tu(`m-${m.sorte.id}`, () => eintragHinzufuegen({
                       name: m.sorte.name, menge: m.menge, einheit: m.sorte.einheit, kategorie: m.sorte.farbe,
                       quelle: 'mangel', grund: 'unter Mindestbestand', block_typ_id: m.sorte.id,
                     }))}
                   >
-                    <Icon name="plus" groesse={16} /> Liste
+                    Auf die Liste
                   </button>
-                )}
+                </div>
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      {(spaeter.length > 0 || ignoriert.length > 0) && (
-        <details className="mehr abstand-oben">
-          <summary>Später & ausgeblendet ({spaeter.length + ignoriert.length})</summary>
+      {spaeter.length > 0 && (
+        <details className="mehr-infos abstand-oben">
+          <summary>Später & ausgeblendet ({spaeter.length})</summary>
           <ul className="liste">
-            {[...spaeter, ...ignoriert].map((z) => (
-              <li key={key(z)} className="zeile">
-                <span className="zeile-info">
-                  <span className="zeile-name">{z.name}</span>
-                  <span className="zeile-details">{mengeZeile(z)} · {z.status === 'zurueckgestellt' ? 'zurückgestellt' : 'ausgeblendet'}</span>
-                </span>
-                <button type="button" className="link" disabled={laeuft === key(z)}
-                  onClick={() => void tu(key(z), () => zeilenStatus(z.schluessel, z.einheit_schluessel, null), `${z.name} ist wieder auf der Liste.`)}>
-                  Wieder aufnehmen
-                </button>
+            {spaeter.map((z) => (
+              <li key={key(z)}>
+                <div className="zeile">
+                  <span className="zeile-haupt">
+                    <span className="zeile-titel">{z.name}</span>
+                    <span className="zeile-meta">{mengeZeile(z)} · {z.status === 'zurueckgestellt' ? 'später' : 'ausgeblendet'}</span>
+                  </span>
+                  <button type="button" className="link" disabled={laeuft === key(z)}
+                    onClick={() => void tu(key(z), () => zeilenStatus(z.schluessel, z.einheit_schluessel, null), `${z.name} ist wieder auf der Liste.`)}>
+                    Zurückholen
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -354,28 +305,28 @@ function ZeileBlatt({ z, frei, onMeldung, onGeaendert, onSchliessen }: {
 
   return (
     <Blatt titel={z.name} untertitel={mengeZeile(z)} onSchliessen={onSchliessen}>
-      <section className="abschnitt erstes">
-        <h3>Wofür</h3>
+      <section>
+        <h3 className="unterkopf">Wofür</h3>
         <ul className="liste">
           {z.quellen.map((q, i) => (
-            <li key={i} className="zeile">
-              <span className="zeile-info">
-                <span className="zeile-name">{quelleText(q)}</span>
-              </span>
-              <strong className="klein">{q.menge === null ? 'Menge offen' : mengeText(q.menge, einheit)}</strong>
+            <li key={i}>
+              <div className="zeile">
+                <span className="zeile-haupt"><span className="zeile-titel">{quelleText(q)}</span></span>
+                <span className="zeile-wert">{q.menge === null ? 'Menge offen' : mengeText(q.menge, einheit)}</span>
+              </div>
             </li>
           ))}
         </ul>
         {z.bedarf_plaene !== null && z.einheit && (
-          <p className="leise klein abstand-oben">
+          <p className="abschnitt-fuss">
             Geplant: {mengeText(z.bedarf_plaene, z.einheit)} · davon aus dem Vorrat: {mengeText(z.vom_vorrat, z.einheit)}
             {frei !== null && ` · danach frei: ${mengeText(frei, z.einheit)}`}. Jede Menge wird nur einmal verplant.
           </p>
         )}
       </section>
 
-      <section className="abschnitt">
-        <h3>Preis</h3>
+      <section>
+        <h3 className="unterkopf">Preis</h3>
         {z.preis ? (
           <p className="klein"><strong>{euroText(z.preis.cent)}</strong> für {z.preis.text} – ganze Packungen nach eurem gespeicherten Preis.</p>
         ) : (
@@ -383,8 +334,8 @@ function ZeileBlatt({ z, frei, onMeldung, onGeaendert, onSchliessen }: {
         )}
       </section>
 
-      <section className="abschnitt">
-        <h3>{einEintrag ? 'Menge ändern' : 'Mehr kaufen'}</h3>
+      <section>
+        <h3 className="unterkopf">{einEintrag ? 'Menge ändern' : 'Mehr kaufen'}</h3>
         <form className="eigene-anzahl" onSubmit={mengeSpeichern}>
           <input type="number" inputMode="numeric" min={1} step={1} value={menge} onChange={(e) => setMenge(e.target.value)}
             placeholder={einEintrag ? `neue Menge (${einheit === 'stueck' ? 'Stück' : einheit === 'portion' ? 'Portionen' : einheit})` : `zusätzlich (${einheit === 'stueck' ? 'Stück' : einheit})`}
@@ -393,7 +344,7 @@ function ZeileBlatt({ z, frei, onMeldung, onGeaendert, onSchliessen }: {
         </form>
       </section>
 
-      <div className="knopf-reihe">
+      <div className="knopf-reihe abstand-oben">
         {z.status === 'zurueckgestellt' ? (
           <button type="button" className="knopf" disabled={laeuft} onClick={() => void tu(() => zeilenStatus(z.schluessel, z.einheit_schluessel, null), `${z.name} ist wieder offen.`)}>
             Wieder aufnehmen
@@ -428,6 +379,12 @@ function UebernahmeBlatt({ z, bestand, sorten, baukasten, planung, onGebucht, on
 
   const zahl = Number(menge);
   const einheit = sorte?.einheit ?? 'stueck';
+  const preisCent = euroZuCent(preis);
+  const stueckpreis = (() => {
+    if (preisCent === null || Number.isNaN(preisCent) || !Number.isInteger(zahl) || zahl < 1) return null;
+    const bezug = einheit === 'g' || einheit === 'ml' ? Math.min(100, zahl) : 1;
+    return { cent: Math.round((preisCent * bezug) / zahl), bezug };
+  })();
   const einheitKurz = einheit === 'stueck' ? 'Stück' : einheit === 'portion' ? 'Portionen' : einheit;
   const packung = sorte && sorte.kosten_menge > 1 ? sorte.kosten_menge : null;
   const vorschlaege = [...new Set([
@@ -483,15 +440,15 @@ function UebernahmeBlatt({ z, bestand, sorten, baukasten, planung, onGebucht, on
             {sorteId !== null && !sorte && <option value={sorteId}>neue Sorte wird geladen …</option>}
             {auswahl.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          {sorteId === null && <button type="button" className="link inline links" onClick={() => setNeu(true)}>+ Neue Sorte „{z.name}“ anlegen</button>}
+          {sorteId === null && <button type="button" className="link inline" onClick={() => setNeu(true)}>+ Neue Sorte „{z.name}“ anlegen</button>}
         </label>
 
         <fieldset className="feld">
           <legend>Tatsächlich gekauft</legend>
           {vorschlaege.length > 0 && (
-            <div className="auswahl-chips">
+            <div className="chips">
               {vorschlaege.map((n) => (
-                <button key={n} type="button" className={zahl === n ? 'gewaehlt' : ''} onClick={() => setMenge(String(n))}>
+                <button key={n} type="button" className={`chip${zahl === n ? ' gewaehlt' : ''}`} onClick={() => setMenge(String(n))}>
                   {mengeText(n, einheit)}{packung && n % packung === 0 ? ` (${n / packung} ${n / packung === 1 ? 'Packung' : 'Packungen'})` : ''}
                 </button>
               ))}
@@ -514,8 +471,9 @@ function UebernahmeBlatt({ z, bestand, sorten, baukasten, planung, onGebucht, on
             <input type="text" inputMode="decimal" value={preis} onChange={(e) => setPreis(e.target.value)} placeholder="z. B. 1,29" aria-label="Bezahlter Preis in Euro" />
           </label>
         </div>
-        {preis.trim() && sorte && Number.isInteger(zahl) && zahl > 0 && (
-          <small>Wird der neue Preis von {sorte.name}: {preis.trim()} € für {mengeText(zahl, einheit)}.</small>
+        {sorte && <small>Kommt in: {lagerortName(sorte.lagerort)}</small>}
+        {sorte && stueckpreis !== null && (
+          <small>= {euroText(stueckpreis.cent)} je {mengeText(stueckpreis.bezug, einheit)} · wird der neue Preis von {sorte.name}</small>
         )}
 
         {fehler && <p className="fehlertext">{fehler}</p>}

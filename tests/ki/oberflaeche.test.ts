@@ -1,7 +1,9 @@
 // Oberfläche ohne Browser: Navigation (Zustand beim Wechsel), Vorrat-Übersicht, Eingaben.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ladeNav, navigiere, speichereNav, START, type NavZustand } from '../../src/navigation.ts';
+import { BEREICHE, hashVon, ladeNav, navigiere, neuerEintrag, routeAus, speichereNav, START, type NavZustand } from '../../src/navigation.ts';
+import { dringendHeute, gruss, heuteGekocht, monatsbilanz, sinnvolleProduktion, startReihenfolge } from '../../src/startseite.ts';
+import type { KomponentenVorschlag } from '../../supabase/functions/_shared/kombi/typen.ts';
 import { freieTage, fuellstand, heuteWichtig, ortKacheln, sortenFuer, tagName, vorratswert, zustand } from '../../src/dashboard.ts';
 import type { Sorte } from '../../src/api.ts';
 import { leseEingabe } from '../../supabase/functions/_shared/kombi/einkaufsliste.ts';
@@ -17,53 +19,136 @@ function sorte(id: number, name: string, teil: Partial<Sorte> = {}): Sorte {
   };
 }
 
-describe('UI-Zustand beim Wechsel zwischen Essen, Vorrat, Komponenten und Einkauf', () => {
-  test('geöffneter Lagerort und Filter bleiben erhalten, Scrollposition wird je Bereich gemerkt', () => {
-    let z: NavZustand = START;
+describe('Navigation: fünf Bereiche, Zustand, Adressen, Zurück', () => {
+  test('alle fünf Hauptbereiche sind erreichbar; die App startet mit „Start“', () => {
+    assert.deepEqual(BEREICHE.map((b) => b.id), ['start', 'essen', 'vorrat', 'produktion', 'einkauf']);
+    assert.equal(START.bereich, 'start');
+    for (const b of BEREICHE) assert.equal(navigiere(START, { typ: 'wechsle', bereich: b.id, scroll: 0 }).bereich, b.id);
+  });
+
+  test('geöffneter Lagerort und Filter bleiben beim Wechsel erhalten, Scrollposition je Bereich', () => {
+    let z: NavZustand = navigiere(START, { typ: 'wechsle', bereich: 'vorrat', scroll: 0 });
     z = navigiere(z, { typ: 'vorrat', teil: { ort: 'gefrierfach' } });
     z = navigiere(z, { typ: 'vorrat', teil: { art: 'komponente' } });
     z = navigiere(z, { typ: 'wechsle', bereich: 'essen', scroll: 420 });
-    assert.equal(z.bereich, 'essen');
     z = navigiere(z, { typ: 'essen', teil: { ansicht: 'woche' } });
-    z = navigiere(z, { typ: 'wechsle', bereich: 'komponenten', scroll: 90 });
+    z = navigiere(z, { typ: 'wechsle', bereich: 'produktion', scroll: 90 });
     z = navigiere(z, { typ: 'wechsle', bereich: 'vorrat', scroll: 0 });
-    assert.equal(z.vorrat.ort, 'gefrierfach');
-    assert.equal(z.vorrat.art, 'komponente');
-    assert.equal(z.scroll.vorrat, 420, 'Vorrat kommt an der alten Stelle zurück');
-    assert.equal(z.scroll.essen, 90);
-    assert.equal(z.essen.ansicht, 'woche', 'Woche bleibt offen');
+    assert.deepEqual([z.vorrat.ort, z.vorrat.art, z.scroll.vorrat, z.scroll.essen, z.essen.ansicht], ['gefrierfach', 'komponente', 420, 90, 'woche']);
   });
 
-  test('nochmal auf den aktiven Reiter → zurück zur Übersicht und nach oben', () => {
-    let z = navigiere(START, { typ: 'vorrat', teil: { ort: 'kuehlschrank', suche: 'jog' } });
+  test('nochmal auf den aktiven Reiter → zurück zum Anfang des Bereichs; Wechsel schließt Details', () => {
+    let z = navigiere(START, { typ: 'route', route: routeAus('#/vorrat/kuehlschrank?sorte=4') });
+    assert.equal(z.sorte, 4);
     z = navigiere(z, { typ: 'wechsle', bereich: 'vorrat', scroll: 300 });
-    assert.equal(z.vorrat.ort, null);
-    assert.equal(z.vorrat.suche, '');
-    assert.equal(z.scroll.vorrat, 0);
+    assert.deepEqual([z.vorrat.ort, z.sorte, z.scroll.vorrat], [null, null, 0]);
   });
 
-  test('neuer Lagerort setzt den Art-Filter zurück', () => {
-    let z = navigiere(START, { typ: 'vorrat', teil: { ort: 'gefrierfach', art: 'zutat' } });
-    z = navigiere(z, { typ: 'vorrat', teil: { ort: 'vorrat' } });
-    assert.equal(z.vorrat.art, null);
+  test('Deep Links: Adresse ↔ Zustand, Unbekanntes führt zum Start, alte Adresse „komponenten“ → Produktion', () => {
+    const r = routeAus('#/vorrat/gefrierfach?art=komponente&sorte=12');
+    assert.deepEqual(r, { bereich: 'vorrat', ort: 'gefrierfach', art: 'komponente', ansicht: 'heute', sorte: 12 });
+    const z = navigiere(START, { typ: 'route', route: r });
+    assert.equal(hashVon(z), '#/vorrat/gefrierfach?art=komponente&sorte=12');
+    assert.equal(hashVon(navigiere(START, { typ: 'route', route: routeAus('#/essen/woche') })), '#/essen/woche');
+    assert.equal(routeAus('#/komponenten').bereich, 'produktion');
+    assert.equal(routeAus('#/admin/x').bereich, 'start');
+    assert.equal(routeAus('#/vorrat/keller?art=x&sorte=-1').ort, null);
+    assert.equal(routeAus('').bereich, 'start');
+    for (const h of ['#/start', '#/essen', '#/vorrat', '#/vorrat/alle', '#/produktion', '#/einkauf', '#/einkauf?sorte=3']) {
+      assert.equal(hashVon(navigiere(START, { typ: 'route', route: routeAus(h) })), h, h);
+    }
   });
 
-  test('gemerkt wird ohne Suche; alte gespeicherte Werte und Unsinn sind kein Problem', () => {
-    let z = navigiere(START, { typ: 'vorrat', teil: { ort: 'alle', suche: 'pizza' } });
-    z = navigiere(z, { typ: 'einkauf', teil: { filter: 'geplant', sortierung: 'name' } });
-    const wieder = ladeNav(speichereNav(z));
-    assert.equal(wieder.vorrat.ort, 'alle');
-    assert.equal(wieder.vorrat.suche, '');
-    assert.deepEqual(wieder.einkauf, { filter: 'geplant', sortierung: 'name' });
-    assert.equal(ladeNav('bestand').bereich, 'vorrat');
-    assert.equal(ladeNav('sorten').bereich, 'vorrat');
-    assert.equal(ladeNav('essen').bereich, 'essen');
-    assert.deepEqual(ladeNav('{kaputt'), START);
-    assert.deepEqual(ladeNav(null), START);
-    const unsinn = ladeNav(JSON.stringify({ bereich: 'admin', vorrat: { ort: 'keller', art: 'x' }, einkauf: { filter: 1 } }));
-    assert.equal(unsinn.bereich, 'vorrat');
-    assert.equal(unsinn.vorrat.ort, null);
-    assert.equal(unsinn.einkauf.filter, 'alle');
+  test('Zurück: Bereich, Lagerort und geöffnete Details bekommen einen Verlaufseintrag, Filter nicht', () => {
+    const vorrat = navigiere(START, { typ: 'wechsle', bereich: 'vorrat', scroll: 0 });
+    const ort = navigiere(vorrat, { typ: 'vorrat', teil: { ort: 'gefrierfach' } });
+    const filter = navigiere(ort, { typ: 'vorrat', teil: { art: 'zutat' } });
+    const detail = navigiere(filter, { typ: 'sorte', id: 5 });
+    assert.equal(neuerEintrag(START, vorrat), true);
+    assert.equal(neuerEintrag(vorrat, ort), true);
+    assert.equal(neuerEintrag(ort, filter), false);
+    assert.equal(neuerEintrag(filter, detail), true);
+    // Zurück = die vorige Adresse wird wieder angewendet
+    const zurueck = navigiere(detail, { typ: 'route', route: routeAus(hashVon(filter)) });
+    assert.deepEqual([zurueck.bereich, zurueck.vorrat.ort, zurueck.vorrat.art, zurueck.sorte], ['vorrat', 'gefrierfach', 'zutat', null]);
+  });
+
+  test('beim Öffnen immer Start (außer ein Link zeigt woandershin); alte Speicherstände sind kein Problem', () => {
+    assert.equal(ladeNav(speichereNav(navigiere(START, { typ: 'wechsle', bereich: 'einkauf', scroll: 0 }))).bereich, 'start');
+    assert.equal(ladeNav('bestand').bereich, 'start');
+    assert.equal(ladeNav('{kaputt').bereich, 'start');
+    assert.equal(ladeNav(null, '#/einkauf').bereich, 'einkauf');
+    assert.equal(ladeNav(JSON.stringify({ bereich: 'komponenten', essen: { ansicht: 'woche' } })).essen.ansicht, 'woche');
+  });
+});
+
+describe('Startseite', () => {
+  const HEUTE_S = '2026-09-28';
+  const e = (erstellt_am: string, preis_cent: number | null, rueckgaengig = false) => ({ erstellt_am, preis_cent, rueckgaengig });
+  const m = (datum: string, kosten_cent: number | null, kosten_unbekannt = 0, kcal: number | null = null, kcal_unbekannt = 1) =>
+    ({ datum, titel: 'x', portionen: 2, kosten_cent, kosten_unbekannt, kcal, kcal_unbekannt, rueckgaengig: false });
+
+  test('Ausgaben diesen Monat: nur tatsächlich Bezahltes; Rückgängiges und Vormonat zählen nicht', () => {
+    const b = monatsbilanz({
+      einkaeufe: [e('2026-09-03T10:00:00Z', 2980), e('2026-09-20T10:00:00Z', 2300), e('2026-09-21T10:00:00Z', null),
+        e('2026-09-22T10:00:00Z', 999, true), e('2026-08-30T10:00:00Z', 5000)],
+      herstellungen: [], mahlzeiten: [],
+    }, HEUTE_S);
+    assert.deepEqual(b.ausgegeben, { cent: 5280, anzahl: 3, ohne_preis: 1 });
+    assert.equal(b.monat, 'September');
+  });
+
+  test('keine Doppelzählung: Produktion und Gekochtes sind Warenwert, nicht Teil der Ausgaben', () => {
+    // 3,00 € Tomaten gekauft → 1,44 € davon zu Tomaten-Basis verarbeitet → 2 Portionen (0,48 €) gegessen
+    const b = monatsbilanz({
+      einkaeufe: [e('2026-09-10T10:00:00Z', 300)],
+      herstellungen: [{ datum: '2026-09-10', kosten_cent: 144, kosten_unbekannt: 0, rueckgaengig: false }],
+      mahlzeiten: [m('2026-09-11', 48)],
+    }, HEUTE_S);
+    assert.equal(b.ausgegeben.cent, 300, 'Ausgaben bleiben 3,00 € – nicht 3,00 + 1,44 + 0,48');
+    assert.deepEqual(b.produktion, { cent: 144, anzahl: 1, vollstaendig: true });
+    assert.deepEqual([b.gekocht.cent, b.gekocht.pro_mahlzeit_cent], [48, 48]);
+  });
+
+  test('Ø pro Mahlzeit nur, wenn für jede Mahlzeit alle Preise bekannt sind', () => {
+    const voll = monatsbilanz({ einkaeufe: [], herstellungen: [], mahlzeiten: [m('2026-09-11', 120), m('2026-09-12', 86)] }, HEUTE_S);
+    assert.equal(voll.gekocht.pro_mahlzeit_cent, 103);
+    const teil = monatsbilanz({ einkaeufe: [], herstellungen: [], mahlzeiten: [m('2026-09-11', 120), m('2026-09-12', 40, 1)] }, HEUTE_S);
+    assert.deepEqual([teil.gekocht.cent, teil.gekocht.vollstaendig, teil.gekocht.pro_mahlzeit_cent], [160, false, null]);
+    assert.equal(monatsbilanz({ einkaeufe: [], herstellungen: [], mahlzeiten: [] }, HEUTE_S).leer, true);
+  });
+
+  test('„Heute gekocht“: kcal nur, wenn sie erfasst und vollständig bekannt sind', () => {
+    assert.deepEqual(heuteGekocht([m(HEUTE_S, 48, 0, 1240, 0)], HEUTE_S), { titel: ['x'], kcal: 1240, vollstaendig: true });
+    assert.equal(heuteGekocht([m(HEUTE_S, 48, 0, 600, 1)], HEUTE_S).kcal, null);
+    assert.equal(heuteGekocht([m('2026-09-27', 48, 0, 600, 0)], HEUTE_S).titel.length, 0, 'nur heute');
+  });
+
+  test('Reihenfolge: Dringendes nach oben, sonst Essen zuerst; leere Bereiche entfallen', () => {
+    assert.deepEqual(startReihenfolge({ dringend: true, wichtig: 2, produktion: true, einkauf: true, geld: true }),
+      ['wichtig', 'essen', 'geld', 'produktion', 'einkauf']);
+    assert.deepEqual(startReihenfolge({ dringend: false, wichtig: 1, produktion: false, einkauf: true, geld: false }),
+      ['essen', 'wichtig', 'einkauf']);
+    assert.deepEqual(startReihenfolge({ dringend: false, wichtig: 0, produktion: false, einkauf: false, geld: false }), ['essen']);
+  });
+
+  test('dringend: abgelaufen, aufgetaut, läuft heute/morgen ab, Auftauen fällig – „noch 3 Tage“ nicht', () => {
+    assert.equal(dringendHeute([sorte(1, 'A', { abgelaufen: 1 })], HEUTE_S, 0), true);
+    assert.equal(dringendHeute([sorte(2, 'B', { aufgetaut: 1 })], HEUTE_S, 0), true);
+    assert.equal(dringendHeute([sorte(3, 'C', { bald_ablaufen: true, naechster_ablauf: '2026-09-29' })], HEUTE_S, 0), true);
+    assert.equal(dringendHeute([sorte(4, 'D', { bald_ablaufen: true, naechster_ablauf: '2026-10-01' })], HEUTE_S, 0), false);
+    assert.equal(dringendHeute([], HEUTE_S, 1), true);
+  });
+
+  test('Gruß nach Tageszeit', () => {
+    assert.deepEqual([6, 12, 19, 2].map(gruss), ['Guten Morgen', 'Guten Tag', 'Guten Abend', 'Gute Nacht']);
+  });
+
+  test('Produktion nur, wenn sinnvoll: vorgemerkt & alles da, sonst Idee, die Dringendes verwertet – sonst nichts', () => {
+    const idee = (typ: 'verwerten' | 'neu', verwertet: string[]) => ({ typ, verwertet, name: 'I' }) as unknown as KomponentenVorschlag;
+    assert.equal(sinnvolleProduktion([{ plan_id: 'p', titel: 'Tomaten-Basis', portionen: 6, alles_da: true }], [])!.art, 'vorgemerkt');
+    assert.equal(sinnvolleProduktion([{ plan_id: 'p', titel: 'T', portionen: 6, alles_da: false }], [idee('verwerten', ['Tomaten'])])!.art, 'idee');
+    assert.equal(sinnvolleProduktion([], [idee('neu', ['Tomaten']), idee('verwerten', [])]), null, 'kein Füllmaterial');
   });
 });
 

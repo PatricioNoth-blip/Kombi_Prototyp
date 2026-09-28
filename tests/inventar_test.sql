@@ -719,6 +719,135 @@ reset role;
 \echo 'ok  Planung & Einkauf ohne Login: anlegen, ändern, entfernen – Buchungen nur über Funktionen'
 
 
+-- ─── Kosten je Charge: Einkauf → Produktion → Essen, nichts doppelt ───
+do $$
+declare
+  v_tom   bigint;
+  v_basis bigint;
+  v_reis  bigint;
+  v_salz  bigint;
+  v_buch  bigint;
+  v_r     jsonb;
+  v_m     bigint;
+  v_h     bigint;
+  v_summe bigint;
+begin
+  insert into block_typ (name, farbe, art, einheit, portion_menge, kcal) values ('Test K Tomaten', 'gruen', 'zutat', 'g', 100, 18)
+  returning id into v_tom;
+  insert into block_typ (name, farbe, art, einheit) values ('Test K Tomaten-Basis', 'rot', 'komponente', 'portion') returning id into v_basis;
+  insert into block_typ (name, farbe, art, einheit, portion_menge, kosten_cent, kosten_menge, kcal)
+  values ('Test K Reis', 'gelb', 'zutat', 'g', 75, 100, 1000, 350) returning id into v_reis;
+  insert into block_typ (name, farbe, art, einheit) values ('Test K Gewürz', 'weiss', 'zutat', 'g') returning id into v_salz;
+
+  -- Einkauf mit bezahltem Preis: 1 kg Tomaten für 3,00 €
+  v_buch := einkaufen(v_tom, 1000, null, 300);
+  assert (select array[preis_cent, menge] from einkauf_buchung where id = v_buch) = array[300, 1000], 'Einkauf gespeichert';
+  assert (select direkt from einkauf_buchung where id = v_buch), 'direkt eingebucht';
+  assert (select c.kosten_cent from charge c join bewegung b on b.charge_id = c.id
+          where b.id = (select bewegung_ids[1] from einkauf_buchung where id = v_buch)) = 300, 'Charge kennt ihren Preis';
+  assert (select array[kosten_cent, kosten_menge] from block_typ where id = v_tom) = array[300, 1000], 'Preis gelernt';
+  assert not exists (select 1 from einkauf_status where schluessel = 'test k tomaten'), 'kein Eintrag auf der Einkaufsliste';
+
+  -- Produktion: 480 g Tomaten → 6 Portionen Tomaten-Basis = 1,44 € (0,24 € je Portion)
+  v_r := produzieren(jsonb_build_array(jsonb_build_object('block_typ_id', v_tom, 'menge', 480)), v_basis, 6, null, null, 0);
+  v_h := (v_r->>'herstellung_id')::bigint;
+  assert (v_r->>'kosten_cent')::int = 144, format('Produktionskosten %s', v_r);
+  assert (select array[menge, kosten_cent, charge_kosten_cent, kosten_unbekannt] from herstellung where id = v_h) = array[6, 144, 144, 0],
+    'Herstellung protokolliert';
+  assert (select c.kosten_cent from charge c where c.id = (select charge_id from herstellung where id = v_h)) = 144, 'neue Charge mit Kosten';
+  assert (select array[kosten_cent, kosten_menge] from block_typ where id = v_basis) = array[144, 6], 'Preis der Komponente = echte Kosten';
+  assert (select anzahl from bestand where id = v_basis) = 6 and (select anzahl from bestand where id = v_tom) = 520, 'Bestand stimmt';
+
+  -- Essen: 2 Portionen Tomaten-Basis = 0,48 € – die Tomaten werden NICHT noch einmal gezählt
+  v_r := essen(jsonb_build_array(jsonb_build_object('block_typ_id', v_basis, 'menge', 2)), null, 'Test Sonnenpasta', 2);
+  v_m := (v_r->>'mahlzeit_id')::bigint;
+  assert (select array[kosten_cent, kosten_unbekannt] from mahlzeit where id = v_m) = array[48, 0], format('Verbrauchskosten %s', v_r);
+  assert (select kcal is null and kcal_unbekannt = 1 from mahlzeit where id = v_m), 'kcal der Basis unbekannt – nicht 0';
+  assert (select anzahl from bestand where id = v_tom) = 520, 'Tomaten bleiben unberührt';
+
+  -- Sortenpreis ändert sich später → gegessen wird trotzdem zum Preis der Charge
+  update block_typ set kosten_cent = 600, kosten_menge = 6 where id = v_basis;
+  v_r := essen(jsonb_build_array(jsonb_build_object('block_typ_id', v_basis, 'menge', 1)), null, 'Test Rest', 1);
+  assert (v_r->>'kosten_cent')::int = 24, format('Wert aus der Charge %s', v_r);
+
+  -- Ohne Chargenpreis gilt der Sortenpreis; unbekannte Preise und kcal werden gezählt, nicht geschätzt
+  perform einfrieren(v_reis, 500);
+  perform einfrieren(v_salz, 50);
+  v_r := essen(jsonb_build_array(
+    jsonb_build_object('block_typ_id', v_reis, 'menge', 150),
+    jsonb_build_object('block_typ_id', v_salz, 'menge', 5),
+    jsonb_build_object('block_typ_id', v_tom, 'menge', 200)), null, 'Test Reispfanne', 2);
+  -- Reis 150 g × 1,00 €/kg = 15 ct; Tomaten 200 g × 3,00 €/kg = 60 ct; Gewürz unbekannt
+  assert (v_r->>'kosten_cent')::int = 75 and (v_r->>'kosten_unbekannt')::int = 1, format('teilweise bekannt %s', v_r);
+  -- kcal: Reis 150 g × 350/100 = 525; Tomaten 200 g × 18/100 = 36; Gewürz unbekannt
+  assert (v_r->>'kcal')::int = 561 and (v_r->>'kcal_unbekannt')::int = 1, format('kcal %s', v_r);
+
+  -- Rückgängig: Bestand zurück, Protokoll markiert, nur einmal
+  v_summe := (select sum(anzahl) from bestand);
+  perform essen_rueckgaengig((v_r->>'mahlzeit_id')::bigint);
+  assert (select sum(anzahl) from bestand) = v_summe + 355, 'Bestand wieder da';
+  assert (select rueckgaengig from mahlzeit where id = (v_r->>'mahlzeit_id')::bigint), 'als rückgängig markiert';
+  assert pg_temp.fehler(format('select essen_rueckgaengig(%s)', v_r->>'mahlzeit_id')) = 'Das wurde schon rückgängig gemacht.', 'nur einmal';
+  assert pg_temp.fehler($q$select essen('[{"block_typ_id": 1, "menge": 1}]', null, '  ', 1)$q$) like 'Name des Gerichts fehlt%', 'Titel nötig';
+
+  -- Produktion mit tatsächlicher (kleinerer) Menge und Zutaten, die nicht im Vorrat geführt werden
+  v_r := produzieren(jsonb_build_array(jsonb_build_object('block_typ_id', v_tom, 'menge', 100)), v_basis, 7, null, null, 2);
+  assert (v_r->>'kosten_cent') is null and (v_r->>'kosten_unbekannt')::int = 2, format('unvollständig bekannt %s', v_r);
+  assert (select array[kosten_cent, kosten_menge] from block_typ where id = v_basis) = array[600, 6], 'Preis nicht aus unvollständigen Kosten gelernt';
+  assert (select c.kosten_cent is null and c.menge_start = 7 from charge c
+          where c.id = (select charge_id from herstellung where id = (v_r->>'herstellung_id')::bigint)), 'Charge: 7 Portionen, Kosten unbekannt';
+
+  -- Aus der ersten Produktion wurde schon gegessen → nicht mehr rückgängig zu machen
+  assert pg_temp.fehler(format('select produzieren_rueckgaengig(%s)', v_h)) like 'Aus dieser Charge wurde inzwischen%',
+    'Produktion mit verbrauchter Charge bleibt';
+  -- Unberührte Produktion: Rückgängig gibt Zutaten zurück und stellt den alten Preis wieder her
+  v_summe := (select anzahl from bestand where id = v_tom);
+  v_r := produzieren(jsonb_build_array(jsonb_build_object('block_typ_id', v_tom, 'menge', 100)), v_basis, 2, null, null, 0);
+  assert (select array[kosten_cent, kosten_menge] from block_typ where id = v_basis) = array[30, 2], '100 g Tomaten = 0,30 € für 2 Portionen';
+  perform produzieren_rueckgaengig((v_r->>'herstellung_id')::bigint);
+  assert (select array[kosten_cent, kosten_menge] from block_typ where id = v_basis) = array[600, 6], 'alter Preis zurück';
+  assert (select anzahl from bestand where id = v_tom) = v_summe, 'Tomaten zurück';
+  assert pg_temp.fehler(format('select produzieren_rueckgaengig(%s)', v_r->>'herstellung_id')) = 'Das wurde schon rückgängig gemacht.', 'nur einmal';
+
+  -- Einkauf direkt rückgängig: kommt nicht auf die Einkaufsliste
+  v_buch := einkaufen(v_reis, 1000, null, 199);
+  perform einkauf_rueckgaengig(v_buch);
+  assert not exists (select 1 from einkauf_status where schluessel = 'test k reis'), 'kein „gekauft“-Eintrag';
+  assert (select array[kosten_cent, kosten_menge] from block_typ where id = v_reis) = array[100, 1000], 'alter Preis zurück';
+  assert pg_temp.fehler(format('select einkaufen(%s, 100, null, null)', v_reis)) like 'Bitte einen gültigen Preis%', 'Preis Pflicht';
+
+  -- Einkaufsliste → Vorrat: Charge bekommt den bezahlten Preis
+  insert into einkauf_status (schluessel, einheit, status) values ('test k reis', 'g', 'gekauft');
+  v_buch := einkauf_buchen('test k reis', 'g', v_reis, 500, null, 120);
+  assert (select c.kosten_cent from charge c join bewegung b on b.charge_id = c.id
+          where b.id = (select bewegung_ids[1] from einkauf_buchung where id = v_buch)) = 120, 'Chargenpreis aus der Liste';
+
+  -- View: Nährwerte, NULL bleibt NULL
+  assert (select kcal from bestand where id = v_reis) = 350 and (select kcal from bestand where id = v_basis) is null, 'Nährwerte in der View';
+end $$;
+\echo 'ok  Kosten je Charge: Einkauf 3,00 € → Produktion 1,44 € → 2 Portionen 0,48 €, nichts doppelt; kcal nur aus Daten'
+
+
+-- ─── Protokolle ohne Login: lesen ja, schreiben nur über Funktionen ───
+set local role anon;
+do $$
+declare
+  v_id bigint := (select id from block_typ where name = 'Test K Reis');
+  v_r  jsonb;
+begin
+  assert (select count(*) from mahlzeit) >= 3 and (select count(*) from herstellung) >= 2, 'Protokolle lesbar';
+  v_r := essen(jsonb_build_array(jsonb_build_object('block_typ_id', v_id, 'menge', 75)), null, 'Test anon', 1);
+  perform essen_rueckgaengig((v_r->>'mahlzeit_id')::bigint);
+  assert pg_temp.fehler($q$insert into mahlzeit (titel, portionen, bewegung_ids) values ('x', 1, '{}')$q$) like 'permission denied%',
+    'Protokoll nicht direkt beschreibbar';
+  assert pg_temp.fehler($q$update herstellung set kosten_cent = 0$q$) like 'permission denied%', 'Herstellung nicht änderbar';
+  assert pg_temp.fehler($q$select wert_der_entnahme('{}')$q$) like 'permission denied%', 'interne Wertfunktion gesperrt';
+  assert pg_temp.fehler($q$update charge set kosten_cent = 0$q$) like 'permission denied%', 'Chargenkosten nicht änderbar';
+end $$;
+reset role;
+\echo 'ok  Protokolle ohne Login: lesen, essen() und Rückgängig – nichts direkt änderbar'
+
+
 rollback;
 \echo ''
 \echo 'Alle Tests bestanden.'

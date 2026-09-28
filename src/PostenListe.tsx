@@ -25,21 +25,23 @@ export function PostenListe({ posten, bestand, onAendern }: {
       : p)));
 
   return (
-    <ul className="liste koch-liste">
+    <ul className="liste">
       {posten.map((p, i) => (
-        <li key={p.block_typ_id} className="zeile">
-          <span className="zeile-info">
-            <span className="zeile-name">{p.name}</span>
-            <span className="zeile-meta">{mengeText(verfuegbarVon(bestand, p.block_typ_id), p.einheit)} da</span>
-          </span>
-          <button type="button" className="icon-knopf klein" onClick={() => aendere(i, -1)} aria-label={`${p.name} weniger`} disabled={p.menge === 0}>
-            <Icon name="minus" groesse={18} />
-          </button>
-          <strong className="koch-anzahl">{mengeText(p.menge, p.einheit)}</strong>
-          <button type="button" className="icon-knopf klein" onClick={() => aendere(i, 1)} aria-label={`${p.name} mehr`}
-            disabled={p.menge >= verfuegbarVon(bestand, p.block_typ_id)}>
-            <Icon name="plus" groesse={18} />
-          </button>
+        <li key={p.block_typ_id}>
+          <div className="zeile">
+            <span className="zeile-haupt">
+              <span className="zeile-titel">{p.name}</span>
+              <span className="zeile-meta">{mengeText(verfuegbarVon(bestand, p.block_typ_id), p.einheit)} da</span>
+            </span>
+            <button type="button" className="icon-knopf klein" onClick={() => aendere(i, -1)} aria-label={`${p.name} weniger`} disabled={p.menge === 0}>
+              <Icon name="minus" groesse={16} />
+            </button>
+            <strong className="menge-rechts posten-menge">{mengeText(p.menge, p.einheit)}</strong>
+            <button type="button" className="icon-knopf klein" onClick={() => aendere(i, 1)} aria-label={`${p.name} mehr`}
+              disabled={p.menge >= verfuegbarVon(bestand, p.block_typ_id)}>
+              <Icon name="plus" groesse={16} />
+            </button>
+          </div>
         </li>
       ))}
     </ul>

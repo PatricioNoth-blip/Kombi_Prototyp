@@ -11,7 +11,9 @@ import { GERICHT_EMOJI, GERICHT_NAME, gerichtstypenVon, partnerVon } from '../su
 import { batchEmpfehlungen, type NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts';
 import { baueSnapshotAus } from './essenApi';
 import { auftauenVormerken } from './haushalt';
-import { fuellstand, plusTageIso } from './dashboard';
+import { fuellstand, plusTageIso, zustand } from './dashboard';
+import { zustandKlasse } from './Vorrat';
+import { naehrwertAus } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
 
 type Props = {
   sorte: Sorte;
@@ -113,126 +115,38 @@ export function SorteBlatt({
     }
   }
 
+  const z = zustand(sorte, heute);
+  const zahl = mengeText(sorte.anzahl, einheit);
+  const naehr = naehrwertAus(sorte, einheit);
+  const kcalText = naehr && naehr.kcal !== null
+    ? `${naehr.kcal.toLocaleString('de-DE')} kcal je ${mengeText(naehr.menge, einheit)}`
+      + (naehr.protein_g !== null ? ` · ${naehr.protein_g.toLocaleString('de-DE')} g Eiweiß` : '')
+    : null;
+
   return (
     <Blatt titel={sorte.name} onSchliessen={onSchliessen}>
-      <p className="pillen">
-        <span className={`pille-rolle f-${sorte.farbe}`}><span className="farbpunkt" aria-hidden="true" />{rolle}</span>
-        <span className="pille-grau">{art.name}</span>
-        <span className="pille-grau"><Icon name={lager.icon} groesse={13} /> {lager.name}</span>
-        {sorte.herkunft && <span className="pille-grau">{sorte.herkunft}</span>}
-        {sorte.richtung && <span className="pille-grau">{sorte.richtung}</span>}
-      </p>
-
-      <div className={`bestand-karte f-${sorte.farbe}`}>
-        <div className="bk-zahl">
-          <strong>{mengeText(sorte.anzahl, einheit).split(' ')[0]}</strong>
-          <span>{mengeText(sorte.anzahl, einheit).split(' ').slice(1).join(' ')}</span>
-          {einheit !== 'portion' && sorte.anzahl > 0 && <small>≈ {Math.floor((sorte.anzahl / pm) * 10) / 10} Portionen</small>}
-        </div>
-        {fuell && (
-          <div className="bk-fuell">
-            <span className="vk-balken"><span style={{ width: `${Math.round(fuell.anteil * 100)}%` }} /></span>
-            <small>Bestand {fuell.text}</small>
-          </div>
-        )}
-        {reserviert && reserviert.menge > 0 && (
-          <p className="bk-reserviert">
-            <Icon name="kalender" groesse={14} /> {mengeText(Math.min(reserviert.menge, sorte.anzahl), einheit)} eingeplant für „{reserviert.plaene.join('“, „')}“ · {mengeText(frei, einheit)} frei
-          </p>
-        )}
-      </div>
-
-      <div className="kennzahlen">
-        <div>
-          <small>Portion</small>
-          <strong>{einheit === 'portion' ? `${sorte.groesse_g} g` : mengeText(pm, einheit)}</strong>
-          <span>{einheit === 'portion' ? 'pro Portion' : 'gilt als Portion'}</span>
-        </div>
-        <div>
-          <small>Pro Portion</small>
-          <strong>{portionspreisText(sorte).replace(' / Portion', '')}</strong>
-          <span>{preis ?? 'nicht hinterlegt'}</span>
-        </div>
-        <div>
-          <small>Haltbar</small>
-          <strong>{sorte.naechster_ablauf ? datum(sorte.naechster_ablauf).slice(0, 6) : `${sorte.haltbar_tage} Tage`}</strong>
-          <span>{sorte.naechster_ablauf ? ablaufText(sorte.naechster_ablauf) : sorte.aelteste ? `bis ca. ${plusTage(sorte.aelteste, sorte.haltbar_tage)}` : 'ab Einbuchen'}</span>
-        </div>
-      </div>
-
-      {(sorte.nachkochen || sorte.bald_ablaufen || (sorte.abgelaufen ?? 0) > 0 || (sorte.aufgetaut ?? 0) > 0) && (
-        <p className="sorte-hinweise">
-          {(sorte.abgelaufen ?? 0) > 0 && <span className="status status-warn">{mengeText(sorte.abgelaufen!, einheit)} abgelaufen</span>}
-          {(sorte.aufgetaut ?? 0) > 0 && <span className="status status-offen">{mengeText(sorte.aufgetaut!, einheit)} aufgetaut</span>}
-          {sorte.bald_ablaufen && <span className="status status-bald">bald verbrauchen</span>}
-          {sorte.nachkochen && <span className="status status-nach">{art.id === 'zutat' ? 'nachkaufen' : 'nachkochen'} (min. {sorte.mindestbestand})</span>}
+      {/* Ebene 1: wie viel, wie dringend */}
+      <div className={`sorte-kopf f-${sorte.farbe}`}>
+        <p className="sorte-art">
+          <span className="punkt" aria-hidden="true" />
+          {art.name}{art.id !== 'komplettgericht' ? ` · ${rolle}` : ''} · {lager.name}
         </p>
-      )}
-
-      {art.id !== 'zutat' && (
-        <section className="abschnitt">
-          <h3>Enthält</h3>
-          {sorte.zusammensetzung?.length ? (
-            <p className="chips">{sorte.zusammensetzung.map((z) => <span key={z} className="chip-statisch">{z}</span>)}</p>
-          ) : (
-            <p className="leise klein">
-              Unbekannt – Kombi erfindet nichts dazu.{' '}
-              {baukasten && <button type="button" className="link inline" onClick={onBearbeiten}>Ergänzen</button>}
-            </p>
-          )}
-        </section>
-      )}
-
-      {gerichte.typen.length > 0 && (
-        <section className="abschnitt">
-          <h3>Damit möglich</h3>
-          <p className="gericht-chips">
-            {gerichte.typen.map((t) => <span key={t}><span aria-hidden="true">{GERICHT_EMOJI[t]}</span> {GERICHT_NAME[t]}</span>)}
+        <p className="sorte-menge">
+          <strong>{zahl.split(' ')[0]}</strong>
+          <span>{zahl.split(' ').slice(1).join(' ')}{einheit !== 'portion' && sorte.anzahl > 0 ? ` · ≈ ${Math.floor((sorte.anzahl / pm) * 10) / 10} Portionen` : ''}</span>
+        </p>
+        {z && <p className={`sorte-status ${zustandKlasse(z)}`}>{z.titel} · {z.text}</p>}
+        {fuell && <span className="balken" aria-hidden="true"><span style={{ width: `${Math.round(fuell.anteil * 100)}%` }} /></span>}
+        {reserviert && reserviert.menge > 0 && (
+          <p className="meta-text">
+            {mengeText(Math.min(reserviert.menge, sorte.anzahl), einheit)} eingeplant für „{reserviert.plaene.join('“, „')}“ · {mengeText(frei, einheit)} frei
           </p>
-          <p className="leise klein">
-            {gerichte.typen.length >= 6 ? `Verwendbar für ${gerichte.typen.length}+ Gerichtsarten. ` : ''}
-            {gerichte.quelle === 'typisch' ? `Typisch für ${rolle} – eigene Auswahl unter „Bearbeiten“.` : 'Von euch hinterlegt.'}
-          </p>
-        </section>
-      )}
+        )}
+      </div>
 
-      {partner.length > 0 && (
+      {sorte.anzahl > 0 ? (
         <section className="abschnitt">
-          <h3>Passt dazu aus dem Vorrat</h3>
-          <p className="chips">
-            {partner.map((p) => {
-              const s = bestand.find((b) => b.id === p.block_typ_id);
-              return (
-                <button key={p.id} type="button" className={`chip-knopf f-${p.farbe}`} onClick={() => s && onOeffnen(s)} disabled={!s}>
-                  <span className="farbpunkt" aria-hidden="true" /> {p.name}
-                </button>
-              );
-            })}
-          </p>
-        </section>
-      )}
-
-      {nutzung && nutzung.verbrauch_28 > 0 && (
-        <section className="abschnitt">
-          <h3>Nutzung</h3>
-          <p className="klein">
-            In den letzten 4 Wochen {mengeText(nutzung.verbrauch_28, einheit)} verbraucht
-            {nutzung.herstellungen_56 > 0 && ` · in 8 Wochen ${nutzung.herstellungen_56}× hergestellt, im Schnitt ${mengeText(nutzung.mittlere_menge, einheit)}`}.
-          </p>
-          {batch && (
-            <div className="batch-hinweis">
-              <strong>Nächstes Mal {mengeText(batch.neu, einheit)} statt {mengeText(batch.bisher, einheit)} vorkochen?</strong>
-              <ul className="gruende">{batch.gruende.map((g) => <li key={g}>{g}</li>)}</ul>
-            </div>
-          )}
-        </section>
-      )}
-
-      {sorte.notiz && <p className="notiz">{sorte.notiz}</p>}
-
-      {sorte.anzahl > 0 && (
-        <section className="abschnitt">
-          <h3>Entnehmen</h3>
+          <div className="abschnitt-kopf"><h3>{art.id === 'komplettgericht' ? 'Portionen entnehmen' : 'Entnehmen'}</h3></div>
           <AnzahlWahl
             werte={werte}
             aktion="Entnehmen"
@@ -241,13 +155,42 @@ export function SorteBlatt({
             platzhalter={einheit === 'portion' ? 'Andere Anzahl' : `Andere Menge (${einheit === 'stueck' ? 'Stück' : einheit})`}
             onWahl={onEntnehmen}
           />
+          {art.id === 'komplettgericht' && <p className="abschnitt-fuss">Wird als Ganzes gegessen – entnommen werden ganze Portionen.</p>}
+        </section>
+      ) : (
+        <p className="leise abstand-oben">Gerade nichts da.</p>
+      )}
+
+      {/* Ebene 2: was man damit machen kann */}
+      {gerichte.typen.length > 0 && art.id !== 'zutat' && (
+        <section className="abschnitt">
+          <div className="abschnitt-kopf"><h3>Damit möglich</h3></div>
+          <p className="gerichte-liste">
+            {gerichte.typen.map((t) => <span key={t}><span aria-hidden="true">{GERICHT_EMOJI[t]}</span> {GERICHT_NAME[t]}</span>)}
+          </p>
+        </section>
+      )}
+
+      {partner.length > 0 && (
+        <section className="abschnitt">
+          <div className="abschnitt-kopf"><h3>Passt dazu</h3></div>
+          <div className="chips">
+            {partner.map((p) => {
+              const b = bestand.find((x) => x.id === p.block_typ_id);
+              return (
+                <button key={p.id} type="button" className={`chip f-${p.farbe}`} onClick={() => b && onOeffnen(b)} disabled={!b}>
+                  <span className="punkt" aria-hidden="true" /> {p.name}
+                </button>
+              );
+            })}
+          </div>
         </section>
       )}
 
       {kannAuftauen && (
         <section className="abschnitt">
-          <h3>Auftauen</h3>
-          <div className="auftau-wahl">
+          <div className="abschnitt-kopf"><h3>Auftauen</h3></div>
+          <div className="option-zeile">
             <div className="stepper">
               <button type="button" className="icon-knopf klein" aria-label="Weniger auftauen" disabled={auftauMenge <= 1}
                 onClick={() => setAuftauMenge((n) => n - 1)}><Icon name="minus" groesse={16} /></button>
@@ -255,62 +198,95 @@ export function SorteBlatt({
               <button type="button" className="icon-knopf klein" aria-label="Mehr auftauen" disabled={(auftauMenge + 1) * pm > frei}
                 onClick={() => setAuftauMenge((n) => n + 1)}><Icon name="plus" groesse={16} /></button>
             </div>
-            <span className="leise klein">{auftauMenge === 1 ? 'Portion' : 'Portionen'}</span>
+            <span className="leise">{auftauMenge === 1 ? 'Portion' : 'Portionen'}</span>
           </div>
-          <div className="knopf-reihe">
-            <button type="button" className="knopf" onClick={() => void auftauen(true)}><Icon name="schneeflocke" groesse={18} /> Heute herausgenommen</button>
-            <button type="button" className="knopf" onClick={() => void auftauen(false)}><Icon name="kalender" groesse={18} /> Morgen auftauen</button>
+          <div className="knopf-reihe abstand-oben">
+            <button type="button" className="knopf" onClick={() => void auftauen(true)}>Heute raus</button>
+            <button type="button" className="knopf" onClick={() => void auftauen(false)}>Morgen raus</button>
           </div>
-          <p className="leise klein">Ändert den Bestand nicht – entnommen wird erst beim Kochen.</p>
+          <p className="abschnitt-fuss">Ändert den Bestand nicht – entnommen wird erst beim Kochen.</p>
         </section>
       )}
 
-      <div className="knopf-reihe">
+      {/* Ebene 3: Einzelheiten */}
+      <details className="mehr-infos abstand-oben">
+        <summary>Details</summary>
+        <div className="info-zeilen">
+          <div className="info-zeile"><span>Portion</span><span>{einheit === 'portion' ? `${sorte.groesse_g} g` : mengeText(pm, einheit)}</span></div>
+          <div className="info-zeile"><span>Preis</span><span>{portionspreisText(sorte)}{preis ? ` (${preis})` : ''}</span></div>
+          <div className="info-zeile">
+            <span>Haltbar</span>
+            <span>{sorte.naechster_ablauf ? `${datum(sorte.naechster_ablauf)} · ${ablaufText(sorte.naechster_ablauf)}` : sorte.aelteste ? `bis ca. ${plusTage(sorte.aelteste, sorte.haltbar_tage)}` : `${sorte.haltbar_tage} Tage ab Einbuchen`}</span>
+          </div>
+          <div className="info-zeile"><span>Nährwerte</span><span>{kcalText ?? 'nicht hinterlegt'}</span></div>
+          {sorte.herkunft && <div className="info-zeile"><span>Herkunft</span><span>{sorte.herkunft}</span></div>}
+          {sorte.nachkochen && <div className="info-zeile"><span>Mindestbestand</span><span>{sorte.mindestbestand}</span></div>}
+        </div>
+
+        {art.id !== 'zutat' && (
+          <p className="klein">
+            <span className="leise">Enthält: </span>
+            {sorte.zusammensetzung?.length ? sorte.zusammensetzung.join(', ') : (
+              <>unbekannt – Kombi erfindet nichts dazu.{' '}{baukasten && <button type="button" className="link inline" onClick={onBearbeiten}>Ergänzen</button>}</>
+            )}
+          </p>
+        )}
+        {sorte.notiz && <p className="klein">{sorte.notiz}</p>}
+
+        {nutzung && nutzung.verbrauch_28 > 0 && (
+          <p className="klein">
+            <span className="leise">Nutzung: </span>
+            in 4 Wochen {mengeText(nutzung.verbrauch_28, einheit)} verbraucht
+            {nutzung.herstellungen_56 > 0 && ` · in 8 Wochen ${nutzung.herstellungen_56}× hergestellt, im Schnitt ${mengeText(nutzung.mittlere_menge, einheit)}`}.
+            {batch && ` Nächstes Mal ${mengeText(batch.neu, einheit)} statt ${mengeText(batch.bisher, einheit)} vorkochen?`}
+          </p>
+        )}
+
+        <div>
+          <h3 className="unterkopf">Chargen · Entnahme: geöffnet → frühester Ablauf → älteste</h3>
+          {fehler && <p className="fehlertext">{fehler}</p>}
+          {chargen === null && !fehler && <p className="leise">Lade …</p>}
+          {chargen?.length === 0 && <p className="leise klein">Nichts mehr da.</p>}
+          {chargen && chargen.length > 0 && (
+            <ul className="liste chargen">
+              {inEntnahmeReihenfolge(chargen, sorte.haltbar_tage).map((c) => (
+                <li key={c.id}>
+                  <span className="charge-links">
+                    <span>{datum(c.eingefroren_am)}</span>
+                    <small>
+                      {c.ablauf_am
+                        ? `MHD ${datum(c.ablauf_am)} · ${ablaufText(c.ablauf_am)}`
+                        : `haltbar bis ca. ${plusTage(c.eingefroren_am, sorte.haltbar_tage)}`}
+                      {c.geoeffnet_am ? ' · geöffnet' : !c.ablauf_am && tageSeit(c.eingefroren_am) > warnAb ? ' · bald' : ''}
+                    </small>
+                  </span>
+                  <span className="chargen-rechts">
+                    <strong>{mengeText(c.menge_aktuell, einheit)}</strong>
+                    {baukasten && (
+                      <button
+                        type="button"
+                        className={`mini-knopf${c.geoeffnet_am ? ' aktiv' : ''}`}
+                        onClick={() => void oeffnen(c, !c.geoeffnet_am)}
+                        aria-label={c.geoeffnet_am ? 'Als verschlossen markieren' : 'Als geöffnet markieren'}
+                        title={c.geoeffnet_am ? 'Als verschlossen markieren' : 'Als geöffnet markieren'}
+                      >
+                        <Icon name="offen" groesse={16} />
+                      </button>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </details>
+
+      <div className="knopf-reihe abstand-oben">
         <button type="button" className="knopf" onClick={onEinfrieren}>
           <Icon name="plus" groesse={18} /> {buchungsVerb(sorte.lagerort).infinitiv.replace(/^./, (b) => b.toUpperCase())}
         </button>
         <button type="button" className="knopf" onClick={onBearbeiten}>Bearbeiten</button>
       </div>
-
-      <section className="abschnitt">
-        <h3>Chargen</h3>
-        <p className="leise klein">Entnommen wird: geöffnet → frühester Ablauf → älteste.</p>
-        {fehler && <p className="fehlertext">{fehler}</p>}
-        {chargen === null && !fehler && <p className="leise">Lade …</p>}
-        {chargen?.length === 0 && <p className="leise">Nichts mehr da.</p>}
-        {chargen && chargen.length > 0 && (
-          <ul className="chargen">
-            {inEntnahmeReihenfolge(chargen, sorte.haltbar_tage).map((c) => (
-              <li key={c.id}>
-                <span className="charge-links">
-                  <span>{datum(c.eingefroren_am)}</span>
-                  <small>
-                    {c.ablauf_am
-                      ? `MHD ${datum(c.ablauf_am)} · ${ablaufText(c.ablauf_am)}`
-                      : `haltbar bis ca. ${plusTage(c.eingefroren_am, sorte.haltbar_tage)}`}
-                  </small>
-                </span>
-                <span className="chargen-rechts">
-                  {c.geoeffnet_am && <span className="status status-offen">geöffnet</span>}
-                  {!c.ablauf_am && tageSeit(c.eingefroren_am) > warnAb && <span className="status status-bald">bald</span>}
-                  <strong>{mengeText(c.menge_aktuell, einheit)}</strong>
-                  {baukasten && (
-                    <button
-                      type="button"
-                      className={`mini-knopf${c.geoeffnet_am ? ' aktiv' : ''}`}
-                      onClick={() => void oeffnen(c, !c.geoeffnet_am)}
-                      aria-label={c.geoeffnet_am ? 'Als verschlossen markieren' : 'Als geöffnet markieren'}
-                      title={c.geoeffnet_am ? 'Als verschlossen markieren' : 'Als geöffnet markieren'}
-                    >
-                      <Icon name="offen" groesse={16} />
-                    </button>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </Blatt>
   );
 }

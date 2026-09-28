@@ -1,51 +1,56 @@
-// Navigation: vier Bereiche. Was man in einem Bereich geöffnet, gefiltert oder gescrollt hat,
-// bleibt beim Wechsel erhalten – und wird für den nächsten Start gemerkt.
+// Navigation: fünf Bereiche, Adressen zum Verlinken (#/vorrat/gefrierfach) und Zurück wie gewohnt.
+// Was man in einem Bereich geöffnet, gefiltert oder gescrollt hat, bleibt beim Wechsel erhalten.
 // Rein und ohne Laufzeit-Importe, damit es sich ohne Browser testen lässt.
-import type { Art, Farbe } from '../supabase/functions/_shared/kombi/typen.ts';
+import type { Art } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { IconName } from './Icon';
 
-export type Bereich = 'essen' | 'vorrat' | 'komponenten' | 'einkauf';
+export type Bereich = 'start' | 'essen' | 'vorrat' | 'produktion' | 'einkauf';
 export type VorratOrt = 'gefrierfach' | 'kuehlschrank' | 'vorrat' | 'alle';
-export type EinkaufFilter = 'alle' | 'geplant' | 'komponente' | 'manuell' | 'mangel';
 
-export const BEREICHE: { id: Bereich; name: string; titel: string; icon: IconName }[] = [
-  { id: 'essen', name: 'Essen', titel: 'Essen', icon: 'essen' },
-  { id: 'vorrat', name: 'Vorrat', titel: 'Vorrat', icon: 'vorrat' },
-  { id: 'komponenten', name: 'Komponenten', titel: 'Komponenten', icon: 'baustein' },
-  { id: 'einkauf', name: 'Einkauf', titel: 'Einkauf', icon: 'wagen' },
+export const BEREICHE: { id: Bereich; name: string; icon: IconName }[] = [
+  { id: 'start', name: 'Start', icon: 'haus' },
+  { id: 'essen', name: 'Essen', icon: 'essen' },
+  { id: 'vorrat', name: 'Vorrat', icon: 'vorrat' },
+  { id: 'produktion', name: 'Produktion', icon: 'topf' },
+  { id: 'einkauf', name: 'Einkauf', icon: 'wagen' },
 ];
 
 export type NavZustand = {
   bereich: Bereich;
   vorrat: { ort: VorratOrt | null; art: Art | null; suche: string };
   essen: { ansicht: 'heute' | 'woche' };
-  komponenten: { rolle: Farbe | null };
-  einkauf: { filter: EinkaufFilter; sortierung: 'kategorie' | 'name' };
+  /** geöffnete Sorte (Detail) – gehört zur Adresse, damit „Zurück“ sie schließt */
+  sorte: number | null;
   /** Scrollposition je Bereich */
   scroll: Record<Bereich, number>;
+};
+
+export type Route = {
+  bereich: Bereich;
+  ort: VorratOrt | null;
+  art: Art | null;
+  ansicht: 'heute' | 'woche';
+  sorte: number | null;
 };
 
 export type NavAktion =
   | { typ: 'wechsle'; bereich: Bereich; scroll: number }
   | { typ: 'vorrat'; teil: Partial<NavZustand['vorrat']> }
   | { typ: 'essen'; teil: Partial<NavZustand['essen']> }
-  | { typ: 'komponenten'; teil: Partial<NavZustand['komponenten']> }
-  | { typ: 'einkauf'; teil: Partial<NavZustand['einkauf']> };
+  | { typ: 'sorte'; id: number | null }
+  | { typ: 'route'; route: Route };
 
 export const START: NavZustand = {
-  bereich: 'vorrat',
+  bereich: 'start',
   vorrat: { ort: null, art: null, suche: '' },
   essen: { ansicht: 'heute' },
-  komponenten: { rolle: null },
-  einkauf: { filter: 'alle', sortierung: 'kategorie' },
-  scroll: { essen: 0, vorrat: 0, komponenten: 0, einkauf: 0 },
+  sorte: null,
+  scroll: { start: 0, essen: 0, vorrat: 0, produktion: 0, einkauf: 0 },
 };
 
 const BEREICH_IDS = BEREICHE.map((b) => b.id) as string[];
 const ORTE: string[] = ['gefrierfach', 'kuehlschrank', 'vorrat', 'alle'];
 const ARTEN: string[] = ['zutat', 'komponente', 'komplettgericht'];
-const FARBEN: string[] = ['rot', 'braun', 'gruen', 'gelb', 'weiss', 'schwarz', 'blau'];
-const FILTER: string[] = ['alle', 'geplant', 'komponente', 'manuell', 'mangel'];
 
 /** Tab antippen: Wechsel merkt sich die Scrollposition; nochmal auf den aktiven Tab = zurück zum Anfang. */
 export function navigiere(z: NavZustand, a: NavAktion): NavZustand {
@@ -55,10 +60,12 @@ export function navigiere(z: NavZustand, a: NavAktion): NavZustand {
         return {
           ...z,
           vorrat: a.bereich === 'vorrat' ? { ...z.vorrat, ort: null, suche: '' } : z.vorrat,
+          essen: a.bereich === 'essen' ? { ansicht: 'heute' } : z.essen,
+          sorte: null,
           scroll: { ...z.scroll, [a.bereich]: 0 },
         };
       }
-      return { ...z, bereich: a.bereich, scroll: { ...z.scroll, [z.bereich]: Math.max(0, a.scroll) } };
+      return { ...z, bereich: a.bereich, sorte: null, scroll: { ...z.scroll, [z.bereich]: Math.max(0, a.scroll) } };
     case 'vorrat': {
       const vorrat = { ...z.vorrat, ...a.teil };
       // neuer Lagerort → Art-Filter zurücksetzen und oben anfangen
@@ -71,54 +78,81 @@ export function navigiere(z: NavZustand, a: NavAktion): NavZustand {
     }
     case 'essen':
       return { ...z, essen: { ...z.essen, ...a.teil } };
-    case 'komponenten':
-      return { ...z, komponenten: { ...z.komponenten, ...a.teil } };
-    case 'einkauf':
-      return { ...z, einkauf: { ...z.einkauf, ...a.teil } };
+    case 'sorte':
+      return { ...z, sorte: a.id };
+    case 'route': {
+      const r = a.route;
+      return {
+        ...z,
+        bereich: r.bereich,
+        vorrat: r.bereich === 'vorrat' ? { ...z.vorrat, ort: r.ort, art: r.ort ? r.art : null } : z.vorrat,
+        essen: r.bereich === 'essen' ? { ansicht: r.ansicht } : z.essen,
+        sorte: r.sorte,
+      };
+    }
   }
 }
 
-/** Gemerkten Zustand lesen – tolerant: Unbekanntes fällt auf den Start zurück, alte Werte werden übernommen. */
-export function ladeNav(text: string | null): NavZustand {
-  if (!text) return START;
-  // bis Version 2 wurde nur der Reiter als Text gespeichert
-  if (text === 'essen') return { ...START, bereich: 'essen' };
-  if (text === 'bestand' || text === 'sorten') return START;
-  let d: Record<string, unknown>;
-  try {
-    d = JSON.parse(text);
-  } catch {
-    return START;
-  }
-  if (!d || typeof d !== 'object') return START;
-  const v = (d.vorrat ?? {}) as Record<string, unknown>;
-  const e = (d.essen ?? {}) as Record<string, unknown>;
-  const k = (d.komponenten ?? {}) as Record<string, unknown>;
-  const ek = (d.einkauf ?? {}) as Record<string, unknown>;
-  return {
-    bereich: BEREICH_IDS.includes(d.bereich as string) ? (d.bereich as Bereich) : START.bereich,
-    vorrat: {
-      ort: ORTE.includes(v.ort as string) ? (v.ort as VorratOrt) : null,
-      art: ARTEN.includes(v.art as string) ? (v.art as Art) : null,
-      suche: '',
-    },
-    essen: { ansicht: e.ansicht === 'woche' ? 'woche' : 'heute' },
-    komponenten: { rolle: FARBEN.includes(k.rolle as string) ? (k.rolle as Farbe) : null },
-    einkauf: {
-      filter: FILTER.includes(ek.filter as string) ? (ek.filter as EinkaufFilter) : 'alle',
-      sortierung: ek.sortierung === 'name' ? 'name' : 'kategorie',
-    },
-    scroll: START.scroll,
-  };
+// ───────── Adressen ─────────
+
+/** „#/vorrat/gefrierfach?art=komponente&sorte=12“ → Route. Unbekanntes → Start. */
+export function routeAus(hash: string): Route {
+  const leer: Route = { bereich: 'start', ort: null, art: null, ansicht: 'heute', sorte: null };
+  const [pfad, abfrage = ''] = hash.replace(/^#\/?/, '').split('?');
+  const teile = pfad.split('/').filter(Boolean).map((t) => decodeURIComponent(t));
+  const q = new Map(abfrage.split('&').filter(Boolean).map((p) => {
+    const [k, v = ''] = p.split('=');
+    return [k, decodeURIComponent(v)] as const;
+  }));
+  // „komponenten“ gab es bis Version 3 als eigenen Bereich
+  const bereichRoh = teile[0] === 'komponenten' ? 'produktion' : teile[0];
+  const bereich = BEREICH_IDS.includes(bereichRoh) ? (bereichRoh as Bereich) : 'start';
+  const sorteRoh = Number(q.get('sorte'));
+  const sorte = Number.isInteger(sorteRoh) && sorteRoh > 0 ? sorteRoh : null;
+  const ort = bereich === 'vorrat' && ORTE.includes(teile[1]) ? (teile[1] as VorratOrt) : null;
+  const art = ort && ARTEN.includes(q.get('art') ?? '') ? (q.get('art') as Art) : null;
+  return { ...leer, bereich, ort, art, ansicht: bereich === 'essen' && teile[1] === 'woche' ? 'woche' : 'heute', sorte };
 }
 
-/** Was gemerkt wird: Bereich und Filter – keine Suche, keine Scrollposition. */
+/** Adresse des aktuellen Zustands. */
+export function hashVon(z: NavZustand): string {
+  let pfad = `#/${z.bereich}`;
+  const q: string[] = [];
+  if (z.bereich === 'vorrat' && z.vorrat.ort) {
+    pfad += `/${z.vorrat.ort}`;
+    if (z.vorrat.art) q.push(`art=${z.vorrat.art}`);
+  }
+  if (z.bereich === 'essen' && z.essen.ansicht === 'woche') pfad += '/woche';
+  if (z.sorte !== null) q.push(`sorte=${z.sorte}`);
+  return q.length ? `${pfad}?${q.join('&')}` : pfad;
+}
+
+/** Neuer Verlaufseintrag (Zurück führt dorthin zurück) – oder nur die Adresse ersetzen (Filter). */
+export function neuerEintrag(alt: NavZustand, neu: NavZustand): boolean {
+  return alt.bereich !== neu.bereich || alt.vorrat.ort !== neu.vorrat.ort || alt.essen.ansicht !== neu.essen.ansicht
+    || (alt.sorte === null && neu.sorte !== null);
+}
+
+// ───────── Gemerkt für den nächsten Start ─────────
+
+/**
+ * Gemerkter Zustand: nur Filter (Art im Vorrat, Essen/Woche). Die App öffnet immer mit dem Start –
+ * außer ein Link zeigt woandershin (dann bestimmt die Adresse den Bereich).
+ */
+export function ladeNav(text: string | null, hash = ''): NavZustand {
+  let gemerkt: NavZustand = START;
+  if (text && text.startsWith('{')) {
+    try {
+      const d = JSON.parse(text) as Record<string, unknown>;
+      const e = (d.essen ?? {}) as Record<string, unknown>;
+      gemerkt = { ...START, essen: { ansicht: e.ansicht === 'woche' ? 'woche' : 'heute' } };
+    } catch {
+      gemerkt = START;
+    }
+  }
+  return hash && hash !== '#' && hash !== '#/' ? navigiere(gemerkt, { typ: 'route', route: routeAus(hash) }) : gemerkt;
+}
+
 export function speichereNav(z: NavZustand): string {
-  return JSON.stringify({
-    bereich: z.bereich,
-    vorrat: { ort: z.vorrat.ort, art: z.vorrat.art },
-    essen: z.essen,
-    komponenten: z.komponenten,
-    einkauf: z.einkauf,
-  });
+  return JSON.stringify({ essen: z.essen });
 }

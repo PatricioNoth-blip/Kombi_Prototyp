@@ -1,9 +1,9 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Sorte } from './api';
 import { ARTEN_INFO, farbe as farbInfo, lagerort, LAGERORTE } from './farben';
 import { Icon, type IconName } from './Icon';
 import { artVon, einheitVon, euro, mengeKurz, portionMengeVon } from './format';
-import { fuellstand, heuteWichtig, ortKacheln, sortenFuer, vorratswert, zustand, type WichtigArt } from './dashboard';
+import { heuteWichtig, ortKacheln, sortenFuer, vorratswert, zustand, type Wichtig } from './dashboard';
 import type { NavZustand } from './navigation';
 
 type Props = {
@@ -11,19 +11,14 @@ type Props = {
   heute: string;
   nav: NavZustand['vorrat'];
   onNav: (teil: Partial<NavZustand['vorrat']>) => void;
+  onZurueck: () => void;
   laeuft: Set<number>;
   /** für Pläne reserviert (Einheit der Sorte) */
   reserviert: Map<number, number>;
-  einkauf: { offen: number; kosten: string | null } | null;
   /** „Für heute auftauen“ (fertig gerendert, kann leer sein) */
   auftauen: ReactNode;
   onOeffnen: (s: Sorte) => void;
   onEntnehmen: (s: Sorte, menge: number) => void;
-  onZumEinkauf: () => void;
-};
-
-const WICHTIG_ICON: Record<WichtigArt, IconName> = {
-  abgelaufen: 'info', aufgetaut: 'schneeflocke', geoeffnet: 'offen', bald: 'uhr', niedrig: 'korb',
 };
 
 /** Eine Portion – oder der Rest, wenn weniger da ist. */
@@ -31,125 +26,137 @@ export const einePortion = (s: Sorte) => Math.min(portionMengeVon(s), s.anzahl);
 
 const rolleVon = (s: Sorte) => (artVon(s) === 'komplettgericht' ? 'Komplettgericht' : farbInfo(s.farbe).bedeutung);
 
+/** Farbe des Zustands: kritisch (rot), Aufmerksamkeit (orange), Info (blau), sonst neutral */
+export const zustandKlasse = (w: Wichtig) =>
+  w.art === 'abgelaufen' ? 'status-kritisch' : w.art === 'bald' ? 'status-achtung' : w.art === 'niedrig' ? '' : 'status-info';
+
+export function WichtigZeile({ w, onOeffnen }: { w: Wichtig; onOeffnen: (s: Sorte) => void }) {
+  return (
+    <li className={`f-${w.sorte.farbe}`}>
+      <button type="button" className="zeile" onClick={() => onOeffnen(w.sorte)}>
+        <span className="punkt" aria-hidden="true" />
+        <span className="zeile-haupt">
+          <span className="zeile-titel">{w.sorte.name}</span>
+          <span className="zeile-meta">
+            <span className={zustandKlasse(w)}>{w.art === 'niedrig' || w.art === 'bald' ? w.text : w.titel}</span> · {lagerort(w.sorte.lagerort).name}
+          </span>
+        </span>
+        <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
+      </button>
+    </li>
+  );
+}
+
 function Suchfeld({ wert, onAendern }: { wert: string; onAendern: (t: string) => void }) {
   return (
     <label className="suchfeld">
-      <Icon name="suche" groesse={18} />
-      <input type="search" value={wert} onChange={(e) => onAendern(e.target.value)} placeholder="Im Vorrat suchen" aria-label="Im Vorrat suchen" />
+      <Icon name="suche" groesse={17} />
+      <input type="search" value={wert} onChange={(e) => onAendern(e.target.value)} placeholder="Suchen" aria-label="Im Vorrat suchen" />
       {wert && (
         <button type="button" className="such-leeren" onClick={() => onAendern('')} aria-label="Suche leeren">
-          <Icon name="schliessen" groesse={14} />
+          <Icon name="schliessen" groesse={12} />
         </button>
       )}
     </label>
   );
 }
 
-function VorratKarte({ s, heute, reserviert, zeigeOrt, laeuft, onOeffnen, onEntnehmen }: {
+function SorteZeile({ s, heute, reserviert, zeigeOrt, laeuft, onOeffnen, onEntnehmen }: {
   s: Sorte; heute: string; reserviert: number; zeigeOrt: boolean; laeuft: boolean;
   onOeffnen: (s: Sorte) => void; onEntnehmen: (s: Sorte, menge: number) => void;
 }) {
   const menge = mengeKurz(s.anzahl, einheitVon(s));
-  const fuell = fuellstand(s);
   const z = zustand(s, heute);
-  const lager = lagerort(s.lagerort);
+  const unter = z
+    ? <span className={zustandKlasse(z)}>{z.art === 'niedrig' || z.art === 'bald' ? z.text : z.titel}</span>
+    : reserviert > 0
+      ? <span>{mengeKurz(reserviert, einheitVon(s)).zahl} eingeplant</span>
+      : <span>{zeigeOrt ? `${rolleVon(s)} · ${lagerort(s.lagerort).name}` : rolleVon(s)}</span>;
   return (
-    <li className={`vorrat-karte f-${s.farbe}${s.anzahl === 0 ? ' leer' : ''}`}>
-      <button type="button" className="vk-oeffnen" onClick={() => onOeffnen(s)}>
-        <span className="vk-rolle"><span className="farbpunkt" aria-hidden="true" />{rolleVon(s)}</span>
-        <span className="vk-name">{s.name}</span>
-        <span className="vk-menge" aria-label={`${menge.zahl} ${menge.einheit}`}>
-          <strong>{menge.zahl}</strong> <small>{menge.einheit}</small>
-        </span>
-        {fuell && (
-          <span className="vk-balken" title={fuell.text} aria-hidden="true">
-            <span style={{ width: `${Math.round(fuell.anteil * 100)}%` }} />
+    <li className={`vorrat-zeile f-${s.farbe}`}>
+      <div className={`zeile${s.anzahl === 0 ? ' leer' : ''}`}>
+        <button type="button" className="zeile-knopf" onClick={() => onOeffnen(s)}>
+          <span className="punkt" aria-hidden="true" />
+          <span className="zeile-haupt">
+            <span className="zeile-titel">{s.name}</span>
+            <span className="zeile-meta">{unter}</span>
           </span>
-        )}
-        <span className="vk-fuss">
-          {z ? (
-            <span className={`pille pille-${z.art}`}>{z.art === 'niedrig' ? z.text : z.titel}</span>
-          ) : reserviert > 0 ? (
-            <span className="pille pille-geplant">{mengeKurz(reserviert, einheitVon(s)).zahl} eingeplant</span>
-          ) : zeigeOrt ? (
-            <span className="vk-ort"><Icon name={lager.icon} groesse={13} /> {lager.name}</span>
-          ) : null}
-        </span>
-      </button>
-      <button
-        type="button"
-        className="minus"
-        disabled={s.anzahl === 0 || laeuft}
-        onClick={() => onEntnehmen(s, einePortion(s))}
-        aria-label={`Eine Portion ${s.name} entnehmen`}
-      >
-        <Icon name="minus" groesse={16} />
-      </button>
+          <span className="zeile-wert" aria-label={`${menge.zahl} ${menge.einheit}`}><strong>{menge.zahl}</strong> {menge.einheit}</span>
+        </button>
+        <button
+          type="button"
+          className="minus"
+          disabled={s.anzahl === 0 || laeuft}
+          onClick={() => onEntnehmen(s, einePortion(s))}
+          aria-label={`Eine Portion ${s.name} entnehmen`}
+        >
+          <Icon name="minus" groesse={16} />
+        </button>
+      </div>
     </li>
   );
 }
 
-/** Der Vorrat als Haushalts-Übersicht – und je Lagerort als Karten mit Füllstand. */
-export function Vorrat({ bestand, heute, nav, onNav, laeuft, reserviert, einkauf, auftauen, onOeffnen, onEntnehmen, onZumEinkauf }: Props) {
+/** Der Vorrat: erst was wichtig ist und wo was liegt – Einzelheiten erst beim Öffnen. */
+export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reserviert, auftauen, onOeffnen, onEntnehmen }: Props) {
+  const [alleWichtig, setAlleWichtig] = useState(false);
+
   if (bestand.length === 0) {
     return (
       <div className="leer-zustand">
         <Icon name="vorrat" groesse={40} />
-        <p>Noch keine Sorten. Tippe unten auf <strong>+</strong> und lege die erste an.</p>
+        <p>Noch nichts im Vorrat. Oben auf <strong>+</strong> tippen und die erste Sorte anlegen.</p>
       </div>
     );
   }
 
-  const karte = (s: Sorte, zeigeOrt: boolean) => (
-    <VorratKarte key={s.id} s={s} heute={heute} reserviert={reserviert.get(s.id) ?? 0} zeigeOrt={zeigeOrt}
+  const zeile = (s: Sorte, zeigeOrt: boolean) => (
+    <SorteZeile key={s.id} s={s} heute={heute} reserviert={reserviert.get(s.id) ?? 0} zeigeOrt={zeigeOrt}
       laeuft={laeuft.has(s.id)} onOeffnen={onOeffnen} onEntnehmen={onEntnehmen} />
   );
 
   // ───────── Ein Lagerort (oder alles) ─────────
   if (nav.ort) {
     const ort = nav.ort;
-    const info = ort === 'alle' ? { name: 'Alle Sorten', icon: 'vorrat' as IconName } : lagerort(ort);
+    const titel = ort === 'alle' ? (nav.art === 'komponente' ? 'Komponenten' : 'Alle Sorten') : lagerort(ort).name;
     const imOrt = sortenFuer(bestand, { ort, art: null, suche: '' }, heute);
     const arten = ARTEN_INFO.filter((a) => imOrt.some((s) => artVon(s) === a.id));
     const sorten = sortenFuer(bestand, { ort, art: nav.art, suche: nav.suche }, heute);
     const da = imOrt.filter((s) => s.anzahl > 0).length;
     return (
       <div className="ort-ansicht">
-        <button type="button" className="zurueck-knopf" onClick={() => onNav({ ort: null, suche: '' })}>
+        <button type="button" className="zurueck-knopf" onClick={onZurueck}>
           <Icon name="zurueck" groesse={18} /> Vorrat
         </button>
-        <div className={`ort-titel ort-${ort}`}>
-          <span className="ok-icon"><Icon name={info.icon} groesse={22} /></span>
-          <div>
-            <h2>{info.name}</h2>
-            <p className="leise klein">{da} von {imOrt.length} Sorten da</p>
-          </div>
+        <div className="ort-kopf">
+          <h2>{titel}</h2>
+          <p className="leise klein">{da} von {imOrt.length} Sorten da</p>
         </div>
         <Suchfeld wert={nav.suche} onAendern={(t) => onNav({ suche: t })} />
         {arten.length > 1 && (
-          <div className="filter-chips" role="group" aria-label="Nach Art filtern">
-            <button type="button" className={nav.art === null ? 'gewaehlt' : ''} aria-pressed={nav.art === null} onClick={() => onNav({ art: null })}>
-              Alle <small>{imOrt.length}</small>
+          <div className="chips scroll abstand-oben" role="group" aria-label="Nach Art filtern">
+            <button type="button" className={`chip${nav.art === null ? ' gewaehlt' : ''}`} aria-pressed={nav.art === null} onClick={() => onNav({ art: null })}>
+              Alle
             </button>
             {arten.map((a) => (
-              <button key={a.id} type="button" className={nav.art === a.id ? 'gewaehlt' : ''} aria-pressed={nav.art === a.id} onClick={() => onNav({ art: a.id })}>
-                {a.mehrzahl} <small>{imOrt.filter((s) => artVon(s) === a.id).length}</small>
+              <button key={a.id} type="button" className={`chip${nav.art === a.id ? ' gewaehlt' : ''}`} aria-pressed={nav.art === a.id} onClick={() => onNav({ art: a.id })}>
+                {a.mehrzahl}
               </button>
             ))}
           </div>
         )}
         {sorten.length === 0 ? (
-          <p className="leise leer-zustand">Nichts gefunden.</p>
+          <p className="leer-zustand">Nichts gefunden.</p>
         ) : nav.art || nav.suche ? (
-          <ul className="karten-raster">{sorten.map((s) => karte(s, ort === 'alle'))}</ul>
+          <ul className="liste abstand-oben">{sorten.map((s) => zeile(s, ort === 'alle'))}</ul>
         ) : (
           arten.map((a) => {
             const gruppe = sorten.filter((s) => artVon(s) === a.id);
             if (gruppe.length === 0) return null;
             return (
-              <section key={a.id} className="gruppe">
-                <h3 className="abschnitt-titel">{a.mehrzahl}</h3>
-                <ul className="karten-raster">{gruppe.map((s) => karte(s, ort === 'alle'))}</ul>
+              <section key={a.id}>
+                <h3 className="unterkopf">{a.mehrzahl}</h3>
+                <ul className="liste">{gruppe.map((s) => zeile(s, ort === 'alle'))}</ul>
               </section>
             );
           })
@@ -164,7 +171,7 @@ export function Vorrat({ bestand, heute, nav, onNav, laeuft, reserviert, einkauf
     return (
       <>
         <Suchfeld wert={nav.suche} onAendern={(t) => onNav({ suche: t })} />
-        {treffer.length === 0 ? <p className="leise leer-zustand">Nichts gefunden.</p> : <ul className="karten-raster">{treffer.map((s) => karte(s, true))}</ul>}
+        {treffer.length === 0 ? <p className="leer-zustand">Nichts gefunden.</p> : <ul className="liste abstand-oben">{treffer.map((s) => zeile(s, true))}</ul>}
       </>
     );
   }
@@ -172,79 +179,83 @@ export function Vorrat({ bestand, heute, nav, onNav, laeuft, reserviert, einkauf
   const wichtig = heuteWichtig(bestand, heute);
   const kacheln = ortKacheln(bestand, heute);
   const wert = vorratswert(bestand);
+  const komponenten = bestand.filter((s) => artVon(s) === 'komponente');
+  const ICON: Record<string, IconName> = Object.fromEntries(LAGERORTE.map((l) => [l.id, l.icon]));
 
   return (
     <>
       <Suchfeld wert={nav.suche} onAendern={(t) => onNav({ suche: t })} />
 
-      <section className="wichtig-bereich" aria-label="Heute wichtig">
-        <h2 className="abschnitt-titel">Heute wichtig</h2>
-        {wichtig.length === 0 ? (
-          <p className="alles-gut"><Icon name="haken" groesse={18} /> Nichts Dringendes – alles im grünen Bereich.</p>
-        ) : (
-          <ul className="wichtig-leiste">
-            {wichtig.map((w) => {
-              const lager = lagerort(w.sorte.lagerort);
-              return (
-                <li key={w.sorte.id}>
-                  <button type="button" className={`wichtig-karte w-${w.art} f-${w.sorte.farbe}`} onClick={() => onOeffnen(w.sorte)}>
-                    <span className="wk-art"><Icon name={WICHTIG_ICON[w.art]} groesse={14} /> {w.titel}</span>
-                    <span className="wk-name">{w.sorte.name}</span>
-                    <span className="wk-text">{w.text}</span>
-                    <span className="wk-ort"><span className="farbpunkt" aria-hidden="true" /> {lager.name}</span>
-                  </button>
-                </li>
-              );
-            })}
+      {wichtig.length > 0 && (
+        <section className="abschnitt" aria-label="Heute wichtig">
+          <div className="abschnitt-kopf">
+            <h2>Heute wichtig</h2>
+            {wichtig.length > 3 && (
+              <button type="button" className="link" onClick={() => setAlleWichtig((a) => !a)}>
+                {alleWichtig ? 'Weniger' : `Alle ${wichtig.length}`}
+              </button>
+            )}
+          </div>
+          <ul className="liste">
+            {(alleWichtig ? wichtig : wichtig.slice(0, 3)).map((w) => <WichtigZeile key={w.sorte.id} w={w} onOeffnen={onOeffnen} />)}
           </ul>
-        )}
-      </section>
+        </section>
+      )}
 
       {auftauen}
 
-      <section aria-label="Lagerorte">
-        <h2 className="abschnitt-titel">Lagerorte</h2>
-        <div className="ort-kacheln">
-          {kacheln.map((k) => {
-            const l = LAGERORTE.find((x) => x.id === k.id)!;
-            return (
-              <button key={k.id} type="button" className={`ort-kachel ort-${k.id}`} onClick={() => onNav({ ort: k.id })}>
-                <span className="ok-icon"><Icon name={l.icon} groesse={22} /></span>
-                <span className="ok-text">
-                  <strong>{l.name}</strong>
-                  <small>
-                    {k.sorten === 0 ? 'noch leer' : `${k.sorten} ${k.sorten === 1 ? 'Sorte' : 'Sorten'}`}
-                    {k.achtung > 0 && <span className="ok-achtung"> · {k.achtung} wichtig</span>}
-                  </small>
+      <section className="abschnitt" aria-label="Lagerorte">
+        <div className="abschnitt-kopf"><h2>Lagerorte</h2></div>
+        <ul className="liste mit-icon">
+          {kacheln.map((k) => (
+            <li key={k.id} className="ort-zeile">
+              <button type="button" className="zeile" onClick={() => onNav({ ort: k.id })}>
+                <span className="icon-kachel"><Icon name={ICON[k.id]} groesse={18} /></span>
+                <span className="zeile-haupt">
+                  <span className="zeile-titel">{LAGERORTE.find((l) => l.id === k.id)!.name}</span>
+                  <span className="zeile-meta">
+                    {k.sorten === 0 ? 'leer' : `${k.sorten} ${k.sorten === 1 ? 'Sorte' : 'Sorten'}`}
+                    {k.achtung > 0 && <span className="status-achtung"> · {k.achtung} wichtig</span>}
+                  </span>
                 </span>
-                <span className="ok-zahl"><strong>{k.zahl}</strong><small>{k.einheit}</small></span>
-                <span className="ok-balken" aria-hidden="true">
-                  {k.farben.map((f) => <span key={f.farbe} className={`f-${f.farbe}`} style={{ flexGrow: f.anteil }} />)}
-                </span>
+                <span className="zeile-wert"><strong>{k.zahl}</strong> {k.einheit === 'Portionen' ? 'Port.' : k.einheit}</span>
+                <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
               </button>
-            );
-          })}
-        </div>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      <div className="kennzahl-reihe">
-        <div className="kennzahl-karte">
-          <small>Wert des Vorrats</small>
-          <strong>{wert.cent > 0 ? `≈ ${euro(wert.cent)}` : '–'}</strong>
-          <span>{wert.ohne_preis > 0 ? `${wert.ohne_preis} ohne Preis` : 'aus euren Preisen'}</span>
-        </div>
-        {einkauf && (
-          <button type="button" className="kennzahl-karte" onClick={onZumEinkauf}>
-            <small>Einkaufsliste</small>
-            <strong>{einkauf.offen === 0 ? 'Leer' : `${einkauf.offen} offen`}</strong>
-            <span>{einkauf.kosten ?? 'Nichts zu kaufen'}</span>
-          </button>
+      <section className="abschnitt">
+        <ul className="liste mit-icon">
+          {komponenten.length > 0 && (
+            <li>
+              <button type="button" className="zeile" onClick={() => onNav({ ort: 'alle', art: 'komponente' })}>
+                <span className="icon-kachel"><Icon name="baustein" groesse={18} /></span>
+                <span className="zeile-haupt">
+                  <span className="zeile-titel">Komponenten</span>
+                  <span className="zeile-meta">vorgekocht im Bestand</span>
+                </span>
+                <span className="zeile-wert"><strong>{komponenten.filter((s) => s.anzahl > 0).length}</strong> da</span>
+                <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
+              </button>
+            </li>
+          )}
+          <li>
+            <button type="button" className="zeile alle-knopf" onClick={() => onNav({ ort: 'alle' })}>
+              <span className="icon-kachel"><Icon name="sorten" groesse={18} /></span>
+              <span className="zeile-haupt"><span className="zeile-titel">Alle Sorten</span></span>
+              <span className="zeile-wert">{bestand.length}</span>
+              <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
+            </button>
+          </li>
+        </ul>
+        {wert.cent > 0 && (
+          <p className="abschnitt-fuss">
+            Wert des Vorrats ≈ {euro(wert.cent)}{wert.ohne_preis > 0 ? ` – ohne ${wert.ohne_preis} ${wert.ohne_preis === 1 ? 'Sorte' : 'Sorten'} ohne Preis` : ''}
+          </p>
         )}
-      </div>
-
-      <button type="button" className="knopf breit alle-knopf" onClick={() => onNav({ ort: 'alle' })}>
-        Alle {bestand.length} Sorten ansehen <Icon name="pfeil" groesse={18} />
-      </button>
+      </section>
     </>
   );
 }

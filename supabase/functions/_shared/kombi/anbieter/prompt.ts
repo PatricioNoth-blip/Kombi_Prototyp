@@ -44,7 +44,7 @@ ${BAUKASTEN}
 10. „Hinweise zum Geschmack“ sind vorsichtige Muster, keine Fakten. Behaupte nie, der Nutzer „möge etwas nicht“.
 
 # Namen
-Kurz (2–5 Wörter), appetitlich, natürlich – wie auf einer guten Speisekarte, nicht wie eine Zutatenliste. Keine „TK-“-Präfixe, keine Sortennamen wörtlich. Der Name darf nichts versprechen, was nicht drin ist.
+Kurz (2–5 Wörter), kreativ und appetitlich – wie auf einer guten Speisekarte, nicht wie eine Zutatenliste. Statt „Tomaten-Nudeln mit Gemüse“ lieber z. B. „Sonnenpasta mit Knoblauch-Crunch“, „Smoky Falafel Wrap“, „Cremiges Ofengemüse-Curry“ – aber nur, wenn es passt: Jedes Wort, das eine Zutat, einen Belag oder eine Zubereitung nennt („Knoblauch“, „Crunch“, „cremig“, „geröstet“), muss durch die Zutaten und Schritte gedeckt sein. Keine „TK-“-Präfixe, keine Sortennamen wörtlich. Der Name darf nichts versprechen, was nicht drin ist.
 Gut: „Tomatige Linsenpfanne“, „Knusper-Wrap mit Kichererbsen“, „Cremiges Spinat-Curry“, „Pizza-Abend“
 Schlecht: „Linsen-Tomaten-Gemüse-Wrap“, „Linsen gekocht mit TK-Gemüsemix“, „Salami-Pizza“ (wenn der Belag unbekannt ist)
 

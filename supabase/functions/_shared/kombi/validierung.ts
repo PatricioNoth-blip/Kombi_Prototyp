@@ -4,6 +4,7 @@
 //   • mehr als vorhanden → Rest „fehlt“; Mengen in der Einheit der Sorte (Portion, Stück, g, ml)
 //   • Kosten, Portionen, Gerichtsart und „rettet Lebensmittel“ rechnet ausschließlich dieser Code
 //   • Texte werden gegen erfundene Zutaten, Preise und Behauptungen geprüft (wahrheit.ts)
+import { naehrwerteFuerGericht } from './naehrwerte.ts';
 import type {
   BausteinIdee, Eigenschaften, FehlendeZutat, Gericht, Gerichtsart, GerichtZutat, Kosten, Optionen,
   RohBaustein, RohGericht, RohZutat, Snapshot, SnapshotZutat,
@@ -286,6 +287,8 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
       hinweise: hinweiseVon(zutaten),
       eigenschaften: normalisiereEigenschaften(roh.eigenschaften, name.name),
       kosten: berechneKosten(zutaten, fehlt, personen),
+      naehrwerte: naehrwerteFuerGericht({ zutaten, fehlt, portionen: personen },
+        (id) => snapshot.zutaten.find((s) => s.block_typ_id !== null && s.block_typ_id === id)?.naehrwert ?? null),
       bewertung: 0,
     },
   };

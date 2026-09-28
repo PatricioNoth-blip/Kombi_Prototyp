@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { AuftauEintrag, AuftauVorschlag } from '../supabase/functions/_shared/kombi/planung.ts';
 import { heuteAuftauen } from '../supabase/functions/_shared/kombi/planung.ts';
 import { kurzMenge } from '../supabase/functions/_shared/kombi/aktionen.ts';
@@ -54,89 +54,86 @@ export function Auftauen({ bestand, plaene, vorschlaege, eintraege, heute, onMel
     }
   }
 
+  const zeile = (key: string, titel: string, meta: string, aktionen: ReactNode, klasse = '') => (
+    <li key={key}>
+      <div className={`zeile ${klasse}`}>
+        <span className="icon-kachel"><Icon name="schneeflocke" groesse={18} /></span>
+        <span className="zeile-haupt">
+          <span className="zeile-titel">{titel}</span>
+          <span className="zeile-meta">{meta}</span>
+        </span>
+        {aktionen}
+      </div>
+    </li>
+  );
+
   return (
-    <section className="auftauen" aria-label="Für heute auftauen">
-      <h2 className="abschnitt-titel"><Icon name="schneeflocke" groesse={14} /> Für heute auftauen</h2>
-      <ul className="auftau-liste">
+    <section className="abschnitt auftauen" aria-label="Auftauen">
+      <div className="abschnitt-kopf"><h2>Auftauen</h2></div>
+      <ul className="liste mit-icon">
         {gruppen.map((g) => {
           const k = `v-${g.plan_id}`;
           const erste = g.eintraege[0];
-          return (
-            <li key={k} className="auftau-vorschlag">
-              <span className="auftau-text">
-                <strong>{tagName(heute, erste.datum)}: {g.eintraege.map((v) => `${kurzMenge(v.menge, v.einheit)} ${v.name}`).join(' + ')}</strong>
-                <small>
-                  für „{erste.titel}“ → {erste.datum === heute ? 'gleich herausnehmen' : erste.auftauen_am === heute ? 'heute zum Auftauen vormerken' : `${tagName(heute, erste.auftauen_am)} auftauen`}
-                </small>
-              </span>
-              <button
-                type="button"
-                className="knopf klein-knopf"
-                disabled={laeuft === k}
-                onClick={() => void aktion(k, async () => {
-                  for (const v of g.eintraege) await auftauenVormerken(v.block_typ_id, v.menge, v.auftauen_am, v.plan_id);
-                }, `Zum Auftauen vorgemerkt: ${g.eintraege.map((v) => v.name).join(', ')}.`)}
-              >
-                Vormerken
-              </button>
-            </li>
+          return zeile(
+            k,
+            g.eintraege.map((v) => `${kurzMenge(v.menge, v.einheit)} ${v.name}`).join(' + '),
+            `für „${erste.titel}“ · ${erste.datum === heute ? 'gleich herausnehmen' : erste.auftauen_am === heute ? 'heute herausnehmen' : `${tagName(heute, erste.auftauen_am)} herausnehmen`}`,
+            <button
+              type="button"
+              className="knopf klein"
+              disabled={laeuft === k}
+              onClick={() => void aktion(k, async () => {
+                for (const v of g.eintraege) await auftauenVormerken(v.block_typ_id, v.menge, v.auftauen_am, v.plan_id);
+              }, `Zum Auftauen vorgemerkt: ${g.eintraege.map((v) => v.name).join(', ')}.`)}
+            >
+              Vormerken
+            </button>,
           );
         })}
         {faellig.map((a) => {
           const k = `f-${a.id}`;
-          return (
-            <li key={k} className="auftau-faellig">
-              <span className="auftau-text">
-                <strong>Jetzt herausnehmen: {menge(a)}</strong>
-                <small>{fuer(a.plan_id)}</small>
-              </span>
+          return zeile(
+            k,
+            `Jetzt herausnehmen: ${menge(a)}`,
+            fuer(a.plan_id),
+            <>
               <button
                 type="button"
-                className="knopf klein-knopf"
+                className="knopf klein akzent"
                 disabled={laeuft === k}
                 onClick={() => void aktion(k, () => auftauStatus(a.id, 'aufgetaut'), `${sorte(a.block_typ_id)?.name ?? 'Portion'} taut auf.`)}
               >
-                <Icon name="haken" groesse={16} /> Herausgenommen
+                Erledigt
               </button>
               <button
                 type="button"
-                className="mini-knopf"
+                className="icon-knopf klein"
                 aria-label="Auftauen abbrechen"
                 disabled={laeuft === k}
                 onClick={() => void aktion(k, () => auftauStatus(a.id, 'abgebrochen'), 'Auftauen abgebrochen.')}
               >
                 <Icon name="schliessen" groesse={14} />
               </button>
-            </li>
+            </>,
           );
         })}
-        {aufgetaut.map((a) => (
-          <li key={`a-${a.id}`} className="auftau-aufgetaut">
-            <span className="auftau-text">
-              <strong>{menge(a)} ist aufgetaut</strong>
-              <small>bald verbrauchen · {fuer(a.plan_id)}</small>
-            </span>
-          </li>
-        ))}
-        {spaeter.map((a) => (
-          <li key={`s-${a.id}`}>
-            <span className="auftau-text">
-              <strong>{tagName(heute, a.auftauen_am)}: {menge(a)} herausnehmen</strong>
-              <small>{fuer(a.plan_id)}</small>
-            </span>
-            <button
-              type="button"
-              className="mini-knopf"
-              aria-label="Vormerkung entfernen"
-              disabled={laeuft === `s-${a.id}`}
-              onClick={() => void aktion(`s-${a.id}`, () => auftauStatus(a.id, 'abgebrochen'), 'Vormerkung entfernt.')}
-            >
-              <Icon name="schliessen" groesse={14} />
-            </button>
-          </li>
+        {aufgetaut.map((a) => zeile(`a-${a.id}`, `${menge(a)} ist aufgetaut`, `bald verbrauchen · ${fuer(a.plan_id)}`, null))}
+        {spaeter.map((a) => zeile(
+          `s-${a.id}`,
+          `${tagName(heute, a.auftauen_am)}: ${menge(a)}`,
+          fuer(a.plan_id),
+          <button
+            type="button"
+            className="icon-knopf klein"
+            aria-label="Vormerkung entfernen"
+            disabled={laeuft === `s-${a.id}`}
+            onClick={() => void aktion(`s-${a.id}`, () => auftauStatus(a.id, 'abgebrochen'), 'Vormerkung entfernt.')}
+          >
+            <Icon name="schliessen" groesse={14} />
+          </button>,
         ))}
       </ul>
-      <p className="leise klein auftau-fuss">Vorgekochtes einen Tag vorher auftauen. Erinnerung nur hier in der App, ohne Push-Nachrichten.</p>
+      <p className="abschnitt-fuss">Vorgekochtes einen Tag vorher auftauen. Der Bestand ändert sich erst beim Kochen.</p>
     </section>
   );
 }

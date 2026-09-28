@@ -1,5 +1,6 @@
 // Gemeinsame Typen der Kombi-Empfehlungslogik.
 // Reines TypeScript ohne Abhängigkeiten: läuft im Browser, in der Edge Function (Deno) und in Node-Tests.
+import type { Naehrwert, Naehrwerte } from './naehrwerte.ts';
 
 export type Farbe = 'rot' | 'braun' | 'gruen' | 'gelb' | 'weiss' | 'schwarz' | 'blau';
 export type Lagerort = 'gefrierfach' | 'kuehlschrank' | 'vorrat';
@@ -56,6 +57,8 @@ export type SnapshotZutat = {
   gerichtstypen: Gerichtstyp[] | null;
   richtung: Gewuerzrichtung | null;
   block_typ_id: number | null;
+  /** hinterlegte Nährwerte; null = unbekannt (wird nie geschätzt) */
+  naehrwert: Naehrwert | null;
 };
 
 /** Bekannter Preis einer Sorte (auch wenn sie gerade leer ist) – Grundlage für Einkaufspreise. */
@@ -263,6 +266,8 @@ export type Gericht = {
   hinweise: string[];
   eigenschaften: Eigenschaften;
   kosten: Kosten;
+  /** Kalorien/Nährwerte aus hinterlegten Daten – berechnet, teilweise oder unbekannt */
+  naehrwerte: Naehrwerte;
   bewertung: number;
 };
 
@@ -415,6 +420,8 @@ export type KomponentenVorschlag = {
   zeit_min: number;
   schritte: string[];
   nutzbarkeit: Nutzbarkeit;
+  /** Kalorien/Nährwerte je Portion der Komponente – nur aus hinterlegten Daten */
+  naehrwerte: Naehrwerte;
   /** Herstellungskosten gesamt; pro_portion_cent = je Portion der Komponente */
   kosten: Kosten;
   /** Einkauf fehlender Zutaten (Packungspreise, nur bekannte) */

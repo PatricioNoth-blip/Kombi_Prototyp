@@ -18,6 +18,15 @@ function ganzeZahl(text: string, min: number): number | null {
 }
 
 const centText = (c: number | null | undefined) => (c != null ? (c / 100).toFixed(2).replace('.', ',') : '');
+const zahlText = (n: number | string | null | undefined) => (n === null || n === undefined || n === '' ? '' : String(n).replace('.', ','));
+
+/** „12,5“ → 12.5 (auf 0,1 gerundet); leer → null (= unbekannt, nicht 0); ungültig → NaN */
+function dezimal(text: string): number | null {
+  const t = text.trim().replace(',', '.');
+  if (t === '') return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 10) / 10 : NaN;
+}
 
 /** Namen, die allein wenig über den Inhalt sagen */
 const MEHRDEUTIG = /^(tk[- ]?)?(pizza|suppe|bolognese|sosse|soße|sauce|curry|eintopf|auflauf|lasagne|chili|gericht|reste?|essen|pasta|nudeln|gemüse|gemuese|fleisch|käse|kaese|brot|salat|bowl|füllung|fuellung)$/i;
@@ -33,6 +42,8 @@ type FormularProps = {
   baukasten: boolean;
   /** Migration „planung_einkauf“: Gerichtsarten und Richtung speicherbar */
   planung?: boolean;
+  /** Migration „kosten_naehrwerte“: Nährwerte speicherbar */
+  naehrwerte?: boolean;
   /** Vorbelegung für eine neue Sorte, z. B. aus einer Komponenten-Idee */
   vorlage?: Partial<SorteDaten>;
   titel?: string;
@@ -40,7 +51,7 @@ type FormularProps = {
   onSchliessen: () => void;
 };
 
-export function SorteFormular({ sorte, baukasten, planung = false, vorlage, titel, onFertig, onSchliessen }: FormularProps) {
+export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = false, vorlage, titel, onFertig, onSchliessen }: FormularProps) {
   const start = { ...vorlage, ...(sorte ?? {}) } as Partial<Sorte>;
   const [name, setName] = useState(start.name ?? '');
   const [art, setArt] = useState<Art>(sorte ? artVon(sorte) : vorlage?.art ?? 'komponente');
@@ -59,6 +70,11 @@ export function SorteFormular({ sorte, baukasten, planung = false, vorlage, tite
   const [haltbar, setHaltbar] = useState(String(start.haltbar_tage ?? 90));
   const [gerichtstypen, setGerichtstypen] = useState<Gerichtstyp[]>(start.gerichtstypen ?? []);
   const [richtung, setRichtung] = useState<Gewuerzrichtung | null>(start.richtung ?? null);
+  const [kcal, setKcal] = useState(zahlText(start.kcal));
+  const [protein, setProtein] = useState(zahlText(start.protein_g));
+  const [kh, setKh] = useState(zahlText(start.kohlenhydrate_g));
+  const [fett, setFett] = useState(zahlText(start.fett_g));
+  const [naehrMenge, setNaehrMenge] = useState(start.naehrwert_menge ? String(start.naehrwert_menge) : '');
   const [fehler, setFehler] = useState<string | null>(null);
   const [speichert, setSpeichert] = useState(false);
 
@@ -113,6 +129,15 @@ export function SorteFormular({ sorte, baukasten, planung = false, vorlage, tite
       daten.gerichtstypen = gerichtstypen.length ? gerichtstypen : null;
       daten.richtung = richtung;
     }
+    // erst ab Migration „kosten_naehrwerte“; leer bleibt unbekannt (null), nie 0
+    if (naehrwerte) {
+      const werte = { kcal: dezimal(kcal), protein_g: dezimal(protein), kohlenhydrate_g: dezimal(kh), fett_g: dezimal(fett) };
+      if (Object.values(werte).some((w) => Number.isNaN(w))) return 'Nährwerte: Zahlen wie 12,5 eingeben – oder leer lassen, wenn unbekannt.';
+      if (werte.kcal === null && (werte.protein_g ?? werte.kohlenhydrate_g ?? werte.fett_g) !== null) return 'Nährwerte: bitte auch die Kalorien angeben.';
+      const bezug = naehrMenge.trim() === '' ? null : ganzeZahl(naehrMenge, 1);
+      if (naehrMenge.trim() !== '' && bezug === null) return 'Nährwerte gelten für: bitte eine ganze Zahl ab 1 eingeben.';
+      Object.assign(daten, werte, { naehrwert_menge: bezug });
+    }
     return {
       ...daten,
       art,
@@ -143,7 +168,7 @@ export function SorteFormular({ sorte, baukasten, planung = false, vorlage, tite
     }
   }
 
-  const detailsOffen = !!vorlage || (!!sorte && (!!sorte.herkunft || !!sorte.zusammensetzung?.length || !!sorte.notiz || !!sorte.gerichtstypen?.length));
+  const detailsOffen = !!vorlage || (!!sorte && (!!sorte.herkunft || !!sorte.zusammensetzung?.length || !!sorte.notiz || !!sorte.gerichtstypen?.length || sorte.kcal != null));
   const typisch = farbe ? TYPISCHE_GERICHTE[farbe] : [];
   const umschalten = (t: Gerichtstyp) =>
     setGerichtstypen((alt) => (alt.includes(t) ? alt.filter((x) => x !== t) : [...alt, t]));
@@ -189,7 +214,7 @@ export function SorteFormular({ sorte, baukasten, planung = false, vorlage, tite
             {FARBEN.map((f) => (
               <label key={f.id} className={`farb-option f-${f.id}${farbe === f.id ? ' gewaehlt' : ''}`}>
                 <input type="radio" name="farbe" value={f.id} checked={farbe === f.id} onChange={() => setFarbe(f.id)} />
-                <span className="farbpunkt" aria-hidden="true" />
+                <span className="punkt" aria-hidden="true" />
                 <span>{f.bedeutung}</span>
               </label>
             ))}
@@ -273,9 +298,9 @@ export function SorteFormular({ sorte, baukasten, planung = false, vorlage, tite
               {planung && (
                 <fieldset className="feld">
                   <legend>Passt in</legend>
-                  <div className="auswahl-chips">
+                  <div className="chips">
                     {WAEHLBAR.map((t) => (
-                      <button key={t} type="button" className={gerichtstypen.includes(t) ? 'gewaehlt' : ''}
+                      <button key={t} type="button" className={`chip${gerichtstypen.includes(t) ? ' gewaehlt' : ''}`}
                         aria-pressed={gerichtstypen.includes(t)} onClick={() => umschalten(t)}>
                         <span aria-hidden="true">{GERICHT_EMOJI[t]}</span> {GERICHT_NAME[t]}
                       </button>
@@ -293,9 +318,9 @@ export function SorteFormular({ sorte, baukasten, planung = false, vorlage, tite
               {planung && (
                 <fieldset className="feld">
                   <legend>Geschmacksrichtung</legend>
-                  <div className="auswahl-chips">
+                  <div className="chips">
                     {([null, ...GEWUERZRICHTUNGEN] as (Gewuerzrichtung | null)[]).map((r) => (
-                      <button key={String(r)} type="button" className={richtung === r ? 'gewaehlt' : ''}
+                      <button key={String(r)} type="button" className={`chip${richtung === r ? ' gewaehlt' : ''}`}
                         aria-pressed={richtung === r} onClick={() => setRichtung(r)}>
                         {r ?? 'offen'}
                       </button>
@@ -315,6 +340,26 @@ export function SorteFormular({ sorte, baukasten, planung = false, vorlage, tite
               <span>Gewicht pro Portion (g)</span>
               <input type="number" inputMode="numeric" min={1} value={groesse} onChange={(e) => setGroesse(e.target.value)} />
             </label>
+          )}
+          {naehrwerte && baukasten && (
+            <fieldset className="feld">
+              <legend>Nährwerte</legend>
+              <div className="naehrwert-raster">
+                {([['kcal', kcal, setKcal], ['Eiweiß (g)', protein, setProtein], ['Kohlenhydrate (g)', kh, setKh], ['Fett (g)', fett, setFett]] as const).map(([titel, wert, setzen]) => (
+                  <label key={titel} className="feld">
+                    <span>{titel}</span>
+                    <input type="text" inputMode="decimal" value={wert} onChange={(e) => setzen(e.target.value)} placeholder="unbekannt" />
+                  </label>
+                ))}
+              </div>
+              <label className="feld-inline">
+                <span>gelten für</span>
+                <input type="number" inputMode="numeric" min={1} value={naehrMenge} onChange={(e) => setNaehrMenge(e.target.value)}
+                  placeholder={einheit === 'g' || einheit === 'ml' ? '100' : '1'} aria-label="Bezugsmenge der Nährwerte" />
+                <span>{einheit === 'g' ? 'g' : einheit === 'ml' ? 'ml' : einheit === 'stueck' ? 'Stück' : 'Portion(en)'}</span>
+              </label>
+              <small>Von der Packung. Leer = unbekannt – Kombi schätzt keine Kalorien.</small>
+            </fieldset>
           )}
           <div className="reihe">
             <label className="feld">

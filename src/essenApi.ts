@@ -8,6 +8,7 @@ import { baueSnapshot, type BestandZeile } from '../supabase/functions/_shared/k
 import { erzeugeKomponenten, erzeugeVorschlaege, erzeugeWoche } from '../supabase/functions/_shared/kombi/engine.ts';
 import { regelbasiert } from '../supabase/functions/_shared/kombi/anbieter/regelbasiert.ts';
 import { rezeptDatensatz } from '../supabase/functions/_shared/kombi/aktionen.ts';
+import { UNBEKANNTE_NAEHRWERTE } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
 import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
 import type {
   Aktion, Ergebnis, Gericht, GerichtKurz, KiAnfrage, KomponentenErgebnis, Optionen, Snapshot, Vorschlag,
@@ -46,6 +47,11 @@ export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string): Snapsho
     gerichtstypen: s.gerichtstypen ?? null,
     richtung: s.richtung ?? null,
     aufgetaut: s.aufgetaut ?? null,
+    kcal: s.kcal ?? null,
+    protein_g: s.protein_g ?? null,
+    kohlenhydrate_g: s.kohlenhydrate_g ?? null,
+    fett_g: s.fett_g ?? null,
+    naehrwert_menge: s.naehrwert_menge ?? null,
   }));
   return baueSnapshot(zeilen, kuehlschrank, heute());
 }
@@ -267,6 +273,8 @@ export function gespeichertesGericht(roh: Gericht): Gericht {
     warum_jetzt: alt.warum_jetzt ?? [],
     schritte: alt.schritte ?? [],
     kosten,
+    // ältere Vorschläge kennen keine Nährwerte – die App rechnet sie aus dem aktuellen Vorrat nach
+    naehrwerte: alt.naehrwerte ?? UNBEKANNTE_NAEHRWERTE,
   };
 }
 
