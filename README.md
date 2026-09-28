@@ -62,6 +62,9 @@ oder gefiltert hat, bleibt beim Wechsel erhalten; jede Ansicht hat eine Adresse 
    **Stand der echten Datenbank (Live-Check 28.09.2026):** nur Dateien 1–4 sind eingespielt – Planung, Einkauf, Kosten/Kalorien-Protokoll, Ausgaben und Bilder-Cache fehlen dort noch.
    Nach Datei 6 die Edge Function neu deployen (siehe „KI einrichten“), damit „Komponenten entdecken“, Woche und Reste die KI nutzen – sonst rechnet die App diese Teile lokal nach Kombi-Regeln.
 
+   **Nicht `supabase db push` verwenden:** Die Dateien werden im SQL-Editor eingespielt, deshalb kennt die Migrations-Historie der CLI sie nicht – `db push` würde Datei 1 erneut ausführen und mit `relation "block_typ" already exists` abbrechen.
+   **Welche Dateien fehlen?** [`scripts/schema-stand.sql`](scripts/schema-stand.sql) im SQL-Editor ausführen (nur lesend): je Migrationsdatei „vollständig / teilweise / fehlt“ mit Liste des Fehlenden – Tabellen, Spalten, Funktionen, Trigger, Fremdschlüssel, RLS, Policies, Rechte, Bucket. Der Live-Check zeigt einen Teil davon bei jedem Lauf.
+
 ### 2. App lokal starten
 
 Voraussetzung: [Node.js](https://nodejs.org) 22 oder neuer.
@@ -88,7 +91,7 @@ Zum Testen auf dem Handy im selben WLAN: `npm run dev -- --host` starten und die
 
 ### 3. Aufs Handy: GitHub Pages
 
-1. Im GitHub-Repo unter **Settings → Pages → Source** „GitHub Actions“ wählen.
+1. Im GitHub-Repo unter **Settings → Pages → Source** „GitHub Actions“ wählen (Stand 28.09.2026: noch nicht aktiviert, und es gibt noch keinen Branch `main`).
 2. Auf den Branch `main` pushen. Du kannst den Workflow „Veröffentlichen (GitHub Pages)“ auch von Hand starten.
    Er nimmt die Werte aus der `.env`. Sind unter **Settings → Secrets and variables → Actions → Variables**
    `SUPABASE_URL` und `SUPABASE_KEY` gesetzt, haben diese Vorrang.
@@ -225,6 +228,8 @@ Ohne Einrichtung läuft „Was essen wir?“ im **Demo-Modus**: Vorschläge nach
 ```
 npx.cmd supabase functions deploy was-essen --project-ref yjjgfdvpqmclocgejrhz --no-verify-jwt
 ```
+Deployt wird der Code im **gerade ausgecheckten** Ordner – vorher den aktuellen Stand holen (`git switch <branch>` und `git pull`).
+Kontrolle: `GET …/functions/v1/was-essen` muss JSON mit `version` liefern. `{"fehler":"Nur POST."}` (HTTP 405) heißt: Es läuft noch Code ohne Health-Check.
 
 **Anbieter wechseln** – nur Secrets ändern, kein Code:
 
@@ -248,7 +253,7 @@ Die Kette ist nachvollziehbar: **App → Edge Function `was-essen` → KI-Anbiet
 - In der App: **Essen → Ändern → KI** zeigt dasselbe; „Testen“ startet den Probelauf. Ist keine KI eingerichtet, steht dort ehrlich „Nicht eingerichtet – Vorschläge nach Kombi-Regeln“.
 - App und Function tragen dieselbe Engine-Version (`ENGINE_VERSION` in `gesundheit.ts`). Weicht sie ab, bittet die App um ein neues Deployment.
 - Der **Live-Check** (GitHub Actions, bei jedem Push) ruft den Health-Check auf, bei eingerichteter KI den Probelauf – bei einer älteren Function einen kleinen POST-Probelauf. Fehler externer Dienste (Kontingent, Wikimedia) erscheinen als ⚠, nicht als Code-Fehler.
-- **Live-Stand 28.09.2026:** Die Function ist deployt, aber noch eine **ältere Version ohne Health-Check** → bitte neu deployen (Befehl oben). Erst danach zeigen Health-Check und Probelauf Anbieter, Modell und Antwortzeit.
+- **Live-Stand 28.09.2026, 16:53 UTC:** Die Function ist deployt (Supabase: VERSION 2), aber mit Code **ohne Health-Check**: `GET` → 405 „Nur POST.“, kein Header `x-kombi-version`. Die KI selbst antwortet (groq · openai/gpt-oss-120b, heute 4,5–9,2 s, Vorschläge bestehen die Prüfung). Die App zeigt deshalb „alte Version – bitte neu deployen“ und kein „Testen“. Abhilfe: aus dem aktuellen Stand neu deployen (siehe oben).
 
 ### Was die KI bekommt und liefert
 
@@ -326,13 +331,16 @@ Die 274 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasi
 - Kalorien: Summe aus echten Mengen, je Portion, unbekannt ≠ 0, teilweise („ab …“), Makros nur wenn vollständig, KI-Angaben ignoriert; Produktion skalieren (vorhanden / benötigt / fehlt)
 - Oberfläche ohne Browser: fünf Bereiche, Zustand beim Wechsel, Adressen und Zurück, Start immer zuerst; Startseite: Ausgaben ohne Doppelzählung, Monatskosten, Ø pro Mahlzeit, heute gekocht, Reihenfolge, Dringendes; „Heute wichtig“, Lagerorte, Füllstand, Vorratswert, Suche
 
-Für `test:db` müssen die Postgres-Programme installiert sein (macOS: `brew install postgresql`, Ubuntu/WSL: `sudo apt install postgresql`). Das Skript startet eine Wegwerf-Datenbank und löscht sie danach wieder. Die echte Supabase-Datenbank wird nie angefasst.
+Für `test:db` müssen die Postgres-Programme installiert sein (macOS: `brew install postgresql`, Ubuntu/WSL: `sudo apt install postgresql`). Das Skript startet eine Wegwerf-Datenbank und löscht sie danach wieder. Die echte Supabase-Datenbank wird nie angefasst. Zum Schluss prüft es, dass `scripts/schema-stand.sql` nach allen Migrationen „vollständig“ meldet – so bleibt die Diagnose für die echte Datenbank aktuell.
 Bei jedem Push laufen alle Tests, der App-Build und eine Deno-Prüfung der Edge Function automatisch in GitHub Actions (Workflow „CI“).
 
 **Live-Check:** Der Workflow „Live-Check (echte Supabase)“ prüft bei jedem Push die echte Datenbank
 aus der `.env` (Migrationen, Seed, Rechte, Buchungsfunktionen), die KI-Verbindung (Health-Check, Probelauf), die Bildsuche
 (Wikimedia Commons) und klickt die gebaute App im Browser durch – auf 390 px und 375 px Breite (kein horizontaler Überlauf,
 Reiter vollständig, keine kaputten Bilder), im Dunkelmodus und mit Höhenangaben der kompakten Startseite. Außerdem prüft er die Lesbarkeit hell und dunkel (Kontrast nach WCAG AA, keine per „…“ abgeschnittenen Texte).
+Er zeigt den **Schema-Stand je Migrationsdatei** (Tabellen, Spalten, Funktionen – nur lesend), **welcher Function-Code deployt ist**
+(GET-Status, `x-kombi-version`) und prüft in der App **Essen → Ändern → KI**: Ist die Function aktuell, muss „Testen“ einen echten
+Probelauf mit „Live getestet …“ liefern; bei einer alten Function darf es kein „Testen“ geben.
 Er **ändert keine Daten**: Buchungen werden nur mit Werten aufgerufen, die garantiert abgelehnt werden.
 Über **Actions → Live-Check → Run workflow** lässt er sich auch von Hand starten, z. B. wenn die App
 plötzlich nichts mehr anzeigt.
@@ -388,7 +396,9 @@ supabase/seed.sql                    Beispieldaten
 tests/inventar_test.sql              Tests der Akzeptanzkriterien
 tests/supabase_rollen.sql            bildet die Supabase-Rollen für lokale Tests nach
 tests/live-check.mjs                 Live-Check gegen die echte Supabase (ändert nichts)
+tests/schema-stand.mjs               Schema-Stand je Migration über die App-Rolle (für den Live-Check)
 scripts/test.sh                      startet Wegwerf-Postgres und führt die Tests aus
+scripts/schema-stand.sql             Schema-Stand je Migration für den SQL-Editor (nur lesend)
 src/api.ts                           alle Supabase-Aufrufe
 src/haushalt.ts                      Pläne, Einkauf, Auftauen, kochen/essen/produzieren – Supabase-Aufrufe
 src/Inventar.tsx                     Rahmen: fünf Bereiche, Adressen/Zurück, gemeinsame Berechnung, Kochansicht
