@@ -7,11 +7,14 @@ import { bereiteProduktionVor, komponenteAlsSorte, type ProduktionsZeile } from 
 import { GERICHT_EMOJI, GERICHT_NAME, ROLLEN } from '../supabase/functions/_shared/kombi/rollen.ts';
 import { batchEmpfehlungen, type BatchSorte, type NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts';
 import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
-import { fehlerText, ladeBestand, speichereSorte, type Sorte, type SorteDaten } from './api';
+import { fehlerText, ladeBestand, setzeNaehrwerte, speichereSorte, type Sorte, type SorteDaten } from './api';
 import { baueSnapshotAus, holeKomponenten, type Quelle } from './essenApi';
 import {
-  eintragHinzufuegen, entfernePlan, herstellen, kochenRueckgaengig, planeKomponente, produzieren, produzierenRueckgaengig, type Plan,
+  eintragHinzufuegen, entfernePlan, herstellen, kochenRueckgaengig, naehrwertVon, planeKomponente, produzieren, produzierenRueckgaengig, type Plan,
 } from './haushalt';
+import { naehrwerteAusProduktion } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
+import type { HerstellungsZeile } from './startseite';
+import { tagName } from './dashboard';
 import { Blatt } from './Blatt';
 import { PostenListe } from './PostenListe';
 import { Icon } from './Icon';
@@ -34,6 +37,8 @@ type Props = {
   reserviert: Map<number, number>;
   /** lokal nach Kombi-Regeln berechnete Ideen (null = wird berechnet) */
   ideen: KomponentenVorschlag[] | null;
+  /** Protokoll der Herstellungen (Migration „kosten_naehrwerte“) – für den Verlauf */
+  herstellungen: HerstellungsZeile[];
   heute: string;
   onOeffnen: (s: Sorte) => void;
   /** zur Wochenplanung (Essen → Woche) */
@@ -86,7 +91,7 @@ type Auftrag = { k: KomponentenVorschlag; planId: string | null };
  * Produktion: Komponenten vorkochen und einlagern. Oben steht nur, was JETZT sinnvoll ist –
  * Vorgemerktes mit allem da, sonst eine Idee, die Dringendes verwertet. Alles Weitere darunter.
  */
-export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPlan, nutzung, reserviert, ideen, heute, onOeffnen, onWoche, onMeldung, onGeaendert }: Props) {
+export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPlan, nutzung, reserviert, ideen, herstellungen, heute, onOeffnen, onWoche, onMeldung, onGeaendert }: Props) {
   const [kiIdeen, setKiIdeen] = useState<KomponentenVorschlag[] | null>(null);
   const [quelle, setQuelle] = useState<{ art: Quelle; anbieter: string; hinweis: string | null } | null>(null);
   const [laedt, setLaedt] = useState(false);
@@ -118,6 +123,11 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
     .filter((s) => artVon(s) === 'komponente')
     .sort((a, b) => Number(b.anzahl > 0) - Number(a.anzahl > 0) || a.name.localeCompare(b.name, 'de'));
   const batch = batchEmpfehlungen(bestand.map(alsBatchSorte), nutzung);
+  // Verlauf: die letzten tatsächlichen Herstellungen (ohne Rückgängig gemachte)
+  const verlauf = herstellungen
+    .filter((x) => !x.rueckgaengig && x.block_typ_id !== undefined && x.menge !== undefined)
+    .sort((a, b) => (b.erstellt_am ?? b.datum).localeCompare(a.erstellt_am ?? a.datum))
+    .slice(0, 5);
 
   async function mitKi() {
     setLaedt(true);
@@ -252,6 +262,30 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
           {plaene.filter((p) => p.datum !== null && p.datum >= tage[0] && p.datum <= tage[6]).length} geplant in den nächsten 7 Tagen{flexibel > 0 ? ` · ${flexibel} flexibel ohne Tag` : ''}
         </p>
       </Box>
+
+      {verlauf.length > 0 && (
+        <Box titel="Verlauf" icon="haken">
+          <ul className="liste">
+            {verlauf.map((v, i) => {
+              const s = bestand.find((b) => b.id === v.block_typ_id);
+              return (
+                <li key={`${v.erstellt_am ?? v.datum}-${i}`}>
+                  <div className="zeile">
+                    <span className="zeile-haupt">
+                      <span className="zeile-titel">{s?.name ?? 'Komponente'}</span>
+                      <span className="zeile-meta">{tagName(heute, v.datum)} · +{mengeText(v.menge ?? 0, s ? einheitVon(s) : 'portion')}</span>
+                    </span>
+                    <span className="zeile-wert">
+                      {v.kosten_cent === null ? 'Kosten unbekannt' : `${v.kosten_unbekannt ? 'ab ' : ''}${euroText(v.kosten_cent)}`}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="abschnitt-fuss">Wert der verarbeiteten Zutaten – schon in den Einkäufen enthalten, nie doppelt gezählt.</p>
+        </Box>
+      )}
 
       {komponenten.length > 0 && (
         <Box titel="Deine Komponenten" icon="vorrat">
@@ -500,7 +534,25 @@ function ProduktionBlatt({ auftrag, plan, bestand, sorten, protokoll, onMeldung,
         const kosten = r.kosten_cent !== null
           ? ` · ${euroText(r.kosten_cent)} (${euroText(Math.round(r.kosten_cent / Math.max(1, tatsaechlich)))} / Portion)`
           : r.kosten_bekannt_cent ? ` · ab ${euroText(r.kosten_bekannt_cent)}, nicht alle Preise bekannt` : ' · Kosten unbekannt';
-        onFertig(`${name}: +${mengeText(menge, einheit)} im Vorrat${kosten}`, () => produzierenRueckgaengig(r.herstellung_id));
+        // Nährwerte der Komponente aus den tatsächlich entnommenen Zutaten – nur vollständig bekannt,
+        // und nur, wenn die Sorte noch keine hat (Werte von der Packung werden nie überschrieben)
+        let kcalText = '';
+        if (!ziel || ziel.kcal === null || ziel.kcal === undefined) {
+          const ungebucht = vorbereitet.zeilen.filter((z) => z.status !== 'da' || z.benoetigt === null).map((z) => z.name);
+          const nw = naehrwerteAusProduktion(
+            posten.filter((p) => p.menge > 0).map((p) => ({ name: p.name, menge: p.menge, naehrwert: naehrwertVon(bestand, p.block_typ_id) })),
+            ungebucht, menge,
+          );
+          if (nw) {
+            try {
+              await setzeNaehrwerte(id, nw);
+              kcalText = ` · ${Math.round(nw.kcal / Math.max(1, tatsaechlich)).toLocaleString('de-DE')} kcal / Portion`;
+            } catch {
+              // Nährwerte sind ein Zusatz – die Produktion ist gebucht
+            }
+          }
+        }
+        onFertig(`${name}: +${mengeText(menge, einheit)} im Vorrat${kosten}${kcalText}`, () => produzierenRueckgaengig(r.herstellung_id));
       } else {
         const ids = await herstellen(aktiv, id, menge, ablauf || null, plan?.id ?? null);
         onFertig(`${name}: +${mengeText(menge, einheit)} im Vorrat.`, () => kochenRueckgaengig(ids, plan?.id ?? null));

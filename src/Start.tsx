@@ -139,10 +139,10 @@ export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaell
     );
   }
 
-  const produktionText = !h.planung ? 'Noch nicht eingerichtet'
+  const produktionText = !h.planung ? 'Migration fehlt'
     : vorgemerkt.length ? `${vorgemerkt.length} geplant`
       : tipp ? `Sinnvoll: ${tipp.art === 'vorgemerkt' ? tipp.titel : tipp.komponente.name}` : 'Gerade nichts nötig';
-  const einkaufText = !h.planung ? 'Noch nicht eingerichtet' : offen.length ? `${offen.length} offen` : 'Alles da';
+  const einkaufText = !h.planung ? 'Migration fehlt' : offen.length ? `${offen.length} offen` : 'Alles da';
 
   const teile: Record<StartAbschnitt, () => ReactNode> = {
     heute: () => <HeuteKarte key="heute" t={tag} protokoll={h.protokoll} onOeffnen={() => setTagOffen(true)} />,

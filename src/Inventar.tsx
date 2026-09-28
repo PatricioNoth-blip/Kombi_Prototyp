@@ -358,6 +358,7 @@ export function Inventar() {
                 nutzung={h.nutzung}
                 reserviert={liste.verteilung.reserviert}
                 ideen={ideen?.komponenten ?? null}
+                herstellungen={h.herstellungen}
                 heute={heute}
                 onOeffnen={oeffneSorte}
                 onWoche={() => dispatch({ typ: 'route', route: { bereich: 'essen', ort: null, art: null, ansicht: 'woche', sorte: null } })}

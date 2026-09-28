@@ -180,3 +180,9 @@ export async function speichereSorte(id: number | null, daten: SorteDaten): Prom
   if (error) throw new Error(meldung(error));
   return (data as { id: number }).id;
 }
+
+/** Nährwerte einer Sorte setzen (z. B. aus einer Produktion gelernt) – nur die Nährwert-Spalten. */
+export async function setzeNaehrwerte(id: number, werte: Pick<Sorte, 'kcal' | 'protein_g' | 'kohlenhydrate_g' | 'fett_g' | 'naehrwert_menge'>): Promise<void> {
+  const { error } = await supabase.from('block_typ').update(werte).eq('id', id);
+  if (error) throw new Error(meldung(error));
+}

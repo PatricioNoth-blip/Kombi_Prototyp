@@ -192,3 +192,23 @@ describe('Seed ohne Nährwerte', () => {
     assert.equal(snap.zutaten[0].naehrwert, null);
   });
 });
+
+describe('Komponenten-Nährwerte aus der tatsächlichen Produktion', () => {
+  const tomaten = { kcal: 18, protein_g: 0.9, kohlenhydrate_g: 3.9, fett_g: 0.2, menge: 100 };
+  const zwiebeln = { kcal: 40, protein_g: 1.1, kohlenhydrate_g: 9.3, fett_g: 0.1, menge: 100 };
+  test('800 g Tomaten + 150 g Zwiebeln → 6 Portionen Tomaten-Basis: 204 kcal für 6 Portionen (34 / Portion)', async () => {
+    const { naehrwerteAusProduktion } = await import('../../supabase/functions/_shared/kombi/naehrwerte.ts');
+    const n = naehrwerteAusProduktion([{ name: 'Tomaten', menge: 800, naehrwert: tomaten }, { name: 'Zwiebeln', menge: 150, naehrwert: zwiebeln }], ['Salz', 'Pfeffer'], 6)!;
+    assert.deepEqual([n.kcal, n.naehrwert_menge], [204, 6]);
+    assert.equal(n.protein_g, 8.9);
+  });
+  test('unbekannt bleibt unbekannt: Öl ohne Menge, nicht erfasste Zutat oder fehlende Nährwerte → nichts gelernt', async () => {
+    const { naehrwerteAusProduktion } = await import('../../supabase/functions/_shared/kombi/naehrwerte.ts');
+    const posten = [{ name: 'Tomaten', menge: 800, naehrwert: tomaten }];
+    assert.equal(naehrwerteAusProduktion(posten, ['Öl'], 6), null, 'Öl hat Kalorien, Menge unbekannt');
+    assert.equal(naehrwerteAusProduktion(posten, ['Knoblauch'], 6), null, 'nicht im Vorrat erfasst');
+    assert.equal(naehrwerteAusProduktion([...posten, { name: 'Soße', menge: 200, naehrwert: null }], [], 6), null);
+    assert.equal(naehrwerteAusProduktion([], [], 6), null);
+    assert.ok(naehrwerteAusProduktion(posten, ['Wasser', 'Salz'], 6), 'Wasser und Salz haben 0 kcal');
+  });
+});

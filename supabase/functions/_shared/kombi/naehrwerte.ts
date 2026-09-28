@@ -115,6 +115,24 @@ export function naehrwerteFuerGericht(
   return summiereNaehrwerte(posten, g.portionen);
 }
 
+/**
+ * Nährwerte einer hergestellten Komponente aus den TATSÄCHLICH entnommenen Zutaten – nur wenn alles
+ * bekannt ist: jede gebuchte Zutat mit Menge und Nährwerten, und nichts Kalorienhaltiges ungebucht
+ * (nicht erfasste Zutaten, fehlende Teilmengen, Öl aus der Grundausstattung). Wasser, Salz und Pfeffer
+ * zählen als 0 kcal. Ergebnis gilt für `menge` Einheiten der Komponente – sonst null (unbekannt bleibt
+ * unbekannt). Wird später eine Portion gegessen, zählen diese Werte; die Zutaten nicht noch einmal.
+ */
+export function naehrwerteAusProduktion(
+  posten: { name: string; menge: number; naehrwert: Naehrwert | null }[],
+  ungebucht: string[],
+  menge: number,
+): { kcal: number; protein_g: number | null; kohlenhydrate_g: number | null; fett_g: number | null; naehrwert_menge: number } | null {
+  if (posten.length === 0 || !(menge > 0)) return null;
+  const n = summiereNaehrwerte([...posten, ...ungebucht.map((name) => ({ name, menge: null, naehrwert: null }))], 1);
+  if (n.status !== 'berechnet' || n.kcal_gesamt === null) return null;
+  return { kcal: n.kcal_gesamt, protein_g: n.protein_g, kohlenhydrate_g: n.kohlenhydrate_g, fett_g: n.fett_g, naehrwert_menge: Math.round(menge) };
+}
+
 /** „620 kcal / Portion“, „ab 450 kcal / Portion“ (teilweise), „kcal unbekannt“ */
 export function kcalText(n: Naehrwerte | null | undefined, proPortion = true): string {
   if (!n || n.status === 'unbekannt' || n.kcal_portion === null) return 'kcal unbekannt';

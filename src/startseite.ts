@@ -13,7 +13,11 @@ import type { Sorte } from './api';
 import { tageBis, zustand } from './dashboard.ts';
 
 export type EinkaufsBuchung = { erstellt_am: string; preis_cent: number | null; rueckgaengig: boolean };
-export type HerstellungsZeile = { datum: string; kosten_cent: number | null; kosten_unbekannt: number; rueckgaengig: boolean };
+export type HerstellungsZeile = {
+  datum: string; kosten_cent: number | null; kosten_unbekannt: number; rueckgaengig: boolean;
+  /** für den Verlauf in „Produktion“ (fehlt bei älteren Abfragen) */
+  block_typ_id?: number; menge?: number; erstellt_am?: string;
+};
 export type SonstigeAusgabe = { id?: number; datum: string; betrag_cent: number; notiz?: string | null; entfernt: boolean };
 export type MahlzeitZeile = {
   datum: string; titel: string; portionen: number;
