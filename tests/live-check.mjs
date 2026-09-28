@@ -349,6 +349,8 @@ if (health?.ki?.eingerichtet) {
       `${p.gerichte} von ${p.vorschlaege_roh} Vorschlägen bestanden die Kombi-Prüfung (${p.namen.join(', ')}); ` +
       `Bildanforderungen: ${p.bildanforderungen_ok}/${p.bildanforderungen} passend` +
       (p.verworfen.length ? `; verworfen: ${p.verworfen.map((v) => `${v.name} (${v.grund})`).join('; ')}` : ''));
+  } else if (p.antwort === false) {
+    console.log(`⚠ KI-Probelauf: keine Antwort vom Anbieter – ${p.fehler} (${(p.ms / 1000).toFixed(1)} s)`);
   } else {
     console.log(`⚠ KI-Probelauf: ${p.fehler ?? 'kein Vorschlag bestand die Prüfung'} – JSON ${p.json_gueltig ? 'gültig' : 'ungültig'}, Format ${p.schema_gueltig ? 'gültig' : 'ungültig'}, ${(p.ms / 1000).toFixed(1)} s`);
   }

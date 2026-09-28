@@ -63,6 +63,7 @@ oder gefiltert hat, bleibt beim Wechsel erhalten; jede Ansicht hat eine Adresse 
    Nach Datei 6 die Edge Function neu deployen (siehe „KI einrichten“), damit „Komponenten entdecken“, Woche und Reste die KI nutzen – sonst rechnet die App diese Teile lokal nach Kombi-Regeln.
 
    **Nicht `supabase db push` verwenden:** Die Dateien werden im SQL-Editor eingespielt, deshalb kennt die Migrations-Historie der CLI sie nicht – `db push` würde Datei 1 erneut ausführen und mit `relation "block_typ" already exists` abbrechen.
+   **Vor dem Einspielen sichern:** [`scripts/daten-export.sql`](scripts/daten-export.sql) im SQL-Editor ausführen (nur lesend) und das JSON-Ergebnis als Datei speichern – Sorten, Chargen, Bewegungen und „Was essen wir?“-Daten.
    **Welche Dateien fehlen?** [`scripts/schema-stand.sql`](scripts/schema-stand.sql) im SQL-Editor ausführen (nur lesend): je Migrationsdatei „vollständig / teilweise / fehlt“ mit Liste des Fehlenden – Tabellen, Spalten, Funktionen, Trigger, Fremdschlüssel, RLS, Policies, Rechte, Bucket. Der Live-Check zeigt einen Teil davon bei jedem Lauf.
 
 ### 2. App lokal starten
@@ -310,7 +311,7 @@ npm run test:ki     # nur „Was essen wir?“ – läuft überall, auch unter W
 npm run test:db     # nur Datenbank
 ```
 
-Die 274 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+Die 276 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
 - Bilder: nur sichere https-URLs, keine Hotlinks, Priorität eigen → gefunden → generiert → lokal → keins, kaputte Quelle (Status „fehler“) und fehlendes Bild → Fallback, Bildanforderung der KI (übernommen / „steak“ verworfen / URL verworfen / fehlt), Beschreibung nur aus Rezeptdaten, unbekannte Pizza bleibt Pizza, Commons-Auswertung (Lizenz, Motiv, fremde Zutaten, Pflanze statt Lebensmittel), Pipeline gefunden/generiert/nichts/offline, Keys nie im Ergebnis, jede App-Anfrage besteht die Prüfung der Function
 - Semantische Zutaten: „REWE Strauchtomaten 500 g“ → Tomate, Spezielles vor Allgemeinem, Unbekanntes bleibt unbekannt
 - KI-Verbindung: Health-Check ohne Keys, Probelauf (JSON gültig/ungültig, nur Halluzinationen → nicht ok), Edge Function GET/POST/Bild
@@ -399,6 +400,7 @@ tests/live-check.mjs                 Live-Check gegen die echte Supabase (änder
 tests/schema-stand.mjs               Schema-Stand je Migration über die App-Rolle (für den Live-Check)
 scripts/test.sh                      startet Wegwerf-Postgres und führt die Tests aus
 scripts/schema-stand.sql             Schema-Stand je Migration für den SQL-Editor (nur lesend)
+scripts/daten-export.sql             Datensicherung als JSON für den SQL-Editor (nur lesend)
 src/api.ts                           alle Supabase-Aufrufe
 src/haushalt.ts                      Pläne, Einkauf, Auftauen, kochen/essen/produzieren – Supabase-Aufrufe
 src/Inventar.tsx                     Rahmen: fünf Bereiche, Adressen/Zurück, gemeinsame Berechnung, Kochansicht

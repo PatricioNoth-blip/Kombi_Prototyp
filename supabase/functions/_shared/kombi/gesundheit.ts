@@ -7,11 +7,13 @@ import { erzeugeVorschlaege } from './engine.ts';
 import { kiKonfiguration } from './anbieter/konfiguration.ts';
 
 /** Version der Kombi-Engine – steht in App und Edge Function; weicht sie ab, ist die Function veraltet. */
-export const ENGINE_VERSION = '2026-09-28.2';
+export const ENGINE_VERSION = '2026-09-28.3';
 
 export type KiProbe = {
   ok: boolean;
   ms: number;
+  /** Der Anbieter hat geantwortet (false: Kontingent, Key, Modell, Netz – dann gibt es nichts zu prüfen) */
+  antwort: boolean;
   /** Antwort war JSON (sonst Fehler vor der Prüfung) */
   json_gueltig: boolean;
   /** JSON hatte das erwartete Format (Liste „vorschlaege“) */
@@ -60,6 +62,7 @@ export async function kiProbe(anbieter: KiAnbieter, jetzt: () => number = Date.n
     return {
       ok: e.gerichte.length > 0,
       ms: jetzt() - start,
+      antwort: true,
       json_gueltig: true,
       schema_gueltig: Array.isArray(r?.vorschlaege),
       vorschlaege_roh: liste.length,
@@ -72,9 +75,12 @@ export async function kiProbe(anbieter: KiAnbieter, jetzt: () => number = Date.n
     };
   } catch (err) {
     const text = err instanceof Error ? err.message : String(err);
+    // Kam überhaupt eine Antwort? Kontingent, Key, Modell, Netz → nein; kein/ungültiges JSON oder falsches Format → ja.
+    const antwort = /kein JSON|kein gültiges JSON|nicht das erwartete Format|Unerwartete Antwort/i.test(text);
     return {
       ok: false, ms: jetzt() - start,
-      json_gueltig: !/kein JSON|kein gültiges JSON/i.test(text),
+      antwort,
+      json_gueltig: antwort && /nicht das erwartete Format/i.test(text),
       schema_gueltig: false, vorschlaege_roh: 0, gerichte: 0, verworfen: [], bildanforderungen: 0, bildanforderungen_ok: 0, namen: [],
       fehler: text,
     };

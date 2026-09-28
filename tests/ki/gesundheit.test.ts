@@ -29,19 +29,34 @@ describe('Health-Check', () => {
     });
     let t = 1000;
     const p = await kiProbe(ki, () => (t += 250));
-    assert.deepEqual([p.ok, p.json_gueltig, p.schema_gueltig, p.vorschlaege_roh, p.gerichte, p.bildanforderungen, p.bildanforderungen_ok],
-      [true, true, true, 2, 1, 1, 1]);
+    assert.deepEqual([p.ok, p.antwort, p.json_gueltig, p.schema_gueltig, p.vorschlaege_roh, p.gerichte, p.bildanforderungen, p.bildanforderungen_ok],
+      [true, true, true, true, 2, 1, 1, 1]);
     assert.equal(p.ms, 250);
     assert.equal(p.verworfen[0].name, 'Lachs-Traum', 'erfundene Zutat → verworfen');
     assert.deepEqual(p.namen, ['Rote Samt-Pasta']);
     assert.equal(ki.auftraege[0].snapshot, PROBE_ANFRAGE.snapshot, 'fester Probe-Haushalt, keine echten Daten');
   });
 
-  test('Probelauf: kein JSON → json_gueltig false, verständlicher Fehler', async () => {
+  test('Probelauf: kein JSON → Antwort da, aber json_gueltig false, verständlicher Fehler', async () => {
     const ki = { name: 'x', async vorschlagen() { throw new KiFehler('Die KI hat kein JSON geliefert.'); } };
     const p = await kiProbe(ki);
-    assert.deepEqual([p.ok, p.json_gueltig, p.schema_gueltig], [false, false, false]);
+    assert.deepEqual([p.ok, p.antwort, p.json_gueltig, p.schema_gueltig], [false, true, false, false]);
     assert.match(p.fehler!, /kein JSON/);
+  });
+
+  test('Probelauf: JSON im falschen Format → JSON gültig, Format ungültig', async () => {
+    const ki = { name: 'x', async vorschlagen() { throw new KiFehler('Die Antwort der KI hatte nicht das erwartete Format.'); } };
+    const p = await kiProbe(ki);
+    assert.deepEqual([p.ok, p.antwort, p.json_gueltig, p.schema_gueltig], [false, true, true, false]);
+  });
+
+  test('Probelauf: Anbieter antwortet nicht (Kontingent, Key, Netz) → nicht „JSON gültig“, Grund bleibt erhalten', async () => {
+    for (const meldung of ['groq: kostenloses Kontingent gerade erschöpft – bitte etwas später nochmal.', 'groq: API-Key ungültig oder ohne Berechtigung.', 'groq: nicht erreichbar.']) {
+      const ki = { name: 'groq', async vorschlagen() { throw new KiFehler(meldung, 429); } };
+      const p = await kiProbe(ki);
+      assert.deepEqual([p.ok, p.antwort, p.json_gueltig, p.schema_gueltig], [false, false, false, false], meldung);
+      assert.equal(p.fehler, meldung);
+    }
   });
 
   test('Probelauf: nur Halluzinationen → nicht ok (kein Modell gewinnt durch Erfundenes)', async () => {

@@ -8,6 +8,8 @@ import { Icon } from './Icon';
 type Zustand = (Status & { probe?: KiProbe }) | null;
 
 function probeText(p: KiProbe): string {
+  // „=== false“: ältere Functions liefern das Feld nicht
+  if (p.antwort === false) return `Test fehlgeschlagen: ${p.fehler ?? 'keine Antwort vom KI-Anbieter'}`;
   if (!p.json_gueltig) return `Test fehlgeschlagen: keine gültige JSON-Antwort${p.fehler ? ` (${p.fehler})` : ''}.`;
   if (!p.schema_gueltig) return `Test fehlgeschlagen: ${p.fehler ?? 'unerwartetes Format'}.`;
   const zeit = `${(p.ms / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} s`;
