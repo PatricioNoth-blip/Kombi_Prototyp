@@ -82,9 +82,28 @@ function erwarteFehler({ error }, code, text) {
 }
 
 async function ladeBestand() {
-  const { data, error } = await db.from('bestand').select('*');
+  const { data, error } = await db.from('bestand').select('*').order('id');
   if (error) throw new Error(fehlerText(error));
   return data;
+}
+
+// Zählt Bestand und neueste Bewegung – ändert sich beides nicht, hat niemand gebucht.
+async function bestandsStand() {
+  const [bestand, letzte] = await Promise.all([
+    ladeBestand(),
+    db.from('bewegung').select('id').order('id', { ascending: false }).limit(1),
+  ]);
+  return { mengen: new Map(bestand.map((s) => [s.id, { name: s.name, anzahl: s.anzahl }])), bewegung: letzte.data?.[0]?.id ?? 0 };
+}
+
+// Was hat sich zwischen zwei Ständen geändert? Nennt Sorten und neue Bewegungen (Art, Menge, Zeit).
+async function bestandsAenderung(vorher, nachher) {
+  const sorten = [...nachher.mengen].filter(([id, s]) => vorher.mengen.get(id)?.anzahl !== s.anzahl)
+    .map(([id, s]) => `${s.name} ${vorher.mengen.get(id)?.anzahl ?? '–'} → ${s.anzahl}`);
+  if (!sorten.length && nachher.bewegung === vorher.bewegung) return null;
+  const { data } = await db.from('bewegung').select('id, menge, art, erstellt_am').gt('id', vorher.bewegung).order('id');
+  const neu = (data ?? []).map((b) => `${b.art} ${b.menge > 0 ? '+' : ''}${b.menge} um ${b.erstellt_am.slice(11, 19)}`);
+  return `${sorten.join(', ') || 'keine Mengenänderung'}; neue Bewegungen: ${neu.join(', ') || 'keine'}`;
 }
 
 // ───────── Verbindung ─────────
@@ -591,14 +610,26 @@ if (!APP_URL) {
     await page.click('.tabbar button:has-text("Start")');
     const knopf = page.locator('main > div:not([hidden]) .rezept-kompakt .rk-kochen').first();
     if (!(await knopf.count())) return 'kein Vorschlag aus dem Vorrat';
-    const vorher = JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl]));
+    // Schreibende Anfragen der App in diesem Zeitfenster (Bild-Cache ausgenommen – kein Bestand)
+    const geschrieben = [];
+    const mitschreiben = (r) => {
+      const pfad = new URL(r.url()).pathname;
+      if (r.method() !== 'GET' && r.method() !== 'HEAD' && pfad.includes('/rest/v1/') && !pfad.endsWith('/rest/v1/bild')) geschrieben.push(`${r.method()} ${pfad.split('/rest/v1/')[1]}`);
+    };
+    const vorher = await bestandsStand();
     const name = await page.locator('main > div:not([hidden]) .rezept-kompakt h3').first().textContent();
+    page.on('request', mitschreiben);
     await knopf.click();
     await page.waitForSelector('.kochen');
     await page.waitForTimeout(300);
     const meta = (await page.innerText('.kochen-kopf .meta-icons')).replace(/\s+/g, ' ');
     await page.click('.kochen [aria-label="Zurück"]');
-    if (JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl])) !== vorher) throw new Error('Bestand hat sich geändert!');
+    await page.waitForTimeout(300);
+    page.off('request', mitschreiben);
+    if (geschrieben.length) throw new Error(`App hat geschrieben: ${geschrieben.join(', ')}`);
+    const aenderung = await bestandsAenderung(vorher, await bestandsStand());
+    // Die App hat nichts geschrieben – eine Änderung kam von außen (z. B. jemand nutzt die App gleichzeitig).
+    if (aenderung) return `${name}: ${meta} · ℹ Bestand wurde gleichzeitig von außerhalb geändert (${aenderung}) – die App selbst hat nichts geschrieben`;
     return `${name}: ${meta}`;
   });
 

@@ -32,7 +32,8 @@ oder gefiltert hat, bleibt beim Wechsel erhalten; jede Ansicht hat eine Adresse 
 - **Entnehmen:** zuerst aus geöffneten Chargen, dann aus der mit dem frühesten Ablauf, sonst aus der ältesten (FIFO).
 - **Rückgängig:** Nach jeder Buchung erscheint einige Sekunden lang „Rückgängig“. Das bucht eine Korrektur, ohne etwas zu löschen.
 - **🍲 Produktion:** „Jetzt sinnvoll“ mit Foto und Grund („Läuft bald ab: Gehackte Tomaten“), „Geplant“ als Wochenstreifen,
-  Vorgemerkt, Empfohlen (Kombi-Regeln, „Neue Ideen“ fragt die KI), deine Komponenten, größer vorkochen.
+  Vorgemerkt, Empfohlen (Kombi-Regeln, „Neue Ideen“ fragt die KI), deine Komponenten, größer vorkochen, **Verlauf**
+  (die letzten Herstellungen mit Menge und Warenwert).
 - **🛒 Einkauf:** „Zum Einkaufen“, „Für geplante Gerichte“, „Im Wagen“ – verrechnet mit dem Vorrat, Kosten nur aus bekannten Preisen.
 - Hell- und Dunkelmodus (eigene, warme Farben für beide) folgen der Systemeinstellung.
 
@@ -124,6 +125,7 @@ Komponenten haben keinen eigenen Reiter mehr, sondern erscheinen dort, wo sie ge
 - **Empfohlen:** Kombi rechnet Ideen aus dem Vorrat nach Regeln; „Neue Ideen“ fragt die KI – **A) verwerten**, was da ist, oder **B) neu**, mit „fehlt: …“. Die Software prüft jede Idee (nur echte Zutaten, Name passend zum Inhalt), rechnet Mengen, Kosten und Kalorien aus hinterlegten Daten und bewertet die **Nutzbarkeit** (1–5 ★) selbst.
 - **Produktion in zwei Schritten:** Portionen wählen → Zutaten werden **skaliert** und gegen den Vorrat geprüft (vorhanden / nur teilweise / fehlt / nicht im Vorrat erfasst) → optional „Fehlendes auf die Einkaufsliste“ → bestätigen mit der **tatsächlichen** Menge („3 statt 4 Portionen“ zählt) und optional MHD. Erst dann wird gebucht – **eine** Transaktion: Zutaten raus, neue Charge rein, mit den echten Kosten der entnommenen Zutaten. Gibt es die Komponente noch nicht als Sorte, wird sie dabei angelegt.
 - **Nichts wird automatisch gespeichert.** Vormerken legt nur einen Plan an (Fehlendes landet auf der Einkaufsliste).
+- **Nährwerte aus der Produktion:** Hat die Komponente noch keine Nährwerte, rechnet Kombi sie nach dem Herstellen aus den **tatsächlich entnommenen** Zutaten (÷ hergestellte Portionen) und hinterlegt sie – aber nur, wenn für **jede** Zutat Menge und Nährwerte bekannt sind (kein „Öl nach Gefühl“, keine nicht erfasste Zutat). Sonst bleibt „unbekannt“. Von Hand eingetragene Werte werden nie überschrieben. Eine gegessene Portion zählt danach mit ihren eigenen kcal – die Zutaten darin nicht noch einmal.
 - **Größer vorkochen?** Nur aus echten Buchungen: Wird eine selbstgemachte Komponente mindestens 2× in 8 Wochen hergestellt und regelmäßig verbraucht, schlägt Kombi eine Menge vor, die etwa 2 Wochen reicht – begrenzt durch die Haltbarkeit. Zu wenig Daten → keine Empfehlung.
 
 ## 🛒 Einkaufsliste
