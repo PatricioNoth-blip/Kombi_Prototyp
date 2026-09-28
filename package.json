@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "npm run test:ki && npm run test:db",
     "test:ki": "node --test \"tests/ki/*.test.ts\"",
-    "test:db": "bash scripts/test.sh"
+    "test:db": "bash scripts/test.sh",
+    "benchmark": "node scripts/benchmark.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",

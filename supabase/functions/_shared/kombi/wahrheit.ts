@@ -196,6 +196,13 @@ function verboteneBehauptung(satz: string, r: Regeln): string | null {
   return null;
 }
 
+/** Welche verbotenen Behauptungen stecken in einem Text? (für Benchmark und Probelauf) */
+export function behauptungenIn(text: string): string[] {
+  const arten: [RegExp, string][] = [[PREIS, 'Preisangabe'], [NAEHRWERT, 'Nährwertangabe'], [LINK, 'Link/Bildquelle'], [BESTAND, 'Bestandsmenge'], [DIAET, 'Diät-Behauptung']];
+  // je Satz alle Arten – „nur 450 kcal für 1,50 €“ sind zwei erfundene Fakten
+  return saetze(text).flatMap((satz) => arten.filter(([re]) => re.test(satz)).map(([, name]) => name));
+}
+
 export function saetze(text: string): string[] {
   return text
     .split(/(?<=[.!?])\s+/)

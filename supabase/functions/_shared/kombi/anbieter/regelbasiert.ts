@@ -12,6 +12,7 @@ import { verletztAusschluss } from '../praeferenz.ts';
 import { verletztVielfalt, vielfaltSperre } from '../vielfalt.ts';
 import { kurzname, normalisiere, restName } from '../text.ts';
 import { katalogVorschlaege } from '../komponenten.ts';
+import { erkenneZutat } from '../zutaten.ts';
 
 type Kandidat = { roh: RohGericht; kurz: GerichtKurz; punkte: number };
 
@@ -135,6 +136,114 @@ function komplettTyp(z: SnapshotZutat): Gerichtstyp {
   return 'aufwaermen';
 }
 
+// ───────── Frische Küche: normale Zutaten ohne Protein-/Basis-Baustein ─────────
+// Greift nur, wenn die Baukasten-Regeln oben nichts finden (z. B. Tomate, Gurke, Joghurt, Brot).
+// Namen und Schritte nennen ausschließlich, was im Gericht steckt (+ Salz, Pfeffer, Öl).
+
+/** Lebensmittelname für Gerichtsnamen: semantische Zutat, sonst Kurzname („Strauchtomaten“ → „Tomate“). */
+const lebensmittel = (z: SnapshotZutat) => (z.art === 'zutat' ? erkenneZutat(z.name)?.name : null) ?? kurzname(z.name);
+/** Wortstamm für Zusammensetzungen: „Tomate“ → „Tomaten-“, „Gurke“ → „Gurken-“, „Käse“ bleibt. */
+const stamm = (w: string) => (/e$/.test(w) && !/^k(ä|ae)se$/i.test(w) ? `${w}n` : w);
+/** Taugt roh für einen Salat (Tomate, Gurke, Paprika …) – Zwiebel oder Brokkoli allein nicht. */
+const salatTauglich = (z: SnapshotZutat) => { const e = erkenneZutat(z.name); return !!e && e.zubereitung.includes('roh') && e.verwendung.includes('salat'); };
+/** Knackig – nur dann darf „Crunch“ im Namen stehen. */
+const knackig = (z: SnapshotZutat | null) => !!z && ['gurke', 'paprika', 'karotte', 'salat', 'kohl', 'mais', 'rucola'].includes(erkenneZutat(z.name)?.id ?? '');
+/** Portionen für den Belag: gewünscht, aber nie mehr als da ist (lieber etwas weniger Gemüse als „fehlt“). */
+const hoechstens = (z: SnapshotZutat, gewuenscht: number) =>
+  z.anzahl === null ? gewuenscht : Math.max(0.25, Math.min(gewuenscht, Math.floor((z.anzahl / z.portion_menge) * 4) / 4));
+const istKaese = (z: SnapshotZutat | null) => !!z && /kaese|gouda|cheddar|mozzarell|parmesan|feta|emmentaler/.test(normalisiere(z.name));
+const istHafer = (z: SnapshotZutat | null) => !!z && /hafer|muesli|porridge/.test(normalisiere(z.name));
+
+function frischeKandidaten(a: KiAuftrag, bestand: SnapshotZutat[], kuehlschrank: SnapshotZutat[]): Kandidat[] {
+  const nach = (farbe: string) => bestand.filter((z) => z.farbe === farbe && z.art !== 'komplettgericht')
+    .sort((x, y) => dringend(y) - dringend(x) || x.name.localeCompare(y.name));
+  const p = a.optionen.personen;
+  const eiweiss = [...nach('braun'), ...nach('rot')];
+  const gemuese = nach('gruen');
+  const toppings = [...nach('schwarz'), null];
+  const satts = [...nach('gelb'), null];
+  const rest = kuehlschrank[0] ?? null;
+  const kandidaten: Kandidat[] = [];
+
+  const paare: [SnapshotZutat | null, SnapshotZutat | null][] = [[null, null]];
+  for (let i = 0; i < gemuese.length; i++) {
+    paare.push([gemuese[i], null]);
+    for (let j = i + 1; j < gemuese.length; j++) paare.push([gemuese[i], gemuese[j]]);
+  }
+  for (const [g1, g2] of paare) for (const top of toppings) for (const sa of satts) for (const ei of [...eiweiss.slice(0, 2), null]) {
+    const belag = [ei, g1, g2, top, rest].filter((x): x is SnapshotZutat => x !== null);
+    const hafer = istHafer(sa);
+    if (belag.length < 2 && !(hafer && top)) continue;
+    if (hafer && (g1 || ei)) continue; // Haferflocken nur als Frühstück mit Topping (Joghurt …)
+    const satt = sattmacherArt(sa);
+    const alleRoh = [g1, g2].every((g) => !g || salatTauglich(g)) && !ei;
+    const typ: Gerichtstyp = hafer ? 'snack'
+      : satt === 'brot' ? 'toast'
+        : satt === 'wrap' ? 'wrap'
+          : satt === 'pasta' ? (istKaese(top) && g1 ? 'auflauf' : 'pasta')
+            : satt === 'reis' || satt === 'couscous' ? 'bowl'
+              : satt === 'kartoffel' ? 'pfanne'
+                : alleRoh && g1 ? 'salat' : 'pfanne';
+    const haupt = g1 ?? ei ?? top ?? rest!;
+    const H = lebensmittel(haupt);
+    const zweit = [g2, top, ei !== haupt ? ei : null, rest].find((x) => x && x !== haupt) ?? null;
+    const Z = zweit ? (zweit.quelle === 'kuehlschrank' ? restName(zweit.name) : lebensmittel(zweit)) : null;
+    // Komponente mit mehrteiligem Namen („Soße vom Wochenende“) nicht zerschneiden
+    const ganzerName = haupt.art !== 'zutat' && haupt.quelle === 'bestand' && /\s/.test(haupt.name.trim());
+    const name = hafer ? `Cremige Hafer-Bowl mit ${lebensmittel(top!)}`
+      : ganzerName && typ !== 'salat' ? `${TYP[typ]?.wort ?? 'Pfanne'} mit ${haupt.name}${Z ? ` & ${Z}` : ''}`
+      : typ === 'salat' ? (top && (knackig(g1) || knackig(g2)) ? `Sommer-Crunch mit ${lebensmittel(top)}` : `Frischer ${stamm(H)}-Salat${Z ? ` mit ${Z}` : ''}`)
+        : typ === 'bowl' ? `Frische ${stamm(H)}-Bowl${Z ? ` mit ${Z}` : ''}`
+          : typ === 'auflauf' ? `Überbackene ${stamm(H)}-Pasta`
+            : typ === 'toast' ? `Knusper-Toast mit ${H}${Z ? ` & ${Z}` : ''}`
+              : typ === 'wrap' ? `Knusper-Wrap mit ${H}${Z ? ` & ${Z}` : ''}`
+                : `${stamm(H)}-${TYP[typ]?.wort ?? 'Pfanne'}${Z ? ` mit ${Z}` : ''}`;
+    const genutzt = [...belag, ...(sa ? [sa] : [])];
+    const namen = belag.map((z) => z.name);
+    const liste = namen.length > 1 ? `${namen.slice(0, -1).join(', ')} und ${namen[namen.length - 1]}` : namen[0] ?? '';
+    const schritte: string[] = [];
+    if (sa && /pasta|reis|couscous/.test(satt)) schritte.push(`${sa.name} nach Packung kochen.`);
+    if (hafer) schritte.push(`${sa!.name} mit etwas Wasser kurz aufkochen oder einweichen.`, `Mit ${top!.name} anrichten.`);
+    else if (typ === 'salat' || typ === 'bowl') {
+      schritte.push(`${[g1, g2].filter(Boolean).map((g) => g!.name).join(' und ') || H} waschen und klein schneiden.`);
+      schritte.push(`${top ? `Mit ${top.name} anrichten, ` : ''}mit Salz, Pfeffer und Öl abschmecken.`);
+    } else if (typ === 'auflauf') {
+      schritte.push(`${g1!.name} klein schneiden und die letzten Minuten mitgaren.`, `Mit ${top!.name} bestreuen und im Ofen überbacken.`);
+    } else if (typ === 'toast' || typ === 'wrap') {
+      schritte.push(`${sa!.name} kurz rösten.`, `Mit ${liste} belegen, mit Salz und Pfeffer abschmecken.`);
+    } else {
+      schritte.push(`${liste} in etwas Öl anbraten.`, sa ? `Mit ${sa.name} mischen, mit Salz und Pfeffer abschmecken.` : 'Mit Salz und Pfeffer abschmecken.');
+    }
+    const zutaten: RohGericht['zutaten'] = belag.filter((z) => z.quelle === 'bestand').map((z) => ({ id: z.id, portionen: hoechstens(z, halbe(p)) }));
+    if (sa) zutaten.push({ id: sa.id, portionen: p });
+    if (rest && belag.includes(rest)) zutaten.push({ id: rest.id });
+    zutaten.push({ id: 'g-salz' });
+    const eigenschaften: Eigenschaften = {
+      gerichtstyp: typ,
+      hauptzutat: normalisiere(H),
+      geschmack: typ === 'salat' || typ === 'bowl' ? 'frisch' : istKaese(top) ? 'cremig' : 'herzhaft',
+      schaerfe: 0,
+      konsistenz: typ === 'toast' || typ === 'wrap' ? 'knusprig' : hafer ? 'cremig' : 'stueckig',
+      sattmacher: hafer ? 'sonstiges' : satt,
+      gewuerzrichtung: 'neutral',
+      zubereitung: typ === 'salat' || hafer ? 'roh' : typ === 'auflauf' ? 'ofen' : typ === 'bowl' && !sa ? 'roh' : 'pfanne',
+      temperatur: typ === 'salat' || (typ === 'bowl' && !sa) ? 'kalt' : 'warm',
+    };
+    kandidaten.push({
+      roh: {
+        name, emoji: EMOJI[typ] ?? (typ === 'salat' ? '🥗' : '🍽️'),
+        beschreibung: `${liste}${sa ? ` mit ${sa.name}` : ''} – frisch kombiniert.`,
+        zutaten, fehlt: [], zeit_min: 8 + (sa && /pasta|reis/.test(satt) ? 10 : 0) + (typ === 'auflauf' ? 10 : 0),
+        schritte, begruendung: `Kombiniert ${genutzt.map((z) => z.name).join(', ')} aus eurem Vorrat.`, eigenschaften,
+      },
+      kurz: { name, eigenschaften, zutaten: genutzt.map((z) => z.name) },
+      // lieber mehr echte Zutaten und ein Sattmacher; Dringendes zuerst
+      punkte: genutzt.reduce((s2, z) => s2 + dringend(z), 0) + (sa ? 2 : 0) + genutzt.length + (top ? 1 : 0),
+    });
+  }
+  return kandidaten;
+}
+
 export function regelbasiert(): KiAnbieter {
   return {
     name: 'regelbasiert',
@@ -167,7 +276,7 @@ export function regelbasiert(): KiAnbieter {
         const name = gerichtName(typ, pr, ba, ge, boost, rest, kandidaten.length);
         const hauptzutat = kurzname((pr ?? ge ?? ba)!.name);
 
-        const zutaten: RohGericht['zutaten'] = belag.map((z) => ({ id: z.id, portionen: halbe(p) }));
+        const zutaten: RohGericht['zutaten'] = belag.map((z) => ({ id: z.id, portionen: hoechstens(z, halbe(p)) }));
         if (sa) zutaten.push({ id: sa.id, portionen: p });
         if (boost) zutaten.push({ id: boost.id, portionen: 1 });
         if (rest) zutaten.push({ id: rest.id });
@@ -202,6 +311,9 @@ export function regelbasiert(): KiAnbieter {
           punkte: genutzt.reduce((s, z) => s + dringend(z), 0) + (sa ? 2 : 0) + (genug ? 2 : 0) + genutzt.length,
         });
       }
+
+      // Nichts aus Protein/Basis/Gemüse möglich? Dann mit normalen, frischen Zutaten (Salat, Bowl, Toast …).
+      if (kandidaten.length === 0) kandidaten.push(...frischeKandidaten(a, bestand, kuehlschrank));
 
       // Komplettgerichte: pur („heute einfach …“) oder mit schlichter Beilage (Suppe + Brötchen).
       const brot = nach('gelb').find((z) => sattmacherArt(z) === 'brot') ?? null;

@@ -63,6 +63,12 @@ describe('Semantische Zutaten: Produkt → Zutat → Verwendung', () => {
     for (const [produkt, id] of Object.entries(erwartet)) assert.equal(erkenneZutat(produkt)?.id ?? null, id, produkt);
   });
 
+  test('Kurznamen für Gerichte: Beiwörter sind keine Lebensmittel („Rote Linsen“ → „Linsen“)', async () => {
+    const { kurzname } = await import('../../supabase/functions/_shared/kombi/text.ts');
+    assert.deepEqual(['Rote Linsen', 'Griechischer Joghurt', 'Kichererbsen (Dose)', 'Kartoffeln festkochend', 'Linsen gekocht'].map(kurzname),
+      ['Linsen', 'Joghurt', 'Kichererbsen', 'Kartoffeln', 'Linsen']);
+  });
+
   test('Unbekanntes bleibt unbekannt – nichts wird geraten', () => {
     for (const n of ['Pizza', 'Booster Italien', 'Xyz', 'Paprikapulver', 'Chili-Box']) assert.equal(erkenneZutat(n), null, n);
   });
@@ -300,8 +306,12 @@ describe('Bildsuche (Wikimedia Commons) – nur passende, frei lizenzierte, echt
       seite('Falafel 2.jpg', 'falafel', 'All rights reserved'),
       seite('Falafel.svg', 'falafel icon', 'CC0', 'image/svg+xml'),
       seite('Hummus bowl.jpg', 'A bowl of hummus'),
+      seite('Falafel logo.png', 'falafel shop logo', 'CC0', 'image/png'),
     ), falafel);
     assert.deepEqual(f, []);
+    const tomate = bildAnfrageFuerZutat('Strauchtomaten')!;
+    assert.deepEqual(werteCommonsAus(antwort(seite('Tomato plant.jpg', 'tomato plant in a field'), seite('Tomatoes.jpg', 'ripe tomatoes')), tomate).map((x) => x.titel),
+      ['Tomatoes.jpg'], 'Lebensmittel statt Pflanze');
   });
 
   test('zusammengesetztes Gericht: eine einzelne Tomate ist noch keine Bowl', () => {

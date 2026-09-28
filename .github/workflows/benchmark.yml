@@ -1,0 +1,40 @@
+name: KI-Benchmark (von Hand)
+
+# 30 Szenarien gegen die eingerichteten KI-Anbieter. Keys kommen aus den Repository-Secrets
+# GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY (fehlende werden übersprungen) und werden nie ausgegeben.
+# Kostet Kontingent beim Anbieter – deshalb nur von Hand: Actions → KI-Benchmark → Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      anbieter:
+        description: 'Anbieter, kommagetrennt (groq, gemini, openrouter)'
+        default: 'groq,gemini,openrouter'
+      szenarien:
+        description: 'optional: nur diese Szenarien (ids, kommagetrennt)'
+        default: ''
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Benchmark
+        env:
+          BENCH_ANBIETER: ${{ inputs.anbieter }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          BENCH_PAUSE_MS: '2500'
+          BENCH_SZENARIEN: ${{ inputs.szenarien }}
+        run: node scripts/benchmark.ts --attrappe --json=benchmark-ergebnis.json | tee benchmark.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ki-benchmark
+          path: |
+            benchmark-ergebnis.json
+            benchmark.md
+          if-no-files-found: ignore

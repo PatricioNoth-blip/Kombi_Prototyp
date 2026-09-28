@@ -368,6 +368,7 @@ export function commonsSuchUrl(begriff: string, breite = 800): string {
   return `https://commons.wikimedia.org/w/api.php?${p.toString()}`;
 }
 
+const KEIN_ESSEN = / (plant|plants|pflanze|flower|flowers|blossom|bl(ü|ue)te|field|farm|seedling|leaf|leaves|tree|harvest|logo|icon|diagram|map|drawing|illustration|painting|cartoon|clipart|svg|sign|packaging|package|label|stamp|advertisement|menu|shop|market|stall) /;
 const FREIE_LIZENZ = /^(cc0|cc[ -]by(-sa)?([ -]\d(\.\d)?)?|public domain|pd\b|attribution)/i;
 const ohneHtml = (t: unknown) => (typeof t === 'string' ? t.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '');
 
@@ -400,6 +401,8 @@ export function werteCommonsAus(antwort: unknown, anfrage: Pick<BildAnfrage, 'pf
     const klein = ` ${text.toLowerCase().replace(/[^a-zäöüß]+/g, ' ')} `;
     const treffer = pflicht.filter((p) => klein.includes(` ${p}`)).length;
     if (treffer === 0 || treffer < anfrage.mindestens) continue;
+    // Das Motiv soll Essen zeigen – keine Pflanze auf dem Feld, kein Logo, keine Grafik
+    if (KEIN_ESSEN.test(klein)) continue;
     // Zeigt das Foto etwas, das nicht ins Gericht gehört? (englisch und deutsch geprüft)
     const fremd = englischeZutaten(klein).filter((id) => !erlaubt.has(id));
     const fremdDe = ungedeckt(flach(text), deckungstext([...erlaubt]));

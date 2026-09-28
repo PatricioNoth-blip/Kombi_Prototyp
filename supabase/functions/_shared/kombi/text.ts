@@ -29,8 +29,10 @@ export function kuerze(text: unknown, max: number): string {
 export function kurzname(name: string): string {
   const woerter = name
     .replace(/^TK[- ]/i, '')
+    .replace(/\([^)]*\)/g, ' ')
     .split(/[\s-]+/)
-    .filter((w) => w && !/^(gekocht|portion|basis|kokos|box|mix)$/i.test(w));
+    // Beiwörter und Produktangaben sind keine Lebensmittel: „Rote Linsen“ → „Linsen“, „Griechischer Joghurt“ → „Joghurt“
+    .filter((w) => w && !/^(gekocht|portion|basis|kokos|box|mix|rote?[rsn]?|gelbe?[rsn]?|gr(ü|ue)ne?[rsn]?|wei(ß|ss)e?[rsn]?|schwarze?[rsn]?|frische?[rsn]?|griechische?[rsn]?|gehackte?[rsn]?|getrocknete?[rsn]?|junge?[rsn]?|bio|vollkorn|natur|festkochend|mehligkochend|\d+\w*)$/i.test(w));
   const erstes = woerter[0] ?? name;
   return erstes
     .replace(/(soße|sosse|sauce)$/i, '')

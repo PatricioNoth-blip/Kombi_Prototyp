@@ -274,7 +274,22 @@ let health = null;
 await pruefe('Health-Check', async () => {
   const r = await fetch(FUNKTION, { headers: kopf, signal: AbortSignal.timeout(20000) });
   if (r.status === 404) return 'ℹ nicht deployt – die App nutzt den Demo-Modus (Vorschläge nach Kombi-Regeln, keine KI)';
-  if (r.status === 405) return 'ℹ ältere Version ohne Health-Check – bitte neu deployen (README „KI einrichten“)';
+  if (r.status === 405) {
+    // Ältere Function ohne Health-Check: ein kleiner, echter Aufruf mit dem Probe-Haushalt zeigt trotzdem,
+    // ob die KI angebunden ist (503 = kein Key → Demo-Modus). Nichts wird gespeichert.
+    const { PROBE_ANFRAGE } = await import('../supabase/functions/_shared/kombi/gesundheit.ts');
+    const start = Date.now();
+    const antwort = await fetch(FUNKTION, {
+      method: 'POST', headers: { ...kopf, 'content-type': 'application/json' }, body: JSON.stringify(PROBE_ANFRAGE), signal: AbortSignal.timeout(90000),
+    });
+    const ms = Date.now() - start;
+    const daten = await antwort.json().catch(() => ({}));
+    const alt = 'ℹ ältere Version ohne Health-Check – bitte neu deployen (README „KI einrichten“)';
+    if (antwort.status === 503) return `${alt}; KI NICHT eingerichtet (KI_API_KEY fehlt) → App nutzt den Demo-Modus`;
+    if (!antwort.ok) return `${alt}; ⚠ KI-Aufruf: HTTP ${antwort.status} ${daten.fehler ?? ''}`;
+    return `${alt}; KI live über die alte Version: ${daten.anbieter ?? 'Anbieter unbekannt'} – ${(ms / 1000).toFixed(1)} s, ` +
+      `${(daten.gerichte ?? []).length} geprüfte Vorschläge (${(daten.gerichte ?? []).map((g) => g.name).join(', ') || '–'}), ${(daten.verworfen ?? []).length} verworfen`;
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   health = await r.json();
   if (JSON.stringify(health).match(/sk-|gsk_|AIza|Bearer /)) throw new Error('Antwort enthält etwas, das wie ein Key aussieht!');
@@ -360,6 +375,23 @@ if (!APP_URL) {
   });
   await page.screenshot({ path: 'live-check-uebersicht.png', fullPage: true });
 
+  await pruefe('Startseite kompakt', async () => {
+    const hoehen = await page.evaluate(() => [...document.querySelectorAll('main > div:not([hidden]) .start > *')]
+      .map((e) => `${e.className.split(' ')[0] || e.tagName.toLowerCase()} ${Math.round(e.getBoundingClientRect().height)} px`));
+    const ende = await page.evaluate(() => Math.round(document.querySelector('main > div:not([hidden]) .start')?.getBoundingClientRect().bottom ?? 0));
+    if (ende > 844 * 1.6) throw new Error(`Startseite ${ende} px hoch – nicht kompakt`);
+    return `${hoehen.join(' · ')}; Ende bei ${ende} px (Bildschirm 844 px)`;
+  });
+
+  /** Nur bei manuellem Start mit „screenshots_im_log“: Screenshot als Base64 ins Log (für Umgebungen ohne Artefakt-Zugriff). */
+  async function screenshotInsLog(name) {
+    if (process.env.LIVE_CHECK_SCREENSHOT_LOG !== '1') return;
+    const bild = (await page.screenshot({ type: 'jpeg', quality: 55, fullPage: true })).toString('base64');
+    const teile = bild.match(/.{1,2000}/g) ?? [];
+    teile.forEach((t, i) => console.log(`SCREENSHOT ${name} ${i + 1}/${teile.length} ${t}`));
+  }
+  await screenshotInsLog('start-hell');
+
   /** Mobile Darstellung: kein horizontales Scrollen, keine abgeschnittenen Reiter, keine kaputten Bilder. */
   const layoutFehler = () => page.evaluate(() => {
     const f = [];
@@ -404,6 +436,7 @@ if (!APP_URL) {
     await page.waitForTimeout(300);
     const grund = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     await page.screenshot({ path: 'live-check-dunkel.png', fullPage: true });
+    await screenshotInsLog('start-dunkel');
     const fehler = await layoutFehler();
     await page.emulateMedia({ colorScheme: 'light' });
     const [r, g, b] = (grund.match(/\d+/g) ?? []).map(Number);
@@ -414,6 +447,8 @@ if (!APP_URL) {
 
   await pruefe('Vorrat: Lagerorte und alle Sorten', async () => {
     await page.click('.tabbar button:has-text("Vorrat")');
+    await page.waitForTimeout(300);
+    await screenshotInsLog('vorrat');
     const orte = await page.locator('.ort-karte').allInnerTexts();
     await page.click('.alle-knopf');
     await page.waitForSelector('.ort-ansicht .vorrat-zeile');
@@ -500,6 +535,8 @@ if (!APP_URL) {
     const name = await page.locator('main > div:not([hidden]) .rezept-kompakt h3').first().textContent();
     await knopf.click();
     await page.waitForSelector('.kochen');
+    await page.waitForTimeout(300);
+    await screenshotInsLog('kochansicht');
     const meta = (await page.innerText('.kochen-kopf .meta-icons')).replace(/\s+/g, ' ');
     await page.click('.kochen [aria-label="Zurück"]');
     if (JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl])) !== vorher) throw new Error('Bestand hat sich geändert!');
