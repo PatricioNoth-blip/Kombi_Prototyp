@@ -629,6 +629,34 @@ if (!APP_URL) {
     return 'Essen-Feld und geöffnete Vorratsansicht erhalten';
   });
 
+  await pruefe('Essen: KI-Status und „Testen“ in den Einstellungen', async () => {
+    await page.click('.tabbar button:has-text("Essen")');
+    const umschalter = page.locator('main > div:not([hidden]) .einstellungen button.link', { hasText: 'Ändern' });
+    await umschalter.click();
+    const status = page.locator('main > div:not([hidden]) .ki-status');
+    await status.waitFor();
+    await page.waitForFunction(() => !document.querySelector('.ki-status')?.textContent?.includes('Prüfe die KI-Verbindung'), null, { timeout: 30000 });
+    const zeile = (await status.locator('.ki-status-text small').first().innerText()).trim();
+    const knopf = status.locator('button', { hasText: 'Testen' });
+    const aktuell = health && health.version === ENGINE_VERSION;
+    let ergebnis;
+    if (!(await knopf.count())) {
+      // Ehrlich: ohne Health-Check (alte Function) oder ohne KI-Key gibt es nichts zu testen.
+      if (aktuell && health.ki.eingerichtet) throw new Error(`Function aktuell und KI eingerichtet, aber kein „Testen“: „${zeile}“`);
+      ergebnis = `ℹ kein „Testen“ – ${zeile}`;
+    } else {
+      if (!health) throw new Error(`„Testen“ angezeigt, obwohl die Function keinen Health-Check hat: „${zeile}“`);
+      await knopf.click();
+      const antwort = status.locator('.status-ok, .status-achtung');
+      await antwort.waitFor({ timeout: 90000 });
+      const text = (await antwort.innerText()).trim();
+      if (!text.startsWith('Live getestet')) throw new Error(`Test in der App: ${text}`);
+      ergebnis = `${zeile} → ${text}`;
+    }
+    await page.locator('main > div:not([hidden]) .einstellungen button.link', { hasText: 'Fertig' }).click();
+    return ergebnis;
+  });
+
   await pruefe('Start: Kochansicht öffnen bucht nichts', async () => {
     await page.click('.tabbar button:has-text("Start")');
     const knopf = page.locator('main > div:not([hidden]) .rezept-kompakt .rk-kochen').first();
