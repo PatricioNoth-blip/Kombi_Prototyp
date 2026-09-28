@@ -652,8 +652,10 @@ if (!APP_URL) {
       const antwort = status.locator('.status-ok, .status-achtung');
       await antwort.waitFor({ timeout: 90000 });
       const text = (await antwort.innerText()).trim();
-      if (!text.startsWith('Live getestet')) throw new Error(`Test in der App: ${text}`);
-      ergebnis = `${zeile} → ${text}`;
+      // Kontingent erschöpft, Anbieter nicht erreichbar oder 5xx: extern – die App meldet es richtig, kein Code-Fehler.
+      if (text.startsWith('Live getestet')) ergebnis = `${zeile} → ${text}`;
+      else if (/Kontingent|nicht erreichbar|Fehler 5\d\d|keine Antwort vom KI-Anbieter/.test(text)) ergebnis = `⚠ extern: ${zeile} → ${text}`;
+      else throw new Error(`Test in der App: ${text}`);
     }
     await page.locator('main > div:not([hidden]) .einstellungen button.link', { hasText: 'Fertig' }).click();
     return ergebnis;

@@ -7,11 +7,14 @@ import { Icon } from './Icon';
 
 type Zustand = (Status & { probe?: KiProbe }) | null;
 
+/** Satzende nur einmal: Meldungen des Anbieters enden oft schon mit einem Punkt. */
+const satz = (t: string) => (/[.!?]$/.test(t) ? t : `${t}.`);
+
 function probeText(p: KiProbe): string {
   // „=== false“: ältere Functions liefern das Feld nicht
-  if (p.antwort === false) return `Test fehlgeschlagen: ${p.fehler ?? 'keine Antwort vom KI-Anbieter'}`;
+  if (p.antwort === false) return satz(`Test fehlgeschlagen: ${p.fehler ?? 'keine Antwort vom KI-Anbieter'}`);
   if (!p.json_gueltig) return `Test fehlgeschlagen: keine gültige JSON-Antwort${p.fehler ? ` (${p.fehler})` : ''}.`;
-  if (!p.schema_gueltig) return `Test fehlgeschlagen: ${p.fehler ?? 'unerwartetes Format'}.`;
+  if (!p.schema_gueltig) return satz(`Test fehlgeschlagen: ${p.fehler ?? 'unerwartetes Format'}`);
   const zeit = `${(p.ms / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} s`;
   const teile = [`Live getestet: ${zeit}`, 'JSON ✓', 'Format ✓', `${p.gerichte} von ${p.vorschlaege_roh} Vorschlägen bestanden die Prüfung`];
   if (p.bildanforderungen) teile.push(`${p.bildanforderungen_ok}/${p.bildanforderungen} Bildanforderungen passend`);
