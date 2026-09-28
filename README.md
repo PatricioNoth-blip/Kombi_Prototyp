@@ -305,7 +305,7 @@ npm run test:ki     # nur „Was essen wir?“ – läuft überall, auch unter W
 npm run test:db     # nur Datenbank
 ```
 
-Die 271 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+Die 274 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
 - Bilder: nur sichere https-URLs, keine Hotlinks, Priorität eigen → gefunden → generiert → lokal → keins, kaputte Quelle (Status „fehler“) und fehlendes Bild → Fallback, Bildanforderung der KI (übernommen / „steak“ verworfen / URL verworfen / fehlt), Beschreibung nur aus Rezeptdaten, unbekannte Pizza bleibt Pizza, Commons-Auswertung (Lizenz, Motiv, fremde Zutaten, Pflanze statt Lebensmittel), Pipeline gefunden/generiert/nichts/offline, Keys nie im Ergebnis, jede App-Anfrage besteht die Prüfung der Function
 - Semantische Zutaten: „REWE Strauchtomaten 500 g“ → Tomate, Spezielles vor Allgemeinem, Unbekanntes bleibt unbekannt
 - KI-Verbindung: Health-Check ohne Keys, Probelauf (JSON gültig/ungültig, nur Halluzinationen → nicht ok), Edge Function GET/POST/Bild
