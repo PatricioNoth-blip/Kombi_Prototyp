@@ -165,8 +165,12 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, nav, onNav
           <span>{wagen.length > 0 ? `${wagen.length} im Wagen` : 'Abhaken bucht noch nichts ein'}</span>
         </div>
         <div className="einkauf-summe">
-          <strong>{liste.kosten.bekannt_cent !== null ? `≈ ${euroText(liste.kosten.bekannt_cent)}` : liste.kosten.status === 'leer' ? '0,00 €' : '–'}</strong>
-          <span>{liste.kosten.unbekannt > 0 ? `+ ${liste.kosten.unbekannt} ohne Preis` : 'aus euren Preisen'}</span>
+          <strong>{liste.kosten.bekannt_cent !== null ? `≈ ${euroText(liste.kosten.bekannt_cent)}` : liste.kosten.status === 'leer' ? '0,00 €' : 'Preis unbekannt'}</strong>
+          <span>
+            {liste.kosten.bekannt_cent === null && liste.kosten.unbekannt > 0
+              ? `${liste.kosten.unbekannt} ${liste.kosten.unbekannt === 1 ? 'Position' : 'Positionen'} ohne Preis`
+              : liste.kosten.unbekannt > 0 ? `+ ${liste.kosten.unbekannt} ohne Preis` : 'aus euren Preisen'}
+          </span>
         </div>
       </div>
 

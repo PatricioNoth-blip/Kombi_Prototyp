@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AuftauEintrag, AuftauVorschlag } from '../supabase/functions/_shared/kombi/planung.ts';
 import { heuteAuftauen } from '../supabase/functions/_shared/kombi/planung.ts';
+import { kurzMenge } from '../supabase/functions/_shared/kombi/aktionen.ts';
 import { fehlerText, type Sorte } from './api';
 import { auftauenVormerken, auftauStatus, type Plan } from './haushalt';
 import { Icon } from './Icon';
@@ -63,8 +64,10 @@ export function Auftauen({ bestand, plaene, vorschlaege, eintraege, heute, onMel
           return (
             <li key={k} className="auftau-vorschlag">
               <span className="auftau-text">
-                <strong>{tagName(heute, erste.datum)} eingeplant: {g.eintraege.map((v) => `${mengeText(v.menge, v.einheit)} ${v.name}`).join(', ')}</strong>
-                <small>für „{erste.titel}“ → {erste.auftauen_am === heute ? 'heute' : tagName(heute, erste.auftauen_am)} zum Auftauen vormerken</small>
+                <strong>{tagName(heute, erste.datum)}: {g.eintraege.map((v) => `${kurzMenge(v.menge, v.einheit)} ${v.name}`).join(' + ')}</strong>
+                <small>
+                  für „{erste.titel}“ → {erste.datum === heute ? 'gleich herausnehmen' : erste.auftauen_am === heute ? 'heute zum Auftauen vormerken' : `${tagName(heute, erste.auftauen_am)} auftauen`}
+                </small>
               </span>
               <button
                 type="button"
@@ -84,7 +87,7 @@ export function Auftauen({ bestand, plaene, vorschlaege, eintraege, heute, onMel
           return (
             <li key={k} className="auftau-faellig">
               <span className="auftau-text">
-                <strong>Heute herausnehmen: {menge(a)}</strong>
+                <strong>Jetzt herausnehmen: {menge(a)}</strong>
                 <small>{fuer(a.plan_id)}</small>
               </span>
               <button
@@ -133,10 +136,7 @@ export function Auftauen({ bestand, plaene, vorschlaege, eintraege, heute, onMel
           </li>
         ))}
       </ul>
-      <p className="leise klein auftau-fuss">
-        Regel: Vorgekochtes einen Tag vorher auftauen – TK-Zutaten, Brot und Gekauftes nach Packung. Kombi erinnert hier in der App,
-        Push-Benachrichtigungen gibt es noch nicht.
-      </p>
+      <p className="leise klein auftau-fuss">Vorgekochtes einen Tag vorher auftauen. Erinnerung nur hier in der App, ohne Push-Nachrichten.</p>
     </section>
   );
 }

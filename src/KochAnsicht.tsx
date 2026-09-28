@@ -250,7 +250,7 @@ export function KochAnsicht({ gericht: g, planId, bestand, reserviert, planung, 
         )}
 
         {gebucht && gebucht.danach.length > 0 && (
-          <section className="koch-abschnitt">
+          <section className="koch-abschnitt koch-bleibt">
             <h2>Im Vorrat bleibt</h2>
             <ul className="koch-danach">
               {gebucht.danach.map((d) => <li key={d.name}><span>{d.name}</span><strong>{d.text}</strong></li>)}

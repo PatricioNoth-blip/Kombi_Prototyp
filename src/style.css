@@ -1262,6 +1262,10 @@ button.kennzahl-karte strong { color: var(--akzent); }
   line-height: 1.45;
 }
 .stufe-kochen .koch-schritte button { font-size: 19px; padding: 18px; }
+/* Kochmodus: Schritte zuerst, Bild und Eckdaten treten zurück */
+.stufe-kochen .koch-hero, .stufe-kochen .koch-beschreibung, .stufe-kochen .koch-fakten { display: none; }
+.stufe-kochen .koch-name { font-size: 26px; }
+.stufe-kochen .koch-bleibt { order: 10; }
 .schritt-nr { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--akzent-weich); color: var(--akzent); font-weight: 700; font-size: 15px; }
 .koch-schritte .erledigt button { color: var(--text-2); }
 .koch-schritte .erledigt button > span:last-child { text-decoration: line-through; text-decoration-color: var(--text-3); }

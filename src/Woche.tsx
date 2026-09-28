@@ -171,8 +171,6 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
 
   return (
     <div className="woche">
-      {auftauen}
-
       <section className="gruppe">
         <h2 className="abschnitt-titel">Geplant</h2>
         {mahlzeiten.length === 0 ? (
@@ -231,6 +229,8 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
           </ul>
         )}
       </section>
+
+      {auftauen}
 
       {!vorschau ? (
         <section className="woche-planen karte-flach">
