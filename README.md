@@ -91,7 +91,7 @@ Zum Testen auf dem Handy im selben WLAN: `npm run dev -- --host` starten und die
 
 ### 3. Aufs Handy: GitHub Pages
 
-1. Im GitHub-Repo unter **Settings → Pages → Source** „GitHub Actions“ wählen (Stand 28.09.2026: noch nicht aktiviert, und es gibt noch keinen Branch `main`).
+1. Im GitHub-Repo unter **Settings → Pages → Source** „GitHub Actions“ wählen. Außerdem unter **Settings → Environments → github-pages → Deployment branches and tags** den Branch `main` erlauben – sonst bricht der Schritt „veroeffentlichen“ mit *„Branch "main" is not allowed to deploy to github-pages due to environment protection rules“* ab (GitHub erlaubt dort anfangs nur den Default-Branch).
 2. Auf den Branch `main` pushen. Du kannst den Workflow „Veröffentlichen (GitHub Pages)“ auch von Hand starten.
    Er nimmt die Werte aus der `.env`. Sind unter **Settings → Secrets and variables → Actions → Variables**
    `SUPABASE_URL` und `SUPABASE_KEY` gesetzt, haben diese Vorrang.
@@ -228,7 +228,7 @@ Ohne Einrichtung läuft „Was essen wir?“ im **Demo-Modus**: Vorschläge nach
 ```
 npx.cmd supabase functions deploy was-essen --project-ref yjjgfdvpqmclocgejrhz --no-verify-jwt
 ```
-Deployt wird der Code im **gerade ausgecheckten** Ordner – vorher den aktuellen Stand holen (`git switch <branch>` und `git pull`).
+Deployt wird der Code im **gerade ausgecheckten** Ordner – vorher den aktuellen Stand holen (`git switch main` und `git pull`). Bricht `git switch` wegen lokaler Änderungen ab (z. B. `package.json` nach `npm install supabase`), diese erst mit `git stash` beiseitelegen – sonst wird weiter der alte Code deployt.
 Kontrolle: `GET …/functions/v1/was-essen` muss JSON mit `version` liefern. `{"fehler":"Nur POST."}` (HTTP 405) heißt: Es läuft noch Code ohne Health-Check.
 
 **Anbieter wechseln** – nur Secrets ändern, kein Code:
@@ -253,7 +253,7 @@ Die Kette ist nachvollziehbar: **App → Edge Function `was-essen` → KI-Anbiet
 - In der App: **Essen → Ändern → KI** zeigt dasselbe; „Testen“ startet den Probelauf. Ist keine KI eingerichtet, steht dort ehrlich „Nicht eingerichtet – Vorschläge nach Kombi-Regeln“.
 - App und Function tragen dieselbe Engine-Version (`ENGINE_VERSION` in `gesundheit.ts`). Weicht sie ab, bittet die App um ein neues Deployment.
 - Der **Live-Check** (GitHub Actions, bei jedem Push) ruft den Health-Check auf, bei eingerichteter KI den Probelauf – bei einer älteren Function einen kleinen POST-Probelauf. Fehler externer Dienste (Kontingent, Wikimedia) erscheinen als ⚠, nicht als Code-Fehler.
-- **Live-Stand 28.09.2026, 16:53 UTC:** Die Function ist deployt (Supabase: VERSION 2), aber mit Code **ohne Health-Check**: `GET` → 405 „Nur POST.“, kein Header `x-kombi-version`. Die KI selbst antwortet (groq · openai/gpt-oss-120b, heute 4,5–9,2 s, Vorschläge bestehen die Prüfung). Die App zeigt deshalb „alte Version – bitte neu deployen“ und kein „Testen“. Abhilfe: aus dem aktuellen Stand neu deployen (siehe oben).
+- **Live-Stand 28.09.2026, 17:28 UTC:** Function aus `main` deployt – `GET` → 200, `x-kombi-version: 2026-09-28.2`, KI eingerichtet (groq · openai/gpt-oss-120b). Probelauf: 4,7 s, JSON und Format gültig, 2 von 2 Vorschlägen bestanden, 2/2 Bildanforderungen passend. In der App: „Testen“ → „Live getestet: 5,2 s“. Die Bildpipeline der Function findet Commons-Fotos (Generierung nicht eingerichtet).
 
 ### Was die KI bekommt und liefert
 
