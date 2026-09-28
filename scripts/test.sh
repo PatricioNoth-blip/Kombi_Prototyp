@@ -79,3 +79,13 @@ if [[ -n "$abweichung" ]]; then
   exit 1
 fi
 echo "ok  schema-stand.sql erkennt alle Migrationen als vollständig"
+
+# Wie bei Supabase: storage.buckets vorhanden – erst ohne, dann mit Bucket „bilder“
+# (ohne Treffer darf die dynamische Abfrage nicht scheitern).
+sql -c "create schema storage; create table storage.buckets (id text primary key, name text, public boolean);"
+bilder="$(psql -X -q -t -A -F '|' -v ON_ERROR_STOP=1 "$URL" -f scripts/schema-stand.sql | awk -F'|' '$1 ~ /bilder_zutaten$/ {print $2 "|" $4}')"
+[[ "$bilder" == "teilweise|bucket bilder" ]] || { echo "schema-stand.sql mit leerem storage.buckets: $bilder" >&2; exit 1; }
+sql -c "insert into storage.buckets (id, name, public) values ('bilder', 'bilder', true);"
+bilder="$(psql -X -q -t -A -F '|' -v ON_ERROR_STOP=1 "$URL" -f scripts/schema-stand.sql | awk -F'|' '$1 ~ /bilder_zutaten$/ {print $2}')"
+[[ "$bilder" == "vollständig" ]] || { echo "schema-stand.sql mit Bucket „bilder“: $bilder" >&2; exit 1; }
+echo "ok  schema-stand.sql mit Supabase-Storage: Bucket fehlt → teilweise, vorhanden → vollständig"

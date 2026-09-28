@@ -254,9 +254,10 @@ geprueft as (
         to_regclass('public.' || split_part(e.objekt, ':', 2)), split_part(e.objekt, ':', 1)), false)
       when 'ausfuehren' then coalesce(has_function_privilege('anon',
         to_regprocedure('public.' || e.objekt), 'execute'), false)
-      -- dynamisch abgefragt, damit das Skript auch ohne Supabase-Storage (z. B. Test-Datenbank) läuft
-      when 'bucket' then to_regclass('storage.buckets') is not null and (xpath('count(//row)', query_to_xml(
-        format('select 1 from storage.buckets where id = %L', e.objekt), false, true, '')))[1]::text::int > 0
+      -- dynamisch abgefragt, damit das Skript auch ohne Supabase-Storage (z. B. Test-Datenbank) läuft;
+      -- kein Treffer ergibt ein leeres Ergebnis (nicht als XML parsen – das scheitert an leerem Inhalt)
+      when 'bucket' then case when to_regclass('storage.buckets') is null then false
+        else length(query_to_xml(format('select 1 from storage.buckets where id = %L', e.objekt), false, true, '')::text) > 0 end
     end as vorhanden
   from erwartet e
 )
