@@ -1,6 +1,8 @@
 // Live-Check gegen die echte Supabase-Datenbank aus der .env – ändert KEINE Daten.
 // Buchungen werden nur mit Werten aufgerufen, die garantiert abgelehnt werden
-// (Anzahl 0, Überentnahme, ID −1).
+// (Anzahl 0, Überentnahme, ID −1). Die KI wird über den Health-Check der Edge Function und einen
+// kleinen Probelauf mit einem festen Beispiel-Haushalt geprüft (keine echten Daten, nichts gespeichert).
+// Externe Dienste (KI-Anbieter, Wikimedia) melden Probleme als ⚠ – das ist kein Fehler im Code.
 //
 // Läuft im GitHub-Workflow „Live-Check“. Lokal:
 //   npm run build && npx vite preview &      (App unter http://localhost:4173)
@@ -263,6 +265,68 @@ if (ausgaben) {
   console.log('ℹ Migration „ausgaben“ noch nicht eingespielt – „Sonstiges“ auf der Startseite ist ausgeblendet.');
 }
 
+// ───────── KI: Edge Function, Anbieter, Modell, echter Probelauf ─────────
+console.log('\nKI (Edge Function „was-essen“)');
+const { ENGINE_VERSION } = await import('../supabase/functions/_shared/kombi/gesundheit.ts');
+const FUNKTION = `${env.VITE_SUPABASE_URL.replace(/\/$/, '')}/functions/v1/was-essen`;
+const kopf = { apikey: env.VITE_SUPABASE_KEY, authorization: `Bearer ${env.VITE_SUPABASE_KEY}` };
+let health = null;
+await pruefe('Health-Check', async () => {
+  const r = await fetch(FUNKTION, { headers: kopf, signal: AbortSignal.timeout(20000) });
+  if (r.status === 404) return 'ℹ nicht deployt – die App nutzt den Demo-Modus (Vorschläge nach Kombi-Regeln, keine KI)';
+  if (r.status === 405) return 'ℹ ältere Version ohne Health-Check – bitte neu deployen (README „KI einrichten“)';
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  health = await r.json();
+  if (JSON.stringify(health).match(/sk-|gsk_|AIza|Bearer /)) throw new Error('Antwort enthält etwas, das wie ein Key aussieht!');
+  const ki = health.ki;
+  return `Version ${health.version}${health.version === ENGINE_VERSION ? '' : ` (App: ${ENGINE_VERSION} – neu deployen)`}; ` +
+    `KI ${ki.eingerichtet ? 'eingerichtet' : 'NICHT eingerichtet (KI_API_KEY fehlt → Demo-Modus)'}: ${ki.anbieter} · ${ki.modell ?? '–'}; ` +
+    `Bilder: Suche ${health.bilder.suche}, Generierung ${health.bilder.generierung.eingerichtet ? `${health.bilder.generierung.anbieter} · ${health.bilder.generierung.modell}` : 'nicht eingerichtet'}`;
+});
+if (health?.ki?.eingerichtet) {
+  const probe = await fetch(`${FUNKTION}?probe=1`, { headers: kopf, signal: AbortSignal.timeout(90000) }).then((r) => r.json()).catch((e) => ({ fehler: e.message }));
+  const p = probe.probe;
+  if (!p) console.log(`⚠ KI-Probelauf nicht möglich – ${probe.fehler ?? 'keine Antwort'}`);
+  else if (p.ok) {
+    console.log(`✓ KI live: ${health.ki.anbieter} · ${health.ki.modell} – ${(p.ms / 1000).toFixed(1)} s, JSON gültig, Format gültig, ` +
+      `${p.gerichte} von ${p.vorschlaege_roh} Vorschlägen bestanden die Kombi-Prüfung (${p.namen.join(', ')}); ` +
+      `Bildanforderungen: ${p.bildanforderungen_ok}/${p.bildanforderungen} passend` +
+      (p.verworfen.length ? `; verworfen: ${p.verworfen.map((v) => `${v.name} (${v.grund})`).join('; ')}` : ''));
+  } else {
+    console.log(`⚠ KI-Probelauf: ${p.fehler ?? 'kein Vorschlag bestand die Prüfung'} – JSON ${p.json_gueltig ? 'gültig' : 'ungültig'}, Format ${p.schema_gueltig ? 'gültig' : 'ungültig'}, ${(p.ms / 1000).toFixed(1)} s`);
+  }
+}
+if (health && health.version === ENGINE_VERSION) {
+  const { bildAnfrageFuerKomponente } = await import('../supabase/functions/_shared/kombi/bilder.ts');
+  const r = await fetch(FUNKTION, {
+    method: 'POST', headers: { ...kopf, 'content-type': 'application/json' }, signal: AbortSignal.timeout(90000),
+    body: JSON.stringify({ aufgabe: 'bild', bild: bildAnfrageFuerKomponente({ name: 'Falafel', zutaten: [] }) }),
+  }).then((x) => x.json()).catch((e) => ({ fehler: e.message }));
+  if (r.bild) console.log(`✓ Bildpipeline der Function: ${r.bild.image_source} – ${r.bild.image_url} (${r.bild.lizenz ?? 'ohne Lizenzangabe'})`);
+  else console.log(`⚠ Bildpipeline der Function: kein Bild (${r.hinweis ?? r.fehler ?? (r.weg ?? []).join(', ')}) – die App zeigt dann lokale Bilder`);
+}
+
+// ───────── Bildsuche direkt (dieselbe Prüfung wie in der Function) ─────────
+console.log('\nBildsuche (Wikimedia Commons)');
+{
+  const { bildAnfrageFuerKomponente, bildAnfrageFuerZutat, commonsSuchUrl, werteCommonsAus } = await import('../supabase/functions/_shared/kombi/bilder.ts');
+  for (const a of [bildAnfrageFuerKomponente({ name: 'Falafel', zutaten: [] }), bildAnfrageFuerZutat('Strauchtomaten')]) {
+    try {
+      const r = await fetch(commonsSuchUrl(a.suchbegriff), { headers: { 'user-agent': 'Kombi-Live-Check/1.0 (GitHub Actions)' }, signal: AbortSignal.timeout(20000) });
+      const funde = werteCommonsAus(await r.json(), a);
+      if (!funde.length) {
+        console.log(`⚠ „${a.suchbegriff}“: kein Foto hat die Prüfung bestanden – lokales Bild`);
+        continue;
+      }
+      const kopfAntwort = await fetch(funde[0].url, { method: 'HEAD', headers: { 'user-agent': 'Kombi-Live-Check/1.0' }, signal: AbortSignal.timeout(20000) });
+      const ok = kopfAntwort.ok && /^image\//.test(kopfAntwort.headers.get('content-type') ?? '');
+      console.log(`${ok ? '✓' : '⚠'} „${a.suchbegriff}“: ${funde.length} passende Fotos, bestes „${funde[0].titel}“ (${funde[0].lizenz}) ${ok ? 'erreichbar' : `nicht erreichbar (${kopfAntwort.status})`}`);
+    } catch (e) {
+      console.log(`⚠ „${a.suchbegriff}“: Wikimedia nicht erreichbar (${e.message})`);
+    }
+  }
+}
+
 // ───────── App im Browser ─────────
 const APP_URL = process.env.APP_URL;
 if (!APP_URL) {
@@ -283,16 +347,70 @@ if (!APP_URL) {
     await page.goto(APP_URL);
     await page.waitForSelector('.tabbar, .karte', { timeout: 20000 });
     if (await page.isVisible('.karte')) throw new Error('„Supabase ist noch nicht eingerichtet“ – .env fehlt beim Build');
-    await page.waitForSelector('main .abschnitt, main .leer-zustand, .fehlerbox', { timeout: 20000 });
+    await page.waitForSelector('main .start, main .leer-zustand, .fehlerbox', { timeout: 20000 });
     if (await page.isVisible('.fehlerbox')) throw new Error(await page.textContent('.fehlerbox'));
     const tabs = await page.locator('.tabbar button > span:last-child').allTextContents();
     if (tabs.map((t) => t.trim()).join(',') !== 'Start,Essen,Vorrat,Produktion,Einkauf') throw new Error(`Bereiche: ${tabs.join(', ')}`);
     const titel = await page.textContent('.kopf h1');
-    const abschnitte = await page.locator('main > div:not([hidden]) :is(.geld-titel, .box-kopf h2, .foto-karte .ueber)').allTextContents();
+    const abschnitte = await page.locator('main > div:not([hidden]) .start > :is(.heute-karte, .start-hinweis, .start-block, .monat-karte, .kachel-paar)')
+      .evaluateAll((els) => els.map((e) => (e.querySelector('.ueber, h2, strong') ?? e).textContent.trim()));
+    if (await page.isVisible('main > div:not([hidden]) .kacheln')) throw new Error('„Heute wichtig“-Kacheln stehen noch auf dem Start');
     const hinweis = await page.locator('main > .hinweisbox').allTextContents();
     return `„${titel}“; Abschnitte: ${abschnitte.join(', ') || '–'}` + (hinweis.length ? `; Hinweis: ${hinweis.join(' ')}` : '');
   });
   await page.screenshot({ path: 'live-check-uebersicht.png', fullPage: true });
+
+  /** Mobile Darstellung: kein horizontales Scrollen, keine abgeschnittenen Reiter, keine kaputten Bilder. */
+  const layoutFehler = () => page.evaluate(() => {
+    const f = [];
+    const d = document.documentElement;
+    if (d.scrollWidth > d.clientWidth + 1) f.push(`Seite ${d.scrollWidth}px breit bei ${d.clientWidth}px`);
+    for (const el of document.querySelectorAll('main > div:not([hidden]) *')) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.right > d.clientWidth + 1 && getComputedStyle(el).position !== 'fixed' && !el.closest('.karussell, .kacheln, .chips, .empfohlen')) {
+        f.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]} ragt ${Math.round(r.right - d.clientWidth)}px hinaus`);
+        break;
+      }
+    }
+    for (const b of document.querySelectorAll('.tabbar button > span:last-child')) {
+      if (b.scrollWidth > b.clientWidth + 1) f.push(`Reiter „${b.textContent}“ abgeschnitten`);
+    }
+    for (const img of document.querySelectorAll('main > div:not([hidden]) img')) {
+      if (img.complete && img.naturalWidth === 0 && img.getAttribute('src')) f.push(`kaputtes Bild ${img.getAttribute('src').slice(0, 60)}`);
+    }
+    return f;
+  });
+  await pruefe('Mobile Darstellung (390 px): kein Überlauf, Reiter vollständig, keine kaputten Bilder', async () => {
+    const fehler = [];
+    for (const b of ['Start', 'Essen', 'Vorrat', 'Produktion', 'Einkauf']) {
+      await page.click(`.tabbar button:has-text("${b}")`);
+      await page.waitForTimeout(400);
+      for (const x of await layoutFehler()) fehler.push(`${b}: ${x}`);
+    }
+    // kleinstes aktuelles iPhone-Format (SE / mini): 375 px
+    await page.setViewportSize({ width: 375, height: 667 });
+    for (const b of ['Start', 'Vorrat', 'Essen']) {
+      await page.click(`.tabbar button:has-text("${b}")`);
+      await page.waitForTimeout(300);
+      for (const x of await layoutFehler()) fehler.push(`${b} (375 px): ${x}`);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.click('.tabbar button:has-text("Start")');
+    if (fehler.length) throw new Error(fehler.join(' | '));
+    return 'Start, Essen, Vorrat, Produktion, Einkauf bei 390 px; Start, Vorrat, Essen bei 375 px';
+  });
+  await pruefe('Dunkelmodus: Start ohne Überlauf, Hintergrund dunkel', async () => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.waitForTimeout(300);
+    const grund = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await page.screenshot({ path: 'live-check-dunkel.png', fullPage: true });
+    const fehler = await layoutFehler();
+    await page.emulateMedia({ colorScheme: 'light' });
+    const [r, g, b] = (grund.match(/\d+/g) ?? []).map(Number);
+    if (r + g + b > 150) throw new Error(`Hintergrund zu hell: ${grund}`);
+    if (fehler.length) throw new Error(fehler.join(' | '));
+    return `Hintergrund ${grund}`;
+  });
 
   await pruefe('Vorrat: Lagerorte und alle Sorten', async () => {
     await page.click('.tabbar button:has-text("Vorrat")');
@@ -376,10 +494,10 @@ if (!APP_URL) {
 
   await pruefe('Start: Kochansicht öffnen bucht nichts', async () => {
     await page.click('.tabbar button:has-text("Start")');
-    const knopf = page.locator('main > div:not([hidden]) .foto-karte .pillen-knopf').first();
+    const knopf = page.locator('main > div:not([hidden]) .rezept-kompakt .rk-kochen').first();
     if (!(await knopf.count())) return 'kein Vorschlag aus dem Vorrat';
     const vorher = JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl]));
-    const name = await page.locator('main > div:not([hidden]) .foto-karte h3').first().textContent();
+    const name = await page.locator('main > div:not([hidden]) .rezept-kompakt h3').first().textContent();
     await knopf.click();
     await page.waitForSelector('.kochen');
     const meta = (await page.innerText('.kochen-kopf .meta-icons')).replace(/\s+/g, ' ');

@@ -30,6 +30,12 @@ export function euro(cent: number): string {
   return (cent / 100).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
 }
 
+/** Kompakt für Übersichten: ab 100 € ohne Cent („142 €“), darunter genau („23,40 €“). Details zeigen immer genau. */
+export function euroKompakt(cent: number): string {
+  if (Math.abs(cent) >= 10_000) return `${Math.round(cent / 100).toLocaleString('de-DE')} €`;
+  return euro(cent);
+}
+
 /** '0,17' / '0.17' / '1' → Cent; leer → null; ungültig → NaN */
 export function euroZuCent(text: string): number | null {
   const t = text.replace('€', '').trim().replace(',', '.');

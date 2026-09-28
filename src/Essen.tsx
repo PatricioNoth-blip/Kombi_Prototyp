@@ -26,6 +26,7 @@ import { kcalKurz } from './format';
 import { tagName } from './dashboard';
 import type { NavZustand } from './navigation';
 import { Bild } from './Bild';
+import { KiStatus } from './KiStatus';
 
 type Props = {
   bestand: Sorte[];
@@ -343,6 +344,7 @@ export function Essen({
         <span className="option-name"><Icon name="preis" groesse={18} /> Möglichst günstig</span>
         <input type="checkbox" role="switch" checked={optionen.guenstig} onChange={() => optionenAendern({ guenstig: !optionen.guenstig })} />
       </label>
+      <KiStatus />
     </div>
   );
 

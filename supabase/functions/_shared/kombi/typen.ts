@@ -1,6 +1,7 @@
 // Gemeinsame Typen der Kombi-Empfehlungslogik.
 // Reines TypeScript ohne Abhängigkeiten: läuft im Browser, in der Edge Function (Deno) und in Node-Tests.
 import type { Naehrwert, Naehrwerte } from './naehrwerte.ts';
+import type { BildAnfrage, RohBildAnfrage } from './bilder.ts';
 
 export type Farbe = 'rot' | 'braun' | 'gruen' | 'gelb' | 'weiss' | 'schwarz' | 'blau';
 export type Lagerort = 'gefrierfach' | 'kuehlschrank' | 'vorrat';
@@ -148,6 +149,8 @@ export type RohGericht = {
   schritte?: string[];
   begruendung?: string;
   eigenschaften?: Record<string, unknown>;
+  /** nur eine Bildanforderung (Suchbegriff, Stil, Format) – nie eine URL */
+  image_request?: RohBildAnfrage | null;
 };
 
 export type RohEinkauf = { name?: string; ermoeglicht?: string[]; begruendung?: string };
@@ -176,6 +179,7 @@ export type RohKomponente = {
   lagerort?: string;
   zeit_min?: number;
   schritte?: string[];
+  image_request?: RohBildAnfrage | null;
 };
 
 export type RohAntwort = {
@@ -269,6 +273,8 @@ export type Gericht = {
   /** Kalorien/Nährwerte aus hinterlegten Daten – berechnet, teilweise oder unbekannt */
   naehrwerte: Naehrwerte;
   bewertung: number;
+  /** welches Bild gebraucht wird – aus den Rezeptdaten gebaut (ältere Gerichte: fehlt) */
+  bild?: BildAnfrage | null;
 };
 
 export type Einkaufsvorschlag = {
@@ -431,6 +437,8 @@ export type KomponentenVorschlag = {
   /** A = verwertet vorhandene Lebensmittel, B = neu (mit Einkauf) */
   typ: 'verwerten' | 'neu';
   vorteil: string;
+  /** welches Bild gebraucht wird (ältere Vorschläge: fehlt) */
+  bild?: BildAnfrage | null;
 };
 
 export type KomponentenErgebnis = {

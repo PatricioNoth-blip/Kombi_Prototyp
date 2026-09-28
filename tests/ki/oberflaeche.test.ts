@@ -2,9 +2,9 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BEREICHE, hashVon, ladeNav, navigiere, neuerEintrag, routeAus, speichereNav, START, type NavZustand } from '../../src/navigation.ts';
-import { dringendHeute, gruss, heuteGekocht, monatsbilanz, sinnvolleProduktion, startReihenfolge } from '../../src/startseite.ts';
+import { dringendHeute, gruss, heuteGekocht, mahlzeitArt, monatsbilanz, sinnvolleProduktion, startAbschnitte, startHinweis, tagesuebersicht } from '../../src/startseite.ts';
 import type { KomponentenVorschlag } from '../../supabase/functions/_shared/kombi/typen.ts';
-import { freieTage, fuellstand, heuteWichtig, ortKacheln, sortenFuer, tagName, vorratswert, zustand } from '../../src/dashboard.ts';
+import { freieTage, fuellstand, heuteWichtig, ortKacheln, produktionsGruende, sortenFuer, tagName, vorratswert, zustand } from '../../src/dashboard.ts';
 import type { Sorte } from '../../src/api.ts';
 import { leseEingabe } from '../../supabase/functions/_shared/kombi/einkaufsliste.ts';
 import { reserviertAusser } from '../../supabase/functions/_shared/kombi/planung.ts';
@@ -148,12 +148,18 @@ describe('Startseite', () => {
     assert.equal(heuteGekocht([m('2026-09-27', 48, 0, 600, 0)], HEUTE_S).titel.length, 0, 'nur heute');
   });
 
-  test('Reihenfolge wie im Entwurf: Geld, Heute wichtig, Essen, Produktion, Einkauf; leere Bereiche entfallen', () => {
-    assert.deepEqual(startReihenfolge({ wichtig: 2, produktion: true, einkauf: true, geld: true }),
-      ['geld', 'wichtig', 'essen', 'produktion', 'einkauf']);
-    assert.deepEqual(startReihenfolge({ wichtig: 1, produktion: false, einkauf: true, geld: false }),
-      ['wichtig', 'essen', 'einkauf']);
-    assert.deepEqual(startReihenfolge({ wichtig: 0, produktion: false, einkauf: false, geld: false }), ['essen']);
+  test('kompakte Reihenfolge: Heute, ein Hinweis, Auftauen, Was essen wir?, Monat, Produktion|Einkauf – kein „Heute wichtig“', () => {
+    assert.deepEqual(startAbschnitte({ hinweis: true, auftauen: true, monat: true }), ['heute', 'hinweis', 'auftauen', 'essen', 'monat', 'kacheln']);
+    assert.deepEqual(startAbschnitte({ hinweis: false, auftauen: false, monat: false }), ['heute', 'essen', 'kacheln']);
+    assert.ok(!startAbschnitte({ hinweis: true, auftauen: true, monat: true }).includes('wichtig' as never));
+  });
+
+  test('statt fünf Kacheln höchstens eine dezente Zeile – Knappes gehört in den Einkauf', () => {
+    assert.equal(startHinweis([sorte(1, 'Joghurt', { geoeffnet: 1 }), sorte(2, 'Spinat', { bald_ablaufen: true, naechster_ablauf: '2026-09-29' })], HEUTE_S),
+      '2 Lebensmittel bald verbrauchen');
+    assert.equal(startHinweis([sorte(1, 'A', { abgelaufen: 1 }), sorte(2, 'B', { aufgetaut: 1 })], HEUTE_S), '1 abgelaufen · 1 Lebensmittel bald verbrauchen');
+    assert.equal(startHinweis([sorte(3, 'C', { nachkochen: true, anzahl: 0 })], HEUTE_S), null, 'knapp ≠ dringend');
+    assert.equal(startHinweis([sorte(4, 'D')], HEUTE_S), null);
   });
 
   test('dringend: abgelaufen, aufgetaut, läuft heute/morgen ab, Auftauen fällig – „noch 3 Tage“ nicht', () => {
@@ -162,6 +168,37 @@ describe('Startseite', () => {
     assert.equal(dringendHeute([sorte(3, 'C', { bald_ablaufen: true, naechster_ablauf: '2026-09-29' })], HEUTE_S, 0), true);
     assert.equal(dringendHeute([sorte(4, 'D', { bald_ablaufen: true, naechster_ablauf: '2026-10-01' })], HEUTE_S, 0), false);
     assert.equal(dringendHeute([], HEUTE_S, 1), true);
+  });
+
+  test('Heute: kcal pro Person aus echten Mahlzeiten, Essenskosten, Ziel – unbekannt ≠ 0', () => {
+    const mz = (kcal: number | null, kcal_unbekannt: number, portionen: number, kosten: number | null, stunde: number, datum = HEUTE_S) => ({
+      datum, titel: 'x', portionen, kosten_cent: kosten, kosten_unbekannt: kosten === null ? 1 : 0, kcal, kcal_unbekannt, rueckgaengig: false,
+      erstellt_am: new Date(2026, 8, 28, stunde, 0).toISOString(),
+    });
+    // Frühstück 900 kcal für 2 Personen = 450; Abend 2780 kcal für 2 = 1390 → 1840 pro Person
+    const t = tagesuebersicht([mz(900, 0, 2, 120, 8), mz(2780, 0, 2, 362, 19)], [{ datum: HEUTE_S, betrag_cent: 0, entfernt: false }].slice(0, 0), HEUTE_S, 2200);
+    assert.deepEqual([t.mahlzeiten, t.kcal, t.kcal_status, t.kosten_cent, t.kosten_status], [2, 1840, 'berechnet', 482, 'berechnet']);
+    assert.deepEqual(t.mahlzeit_arten, { fruehstueck: true, mittag: false, abend: true });
+    assert.equal(t.ziel, 2200);
+    assert.equal(Math.round(t.anteil! * 100), 84);
+    // eine Mahlzeit ohne bekannte Nährwerte → „ab“, Ziel-Balken nur bei vollständigen Werten
+    const teil = tagesuebersicht([mz(900, 0, 2, 120, 8), mz(null, 1, 1, null, 13)], [], HEUTE_S, 2200);
+    assert.deepEqual([teil.kcal, teil.kcal_status, teil.anteil, teil.kosten_status], [450, 'teilweise', null, 'teilweise']);
+    const nix = tagesuebersicht([mz(null, 2, 1, null, 13)], [], HEUTE_S);
+    assert.deepEqual([nix.kcal, nix.kcal_status, nix.kosten_cent, nix.kosten_status], [null, 'unbekannt', null, 'unbekannt'], 'unbekannt, nicht 0');
+    const leer = tagesuebersicht([mz(500, 0, 1, 100, 13, '2026-09-27')], [], HEUTE_S);
+    assert.deepEqual([leer.mahlzeiten, leer.kcal_status, leer.kosten_status], [0, 'leer', 'leer'], 'nur heute');
+    // Sonstiges von heute zählt zu den Essenskosten (Kantine), rückgängig Gemachtes nicht
+    const mitKantine = tagesuebersicht([{ ...mz(600, 0, 1, 200, 12), rueckgaengig: true }], [{ id: 1, datum: HEUTE_S, betrag_cent: 650, entfernt: false }], HEUTE_S);
+    assert.deepEqual([mitKantine.mahlzeiten, mitKantine.kosten_cent, mitKantine.kosten_status], [0, 650, 'berechnet']);
+    assert.equal(tagesuebersicht([], [], HEUTE_S, 50).ziel, null, 'unplausibles Ziel ignoriert');
+    assert.equal(mahlzeitArt(undefined), null);
+  });
+
+  test('Komponente: eine gegessene Portion zählt mit ihren eigenen kcal – die Zutaten nicht noch einmal', () => {
+    // essen() protokolliert die kcal der ENTNOMMENEN Sorte (Tomaten-Basis 45 kcal/Portion), nicht die Tomaten darin
+    const t = tagesuebersicht([{ datum: HEUTE_S, titel: 'Pasta', portionen: 1, kosten_cent: 24, kosten_unbekannt: 0, kcal: 45, kcal_unbekannt: 0, rueckgaengig: false }], [], HEUTE_S);
+    assert.equal(t.kcal, 45);
   });
 
   test('Gruß nach Tageszeit', () => {
@@ -173,6 +210,25 @@ describe('Startseite', () => {
     assert.equal(sinnvolleProduktion([{ plan_id: 'p', titel: 'Tomaten-Basis', portionen: 6, alles_da: true }], [])!.art, 'vorgemerkt');
     assert.equal(sinnvolleProduktion([{ plan_id: 'p', titel: 'T', portionen: 6, alles_da: false }], [idee('verwerten', ['Tomaten'])])!.art, 'idee');
     assert.equal(sinnvolleProduktion([], [idee('neu', ['Tomaten']), idee('verwerten', [])]), null, 'kein Füllmaterial');
+  });
+});
+
+describe('Produktion: Begründung aus strukturierten Daten', () => {
+  test('„700 g Gehackte Tomaten – noch 2 Tage“, „Passt zu 6 Sachen im Vorrat“ – nichts von der KI', () => {
+    const tomaten = sorte(7, 'Gehackte Tomaten', { einheit: 'g', portion_menge: 100, anzahl: 800, bald_ablaufen: true, naechster_ablauf: '2026-09-30', art: 'zutat' });
+    const k = {
+      zutaten: [
+        { name: 'Gehackte Tomaten', block_typ_id: 7, menge: 700, einheit: 'g' as const, quelle: 'bestand' as const, kosten_cent: null, dringend: true },
+        { name: 'Zwiebeln', block_typ_id: null, menge: 150, einheit: 'g' as const, quelle: 'einkauf' as const, kosten_cent: null, dringend: false },
+        { name: 'Salz', block_typ_id: null, menge: null, einheit: null, quelle: 'grundausstattung' as const, kosten_cent: null, dringend: false },
+      ],
+      partner: ['a', 'b', 'c', 'd', 'e', 'f'],
+      gerichtstypen: ['pasta', 'pizza', 'suppe', 'auflauf', 'eintopf'] as never,
+    };
+    const g = produktionsGruende(k, [tomaten], HEUTE);
+    assert.deepEqual(g.dringend, ['700 g Gehackte Tomaten – noch 3 Tage']);
+    assert.deepEqual(g.passend, ['Passt zu 6 Sachen im Vorrat', 'Für 5 Gerichtsarten']);
+    assert.deepEqual(produktionsGruende({ zutaten: [], partner: [], gerichtstypen: [] }, [], HEUTE), { dringend: [], passend: [] });
   });
 });
 

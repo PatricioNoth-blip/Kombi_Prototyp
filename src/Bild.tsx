@@ -1,7 +1,13 @@
-// Bilder zum Essen: ein Foto, wenn es eines gibt, das wirklich passt – sonst eine warme Kachel mit
-// dem passenden Lebensmittel-Symbol. Bilder sind nur Illustration; Mengen, Preise und Inhalte
-// kommen nie aus einem Bild.
+// Bilder zum Essen – in dieser Reihenfolge:
+//   1. eigenes, gefundenes oder generiertes Bild (geprüfte https-URL, siehe bilder.ts)
+//   2. lokales Foto, das wirklich zum Namen passt (src/bilder/)
+//   3. warme Kachel mit passendem Lebensmittel-Symbol (nach Name, sonst nach Zutat-Kategorie oder Rolle)
+// Lädt ein Bild nicht, springt die Anzeige sofort eine Stufe weiter – nie ein kaputtes Bild-Symbol.
+// Bilder sind nur Illustration; Mengen, Preise und Inhalte kommen nie aus einem Bild.
+import { useState } from 'react';
 import type { Farbe } from '../supabase/functions/_shared/kombi/typen.ts';
+import { type BildDaten, bildUrlFuerBreite, sichereBildUrl } from '../supabase/functions/_shared/kombi/bilder.ts';
+import { erkenneZutat, KATEGORIE_EMOJI } from '../supabase/functions/_shared/kombi/zutaten.ts';
 import tomatensosse from './bilder/tomatensosse.webp';
 import pasta from './bilder/pasta.webp';
 import curry from './bilder/curry.webp';
@@ -68,8 +74,13 @@ export function fotoFuer(name: string): Foto | null {
 
 export function emojiFuer(name: string, farbe?: Farbe | null): string {
   const n = klein(name);
-  return EMOJIS.find(([m]) => m.test(n))?.[1] ?? (farbe ? NACH_FARBE[farbe] : '🍽️');
+  const z = EMOJIS.find(([m]) => m.test(n))?.[1];
+  if (z) return z;
+  const zutat = erkenneZutat(name);
+  return zutat ? KATEGORIE_EMOJI[zutat.kategorie] : farbe ? NACH_FARBE[farbe] : '🍽️';
 }
+
+const BREITE: Record<BildArt, number> = { rund: 160, klein: 160, kachel: 320, flaeche: 800 };
 
 export type BildArt = 'rund' | 'klein' | 'kachel' | 'flaeche';
 
@@ -77,13 +88,33 @@ export type BildArt = 'rund' | 'klein' | 'kachel' | 'flaeche';
  * rund/klein: runde Lebensmittel-Bilder (Listen, „Heute wichtig“); kachel: quadratisch mit runden Ecken;
  * flaeche: füllt den Platz (Karten mit Foto). Kleine Fotos werden nie groß aufgeblasen.
  */
-export function Bild({ name, emoji, farbe, art, className = '' }: {
+export function Bild({ name, emoji, farbe, art, className = '', bild, alt, onKaputt }: {
   name: string; emoji?: string | null; farbe?: Farbe | null; art: BildArt; className?: string;
+  /** eigenes/gefundenes/generiertes Bild (optional) */
+  bild?: BildDaten | null;
+  /** Alternativtext – nur für inhaltlich wichtige Bilder (Koch-Ansicht); sonst dekorativ */
+  alt?: string;
+  onKaputt?: () => void;
 }) {
+  const [kaputt, setKaputt] = useState<string | null>(null);
+  const url = bild && bild.image_status === 'ok' ? sichereBildUrl(bild.image_url, bild.image_source) : null;
+  if (url && kaputt !== url) {
+    const src = bildUrlFuerBreite(url, BREITE[art]);
+    const srcSet = art === 'flaeche' && src !== bildUrlFuerBreite(url, 400)
+      ? `${bildUrlFuerBreite(url, 400)} 400w, ${src} 800w` : undefined;
+    return (
+      <img className={`bild bild-${art} ${className}`} src={src} srcSet={srcSet} sizes={srcSet ? '(max-width: 560px) 100vw, 560px' : undefined}
+        alt={alt ?? ''} loading="lazy" decoding="async" draggable={false}
+        onError={() => {
+          setKaputt(url);
+          onKaputt?.();
+        }} />
+    );
+  }
   const foto = fotoFuer(name);
-  const passt = foto && (foto.gross || art === 'rund' || art === 'klein');
+  const passt = foto && (foto.gross || art === 'rund' || art === 'klein') && kaputt !== foto.src;
   if (passt) {
-    return <img className={`bild bild-${art} ${className}`} src={foto.src} alt="" loading="lazy" decoding="async" draggable={false} />;
+    return <img className={`bild bild-${art} ${className}`} src={foto.src} alt={alt ?? ''} loading="lazy" decoding="async" draggable={false} onError={() => setKaputt(foto.src)} />;
   }
   return (
     <span className={`bild bild-${art} bild-symbol f-${farbe ?? 'neutral'} ${className}`} aria-hidden="true">

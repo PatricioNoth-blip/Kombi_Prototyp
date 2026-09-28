@@ -1,4 +1,6 @@
-// Startseite: Was ist heute wichtig, was kostet der Haushalt – nur aus echten Daten.
+// Startseite: Was wurde heute gegessen (kcal, Kosten), was kostet der Haushalt – nur aus echten Daten.
+// „Heute wichtig“ steht nicht mehr als große Liste auf dem Start; Ablauf und Reste steuern im Hintergrund
+// die Vorschläge (Engine) und erscheinen hier höchstens als eine dezente Zeile.
 //
 // Geld wird nie doppelt gezählt:
 //   • Ausgegeben  = was beim Einkauf tatsächlich bezahlt wurde (Einkaufsbuchungen mit Preis).
@@ -16,6 +18,8 @@ export type SonstigeAusgabe = { id?: number; datum: string; betrag_cent: number;
 export type MahlzeitZeile = {
   datum: string; titel: string; portionen: number;
   kosten_cent: number | null; kosten_unbekannt: number; kcal: number | null; kcal_unbekannt: number; rueckgaengig: boolean;
+  /** Zeitpunkt der Buchung – für Frühstück/Mittag/Abend (fehlt bei älteren Daten) */
+  erstellt_am?: string;
 };
 
 export type Monatsbilanz = {
@@ -115,16 +119,94 @@ export function dringendHeute(bestand: Sorte[], heute: string, auftauenFaellig: 
   });
 }
 
-export type StartAbschnitt = 'wichtig' | 'essen' | 'geld' | 'produktion' | 'einkauf';
+export type StartAbschnitt = 'heute' | 'hinweis' | 'auftauen' | 'essen' | 'monat' | 'kacheln';
 
 /**
- * Reihenfolge der Startseite (wie im Entwurf): Geld → Heute wichtig → Essen → Produktion | Einkauf.
- * Leere Bereiche entfallen – so rückt Wichtiges automatisch nach oben.
+ * Reihenfolge der kompakten Startseite: Heute (kcal, Kosten) → höchstens ein dezenter Hinweis →
+ * Auftauen, wenn heute fällig → Was essen wir? → Monat → Produktion | Einkauf.
+ * Leere Teile entfallen; „Was essen wir?“ und die beiden Kacheln bleiben immer.
  */
-export function startReihenfolge(k: { wichtig: number; produktion: boolean; einkauf: boolean; geld: boolean }): StartAbschnitt[] {
-  const folge: StartAbschnitt[] = ['geld', 'wichtig', 'essen', 'produktion', 'einkauf'];
-  return folge.filter((a) =>
-    (a !== 'wichtig' || k.wichtig > 0) && (a !== 'produktion' || k.produktion) && (a !== 'einkauf' || k.einkauf) && (a !== 'geld' || k.geld));
+export function startAbschnitte(k: { hinweis: boolean; auftauen: boolean; monat: boolean }): StartAbschnitt[] {
+  const folge: StartAbschnitt[] = ['heute', 'hinweis', 'auftauen', 'essen', 'monat', 'kacheln'];
+  return folge.filter((a) => (a !== 'hinweis' || k.hinweis) && (a !== 'auftauen' || k.auftauen) && (a !== 'monat' || k.monat));
+}
+
+export type Status = 'berechnet' | 'teilweise' | 'unbekannt' | 'leer';
+
+export type Tagesuebersicht = {
+  mahlzeiten: number;
+  /** kcal pro Person (Mahlzeit ÷ Portionen), Summe der bekannten; null = keine bekannt */
+  kcal: number | null;
+  kcal_status: Status;
+  /** Essenskosten heute: Warenwert der gekochten Mahlzeiten + sonstige Ausgaben von heute */
+  kosten_cent: number | null;
+  kosten_status: Status;
+  mahlzeit_arten: { fruehstueck: boolean; mittag: boolean; abend: boolean };
+  /** persönliches Tagesziel (optional) und Anteil 0…1 – nur, wenn die kcal vollständig bekannt sind */
+  ziel: number | null;
+  anteil: number | null;
+};
+
+/** Frühstück vor 11 Uhr, Mittag bis 16 Uhr, danach Abendessen (Gerätezeit). */
+export function mahlzeitArt(zeitstempel: string | undefined): 'fruehstueck' | 'mittag' | 'abend' | null {
+  if (!zeitstempel) return null;
+  const d = new Date(zeitstempel);
+  if (Number.isNaN(d.getTime())) return null;
+  const h = d.getHours();
+  return h < 11 ? 'fruehstueck' : h < 16 ? 'mittag' : 'abend';
+}
+
+/**
+ * Der Tag in Zahlen – nur aus protokollierten Mahlzeiten und eingetragenen Ausgaben.
+ * Kalorien kommen aus hinterlegten Nährwerten der TATSÄCHLICH entnommenen Mengen (essen() in der DB):
+ * Eine gegessene Portion Tomaten-Basis zählt mit ihren eigenen kcal – die Tomaten darin nicht noch einmal.
+ * Unbekannt bleibt unbekannt: „teilweise“ heißt „mindestens“, nie geschätzt.
+ */
+export function tagesuebersicht(
+  mahlzeiten: MahlzeitZeile[], sonstige: SonstigeAusgabe[], heute: string, ziel: number | null = null,
+): Tagesuebersicht {
+  const m = mahlzeiten.filter((x) => !x.rueckgaengig && x.datum === heute);
+  const s = sonstige.filter((a) => !a.entfernt && a.datum === heute);
+  const kcalBekannt = m.filter((x) => x.kcal !== null);
+  const kcal = kcalBekannt.length ? Math.round(kcalBekannt.reduce((sum, x) => sum + (x.kcal as number) / Math.max(1, x.portionen), 0)) : null;
+  const kcalVoll = m.length > 0 && m.every((x) => x.kcal !== null && x.kcal_unbekannt === 0);
+  const kcal_status: Status = m.length === 0 ? 'leer' : kcalVoll ? 'berechnet' : kcal !== null ? 'teilweise' : 'unbekannt';
+  const kostenBekannt = m.filter((x) => x.kosten_cent !== null);
+  const kostenVoll = m.every((x) => x.kosten_cent !== null && x.kosten_unbekannt === 0);
+  const kosten = kostenBekannt.reduce((sum, x) => sum + (x.kosten_cent as number), 0) + s.reduce((sum, a) => sum + a.betrag_cent, 0);
+  const kosten_status: Status = m.length + s.length === 0 ? 'leer' : kostenVoll ? 'berechnet' : kostenBekannt.length || s.length ? 'teilweise' : 'unbekannt';
+  const arten = new Set(m.map((x) => mahlzeitArt(x.erstellt_am)));
+  const zielOk = ziel !== null && Number.isFinite(ziel) && ziel >= 500 && ziel <= 8000 ? Math.round(ziel) : null;
+  return {
+    mahlzeiten: m.length,
+    kcal,
+    kcal_status,
+    kosten_cent: kosten_status === 'leer' || kosten_status === 'unbekannt' ? null : kosten,
+    kosten_status,
+    mahlzeit_arten: { fruehstueck: arten.has('fruehstueck'), mittag: arten.has('mittag'), abend: arten.has('abend') },
+    ziel: zielOk,
+    anteil: zielOk !== null && kcal !== null && kcal_status === 'berechnet' ? Math.min(1.5, kcal / zielOk) : null,
+  };
+}
+
+/**
+ * Höchstens EINE dezente Zeile statt „Heute wichtig“-Kacheln: „1 abgelaufen · 2 bald verbrauchen“.
+ * Knapp werdende Sorten gehören in den Einkauf, nicht hierher. null = nichts zu sagen.
+ */
+export function startHinweis(bestand: Sorte[], heute: string): string | null {
+  let abgelaufen = 0;
+  let bald = 0;
+  for (const s of bestand) {
+    const z = zustand(s, heute);
+    if (!z) continue;
+    if (z.art === 'abgelaufen') abgelaufen++;
+    else if (z.art !== 'niedrig') bald++;
+  }
+  const teile = [
+    abgelaufen ? `${abgelaufen} abgelaufen` : null,
+    bald ? `${bald} Lebensmittel bald verbrauchen` : null,
+  ].filter(Boolean);
+  return teile.length ? teile.join(' · ') : null;
 }
 
 /** „Guten Morgen“ … abhängig von der Uhrzeit */

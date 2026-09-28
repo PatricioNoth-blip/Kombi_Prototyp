@@ -101,12 +101,18 @@ describe('Prompt', () => {
       notfall: false,
     };
     const text = auftragAlsText(a);
-    assert.match(text, /## Komplettgerichte[^#]*b13 \| Pizza \| Rolle: Komplettgericht \| 4 Portionen \| Gefrierfach \| Zusammensetzung unbekannt/);
-    assert.match(text, /## Komponenten[^#]*b3 \| Linsen gekocht \| Rolle: Protein \| 6 Portionen/);
-    assert.match(text, /## Einzelne Zutaten[^#]*b6 \| TK-Gemüsemix \| Rolle: Gemüse/);
-    assert.match(text, /b3 [^\n]*€ \(sehr günstig\)/, 'Preisklasse statt Betrag');
+    const json = JSON.parse(/```json\n(.*)\n```/.exec(text)![1]);
+    const pizza = json.inventar.find((x: { id: string }) => x.id === 'b13');
+    assert.deepEqual([pizza.name, pizza.typ, pizza.rolle, pizza.menge, pizza.einheit, pizza.lagerort, pizza.zusammensetzung],
+      ['Pizza', 'komplettgericht', 'Komplettgericht', 4, 'portion', 'gefrierfach', null], 'Zusammensetzung unbekannt = null');
+    const linsen = json.inventar.find((x: { id: string }) => x.id === 'b3');
+    assert.deepEqual([linsen.typ, linsen.rolle, linsen.menge, linsen.preisklasse], ['komponente', 'Protein', 6, '€ (sehr günstig)'], 'Preisklasse statt Betrag');
+    assert.equal(json.inventar.find((x: { id: string }) => x.id === 'b6').typ, 'zutat');
+    assert.deepEqual(json.inventar.map((x: { typ: string }) => x.typ).filter((t: string, i: number, l: string[]) => l.indexOf(t) === i),
+      ['komplettgericht', 'komponente', 'zutat'], 'nach Art geordnet');
     assert.doesNotMatch(text, /\d+,\d\d €/, 'keine Euro-Beträge im Prompt');
-    assert.match(text, /k1 \| halbe Paprika/);
+    assert.deepEqual(json.kuehlschrank_reste, [{ id: 'k1', name: 'halbe Paprika', menge: null }], 'Menge unbekannt – keine Zahl');
+    assert.ok(json.immer_da.some((x: { id: string }) => x.id === 'g-salz'));
     assert.match(text, /- Curry A/);
     assert.match(text, /vorerst meiden: Gerichtstyp curry/);
   });

@@ -51,8 +51,14 @@ describe('Komponenten verstehen: Rolle, Zusammensetzung, Funktion', () => {
   test('Prompt: Baukasten-Prinzip, Rolle, „enthält“, unbekannte Zusammensetzung (TK-Pizza)', () => {
     const a: KiAuftrag = { ...anfrage({ snapshot: snapshot(HAUSHALT) }), leitplanken: berechneLeitplanken([], { art: 'normal' }), notfall: false };
     const text = auftragAlsText(a);
-    assert.match(text, /b22 \| Tomaten-Basis \| Rolle: Basis & Soße \| 6 Portionen \| Gefrierfach \| enthält: Tomaten, Zwiebeln, Knoblauch \| passt in: Pasta, Pizza, Suppe \| Richtung: italienisch/);
-    assert.match(text, /b13 \| Pizza \| Rolle: Komplettgericht [^\n]*Zusammensetzung unbekannt/);
+    const json = JSON.parse(/```json\n(.*)\n```/.exec(text)![1]);
+    const tb = json.inventar.find((x: { id: string }) => x.id === 'b22');
+    assert.deepEqual([tb.name, tb.rolle, tb.menge, tb.lagerort, tb.zusammensetzung, tb.passt_in, tb.richtung],
+      ['Tomaten-Basis', 'Basis & Soße', 6, 'gefrierfach', ['Tomaten', 'Zwiebeln', 'Knoblauch'], ['Pasta', 'Pizza', 'Suppe'], 'italienisch']);
+    const pizza = json.inventar.find((x: { id: string }) => x.id === 'b13');
+    assert.equal(pizza.rolle, 'Komplettgericht');
+    assert.equal(pizza.zusammensetzung, null, 'unbekannte Zusammensetzung bleibt null');
+    assert.match(text, /zusammensetzung null = UNBEKANNT/);
     const system = systemPromptFuer(a);
     assert.match(system, /KEINE normale Rezept-App/);
     assert.match(system, /Finde sinnvolle Kombinationen dieser Bausteine/);

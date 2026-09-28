@@ -17,8 +17,10 @@ import { PostenListe } from './PostenListe';
 import { Icon } from './Icon';
 import { lagerort } from './farben';
 import { artVon, einheitVon, euroKurz, heuteIso, kcalKurz, mengeText, portionMengeVon, portionenVon } from './format';
-import { plusTageIso, zustand } from './dashboard';
-import { Bild } from './Bild';
+import { plusTageIso, produktionsGruende, zustand } from './dashboard';
+import { Bild, type BildArt } from './Bild';
+import { bildKaputt, useBild } from './bildApi';
+import { bildAnfrageFuerVorschlag } from '../supabase/functions/_shared/kombi/bilder.ts';
 import { Box } from './Karten';
 
 type Props = {
@@ -68,6 +70,13 @@ function dringendsterGrund(k: KomponentenVorschlag, bestand: Sorte[], heute: str
     }
   }
   return { text: `Verwertet ${k.verwertet.slice(0, 2).join(' und ')}`, klein: null };
+}
+
+/** Bild einer Komponente: Cache bzw. (nur für die Hauptkarte) einmalige Suche – sonst lokal. */
+function KomponentenBild({ k, art, suchen = false }: { k: KomponentenVorschlag; art: BildArt; suchen?: boolean }) {
+  const anfrage = k.bild ?? bildAnfrageFuerVorschlag(k);
+  const foto = useBild(anfrage, suchen);
+  return <Bild name={k.name} farbe={k.rolle} art={art} bild={foto} onKaputt={() => bildKaputt(anfrage?.schluessel)} />;
 }
 
 /** Was soll hergestellt werden – und wohin kommt es? */
@@ -130,6 +139,8 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
   }
 
   const warnung = jetzt && !jetzt.planId ? dringendsterGrund(jetzt.k, bestand, heute) : null;
+  // Begründung aus strukturierten Daten: Menge und Zustand aus dem Vorrat, Partner, Gerichtsarten
+  const gruende = jetzt ? produktionsGruende(jetzt.k, bestand, heute) : null;
   const weitereVorgemerkt = vorgemerkt.filter((p) => p.id !== jetzt?.planId);
   const tage = Array.from({ length: 7 }, (_, i) => plusTageIso(heute, i));
   const flexibel = plaene.filter((p) => p.datum === null).length;
@@ -138,7 +149,7 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
     const fehlt = fehltNamen(k);
     return (
       <button key={k.id} type="button" className="empfohlen-karte" onClick={() => setOffen(k)}>
-        <span className="empf-bild"><Bild name={k.name} farbe={k.rolle} art="flaeche" /></span>
+        <span className="empf-bild"><KomponentenBild k={k} art="flaeche" /></span>
         <span className="empf-text">
           <strong>{k.name} <Icon name="pfeil" groesse={16} /></strong>
           <span className="meta-icons">
@@ -158,7 +169,7 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
       {jetzt ? (
         <Box titel="Jetzt sinnvoll" icon="funken">
           <article className="foto-karte getoent">
-            <div className="foto-karte-bild"><Bild name={jetzt.k.name} farbe={jetzt.k.rolle} art="flaeche" /></div>
+            <div className="foto-karte-bild"><KomponentenBild k={jetzt.k} art="flaeche" suchen /></div>
             <div className="foto-karte-inhalt">
               <h3>{jetzt.k.name}</h3>
               <p className="meta-icons">
@@ -166,10 +177,12 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
                 <span><Icon name="uhr" groesse={17} /> {jetzt.k.zeit_min} Min</span>
               </p>
               {warnung ? (
-                <p className="warnzeile"><span className="warn-punkt" aria-hidden="true">!</span><span>{warnung.text}{warnung.klein && <small>{warnung.klein}</small>}</span></p>
+                <p className="warnzeile"><span className="warn-punkt" aria-hidden="true">!</span>
+                  <span>{gruende?.dringend[0] ?? warnung.text}{!gruende?.dringend.length && warnung.klein && <small>{warnung.klein}</small>}</span></p>
               ) : (
                 <p className="verfuegbar status-ok"><span className="kreis-haken"><Icon name="haken" groesse={13} /></span> Vorgemerkt · alles da</p>
               )}
+              {gruende && gruende.passend.length > 0 && <p className="meta-text">{[...gruende.dringend.slice(1, 2), ...gruende.passend].join(' · ')}</p>}
               <button type="button" className="knopf pillen-knopf" onClick={() => setAuftrag(jetzt)}>
                 <Icon name="topf" groesse={20} /> Produktion starten <Icon name="weiter" groesse={18} />
               </button>

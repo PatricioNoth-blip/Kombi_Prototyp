@@ -29,3 +29,20 @@ export function anbieterAusUmgebung(
   if (!apiKey && !vor?.ohneKey) return null; // nicht eingerichtet → App nutzt den Demo-Modus
   return openAiKompatibel({ name, basisUrl, apiKey, modell, fetch: f });
 }
+
+/** Was eingerichtet ist – ohne Key (für Health-Check und Anzeige). */
+export function kiKonfiguration(env: (name: string) => string | undefined): {
+  eingerichtet: boolean; anbieter: string; modell: string | null; host: string | null;
+} {
+  const name = (env('KI_ANBIETER') || 'groq').trim().toLowerCase();
+  const vor = VOREINSTELLUNGEN[name];
+  const basisUrl = env('KI_BASIS_URL')?.trim() || vor?.basisUrl || null;
+  const modell = env('KI_MODELL')?.trim() || vor?.modell || null;
+  let host: string | null = null;
+  try {
+    host = basisUrl ? new URL(basisUrl).host : null;
+  } catch {
+    host = null;
+  }
+  return { eingerichtet: anbieterAusUmgebung(env) !== null, anbieter: name, modell, host };
+}

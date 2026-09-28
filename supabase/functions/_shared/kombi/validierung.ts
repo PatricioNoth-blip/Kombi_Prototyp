@@ -5,6 +5,7 @@
 //   • Kosten, Portionen, Gerichtsart und „rettet Lebensmittel“ rechnet ausschließlich dieser Code
 //   • Texte werden gegen erfundene Zutaten, Preise und Behauptungen geprüft (wahrheit.ts)
 import { naehrwerteFuerGericht } from './naehrwerte.ts';
+import { bildAnfrageFuerGericht } from './bilder.ts';
 import type {
   BausteinIdee, Eigenschaften, FehlendeZutat, Gericht, Gerichtsart, GerichtZutat, Kosten, Optionen,
   RohBaustein, RohGericht, RohZutat, Snapshot, SnapshotZutat,
@@ -267,12 +268,15 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
   const beschreibung = bereinigeText(kuerze(roh.beschreibung, 220), gericht, regeln).text;
   const deckungSchritte = deckungstext([haushalt, ...fehlt.map((f) => f.name)]);
 
+  const eigenschaften = normalisiereEigenschaften(roh.eigenschaften, name.name);
+  const gerichtName = kuerze(name.name, 60);
+
   return {
     ok: true,
     wert: {
       art: 'gericht',
       id,
-      name: kuerze(name.name, 60),
+      name: gerichtName,
       emoji: kuerze(roh.emoji, 8) || '🍽️',
       beschreibung: kuerze(beschreibung, 180) || ersatzBeschreibung(gerichtsart, zutaten),
       gerichtsart,
@@ -285,11 +289,13 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
       warum_jetzt: warumJetzt(zutaten, fehlt, snapshot),
       rettet: rettetVon(zutaten, snapshot),
       hinweise: hinweiseVon(zutaten),
-      eigenschaften: normalisiereEigenschaften(roh.eigenschaften, name.name),
+      eigenschaften,
       kosten: berechneKosten(zutaten, fehlt, personen),
       naehrwerte: naehrwerteFuerGericht({ zutaten, fehlt, portionen: personen },
         (id) => snapshot.zutaten.find((s) => s.block_typ_id !== null && s.block_typ_id === id)?.naehrwert ?? null),
       bewertung: 0,
+      // Bild: Suchbegriff/Beschreibung aus den Rezeptdaten; der Vorschlag der KI nur, wenn er passt
+      bild: bildAnfrageFuerGericht({ name: gerichtName, zutaten, fehlt, eigenschaften, gerichtsart }, roh.image_request),
     },
   };
 }

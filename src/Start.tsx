@@ -8,15 +8,14 @@ import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { fehlerText, type Sorte } from './api';
 import { baueSnapshotAus } from './essenApi';
 import { ausgabeEintragen, ausgabeEntfernen, naehrwerteGericht, type Haushaltsdaten } from './haushalt';
-import { Bild, DEKO } from './Bild';
-import { Box, MetaIcons, Verfuegbar, WarnIcon, WichtigKacheln } from './Karten';
+import { Bild } from './Bild';
+import { bildKaputt, useBild } from './bildApi';
 import { Blatt } from './Blatt';
 import { Icon } from './Icon';
-import { euro, euroZuCent } from './format';
-import { heuteWichtig, zustand } from './dashboard';
+import { euro, euroKompakt, euroKurz, euroZuCent, kcalKurz } from './format';
 import {
-  heuteGekocht, monatsbilanz, sinnvolleProduktion, startReihenfolge,
-  type Monatsbilanz, type ProduktionsTipp, type StartAbschnitt,
+  monatsbilanz, sinnvolleProduktion, startAbschnitte, startHinweis, tagesuebersicht,
+  type Monatsbilanz, type ProduktionsTipp, type StartAbschnitt, type Tagesuebersicht,
 } from './startseite';
 import type { Bereich } from './navigation';
 
@@ -32,7 +31,6 @@ type Props = {
   /** lokal nach Kombi-Regeln berechnet (null = wird berechnet) */
   ideen: LokaleIdeen | null;
   onKochen: (g: Gericht, planId: string | null) => void;
-  onOeffnen: (s: Sorte) => void;
   onBereich: (b: Bereich) => void;
   onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void;
   onGeaendert: () => void;
@@ -78,13 +76,34 @@ export function useLokaleIdeen(bestand: Sorte[] | null, reserviert: Map<number, 
   return ideen;
 }
 
-/** Die Startseite: Geld, was heute wichtig ist, was es zu essen gibt, Produktion und Einkauf. */
-export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaellig, ideen, onKochen, onOeffnen, onBereich, onMeldung, onGeaendert }: Props) {
-  const [geldOffen, setGeldOffen] = useState(false);
+const ZIEL_SPEICHER = 'kombi-kcal-ziel';
 
-  const wichtig = heuteWichtig(bestand, heute);
+/** Persönliches Tagesziel – je Gerät (jede Person hat ihr eigenes Handy), optional. */
+function ladeZiel(): number | null {
+  try {
+    const z = Number(localStorage.getItem(ZIEL_SPEICHER));
+    return Number.isFinite(z) && z >= 500 && z <= 8000 ? Math.round(z) : null;
+  } catch {
+    return null;
+  }
+}
+
+const kcalZahl = (n: number) => n.toLocaleString('de-DE');
+
+/**
+ * Die Startseite – kompakt, iPhone-first: Heute (kcal, Essenskosten), höchstens ein dezenter Hinweis,
+ * „Was essen wir?“ als kleine Karte, der Monat in einer Zeile, Produktion und Einkauf als Kacheln.
+ * Ablauf und Reste steuern im Hintergrund die Vorschläge – als Liste stehen sie im Vorrat.
+ */
+export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaellig, ideen, onKochen, onBereich, onMeldung, onGeaendert }: Props) {
+  const [geldOffen, setGeldOffen] = useState(false);
+  const [tagOffen, setTagOffen] = useState(false);
+  const [ziel, setZiel] = useState<number | null>(ladeZiel);
+
   const bilanz = monatsbilanz(h, heute);
-  const gekocht = heuteGekocht(h.mahlzeiten, heute);
+  const tag = tagesuebersicht(h.mahlzeiten, h.sonstige, heute, ziel);
+  const hinweis = startHinweis(bestand, heute);
+  const gekochtHeute = h.mahlzeiten.filter((m) => !m.rueckgaengig && m.datum === heute).map((m) => m.titel);
 
   // Vorschläge: Geplantes für heute zuerst, dann Ideen aus dem freien Vorrat (ohne heute schon Gekochtes)
   const geplant = h.plaene
@@ -93,7 +112,7 @@ export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaell
     .map((p) => ({ g: p.daten.gericht!, planId: p.id as string | null }));
   const vorschlaege = [
     ...geplant,
-    ...(ideen?.gerichte ?? []).filter((g) => !gekocht.titel.includes(g.name)).map((g) => ({ g, planId: null })),
+    ...(ideen?.gerichte ?? []).filter((g) => !gekochtHeute.includes(g.name)).map((g) => ({ g, planId: null })),
   ].slice(0, 4);
 
   const vorgemerkt = h.plaene.filter((p) => p.art === 'komponente').map((p) => {
@@ -103,112 +122,202 @@ export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaell
   const tipp: ProduktionsTipp | null = sinnvolleProduktion(vorgemerkt, ideen?.komponenten ?? []);
   const offen = liste.zeilen.filter((z) => z.status === 'offen');
 
-  const folge = startReihenfolge({
-    wichtig: wichtig.length + auftauFaellig,
-    produktion: tipp !== null,
-    einkauf: h.planung && offen.length > 0,
+  const folge = startAbschnitte({
+    hinweis: hinweis !== null,
+    auftauen: auftauFaellig > 0 && auftauen !== null,
     // ohne Protokoll (Migration „kosten_naehrwerte“) gibt es Ausgaben nur aus der Einkaufsliste
-    geld: h.planung && (h.protokoll || bilanz.ausgegeben.anzahl > 0),
+    monat: h.planung && (h.protokoll || bilanz.ausgegeben.anzahl > 0),
   });
 
   if (bestand.length === 0) {
     return (
       <div className="leer-zustand">
         <Icon name="haus" groesse={40} />
-        <p>Willkommen bei Kombi. Leg unter <strong>Vorrat</strong> die erste Sorte an – dann gibt es hier Vorschläge, Hinweise und Kosten.</p>
+        <p>Willkommen bei Kombi. Leg unter <strong>Vorrat</strong> die erste Sorte an – dann gibt es hier Vorschläge, Kalorien und Kosten.</p>
         <button type="button" className="knopf" onClick={() => onBereich('vorrat')}>Zum Vorrat</button>
       </div>
     );
   }
 
-  const produktionBox = tipp && (
-    <Box titel="Produktion" icon="topf">
-      <div className="mini-tipp">
-        <Bild name={tipp.art === 'vorgemerkt' ? tipp.titel : tipp.komponente.name} farbe={tipp.art === 'idee' ? tipp.komponente.rolle : null} art="kachel" />
-        <div>
-          <strong>{tipp.art === 'vorgemerkt' ? tipp.titel : tipp.komponente.name}</strong>
-          <small>Heute sinnvoll · {tipp.art === 'vorgemerkt' ? tipp.portionen : tipp.komponente.portionen} Portionen</small>
-          <small className="status-kritisch">{tipp.art === 'vorgemerkt' ? 'Vorgemerkt · alles da' : produktionsGrund(tipp, bestand, heute)}</small>
-        </div>
-      </div>
-      <button type="button" className="knopf weich gross-schrift" onClick={() => onBereich('produktion')}>
-        Ansehen <Icon name="pfeil" groesse={16} />
-      </button>
-    </Box>
-  );
-
-  const einkaufBox = h.planung && offen.length > 0 && (
-    <Box titel="Einkauf" icon="wagen">
-      <div className="einkauf-kurz">
-        <strong>{offen.length} {offen.length === 1 ? 'Ding fehlt' : 'Dinge fehlen'}</strong>
-        <span>{einkaufKosten(liste.kosten).split(' · ')[0]}</span>
-        {liste.kosten.status === 'teilweise' && <small>Preis teilweise bekannt</small>}
-      </div>
-      <div className="bilder-reihe">
-        {offen.slice(0, 4).map((z) => <Bild key={z.schluessel + z.einheit_schluessel} name={z.name} farbe={z.kategorie === 'sonstiges' ? null : z.kategorie} art="klein" />)}
-      </div>
-      <button type="button" className="knopf weich-gruen gross-schrift" onClick={() => onBereich('einkauf')}>
-        Einkaufen <Icon name="pfeil" groesse={16} />
-      </button>
-    </Box>
-  );
+  const produktionText = !h.planung ? 'Noch nicht eingerichtet'
+    : vorgemerkt.length ? `${vorgemerkt.length} geplant`
+      : tipp ? `Sinnvoll: ${tipp.art === 'vorgemerkt' ? tipp.titel : tipp.komponente.name}` : 'Gerade nichts nötig';
+  const einkaufText = !h.planung ? 'Noch nicht eingerichtet' : offen.length ? `${offen.length} offen` : 'Alles da';
 
   const teile: Record<StartAbschnitt, () => ReactNode> = {
-    geld: () => <GeldKarte key="geld" b={bilanz} h={h} onOeffnen={() => setGeldOffen(true)} />,
-    wichtig: () => (
-      <div key="wichtig">
-        {wichtig.length > 0 && (
-          <Box titel="Heute wichtig" kopfIcon={<WarnIcon />} link={{ text: 'Alle anzeigen', onClick: () => onBereich('vorrat'), grau: true }}>
-            <WichtigKacheln wichtig={wichtig.slice(0, 8)} onOeffnen={onOeffnen} />
-          </Box>
-        )}
-        {auftauen}
-      </div>
+    heute: () => <HeuteKarte key="heute" t={tag} protokoll={h.protokoll} onOeffnen={() => setTagOffen(true)} />,
+    hinweis: () => (
+      <button key="hinweis" type="button" className="start-hinweis" onClick={() => onBereich('vorrat')}>
+        <span className="hinweis-punkt" aria-hidden="true" /> {hinweis} <Icon name="pfeil" groesse={15} />
+      </button>
     ),
+    auftauen: () => <div key="auftauen">{auftauen}</div>,
     essen: () => (
-      <div key="essen" className="abschnitt">
+      <section key="essen" className="start-block" aria-label="Was essen wir?">
+        <div className="start-kopf">
+          <h2>Was essen wir?</h2>
+          <button type="button" className="mehr-link" onClick={() => onBereich('essen')}>Andere <Icon name="pfeil" groesse={15} /></button>
+        </div>
         {vorschlaege.length > 0 ? (
           <Karussell>
             {vorschlaege.map((v) => (
-              <GerichtFotoKarte key={v.g.id} g={v.g} geplant={v.planId !== null} bestand={bestand}
-                onKochen={() => onKochen(v.g, v.planId)} onMehr={() => onBereich('essen')} />
+              <RezeptKompakt key={v.g.id} g={v.g} geplant={v.planId !== null} bestand={bestand} onKochen={() => onKochen(v.g, v.planId)} />
             ))}
           </Karussell>
         ) : (
-          <Box titel="Was möchtest du essen?" icon="essen">
-            <p className="leise">{ideen === null ? 'Kombi schaut in den Vorrat …' : 'Aus dem freien Vorrat lässt sich gerade kein ganzes Gericht kochen.'}</p>
-            {ideen !== null && <button type="button" className="knopf breit abstand-oben" onClick={() => onBereich('essen')}>Ideen mit Einkauf ansehen</button>}
-          </Box>
+          <div className="rezept-kompakt leer">
+            <p className="leise klein">{ideen === null ? 'Kombi schaut in den Vorrat …' : 'Aus dem freien Vorrat lässt sich gerade kein ganzes Gericht kochen.'}</p>
+            {ideen !== null && <button type="button" className="knopf klein" onClick={() => onBereich('essen')}>Ideen mit Einkauf</button>}
+          </div>
         )}
-        <div className="karussell-fuss">
-          <p className="heute-gekocht">
-            {gekocht.titel.length > 0 && <>Heute gekocht: {gekocht.titel.join(', ')}{gekocht.kcal !== null && ` · ${gekocht.kcal.toLocaleString('de-DE')} kcal`}</>}
-          </p>
-          {vorschlaege.length > 0 && <button type="button" className="mehr-link" onClick={() => onBereich('essen')}>Andere Vorschläge <Icon name="pfeil" groesse={16} /></button>}
-        </div>
+      </section>
+    ),
+    monat: () => <MonatKarte key="monat" b={bilanz} h={h} onOeffnen={() => setGeldOffen(true)} />,
+    kacheln: () => (
+      <div key="kacheln" className="kachel-paar">
+        <button type="button" className="mini-kachel" onClick={() => onBereich('produktion')} aria-label={`Produktion: ${produktionText}`}>
+          <span className="mini-icon ton-gelb"><Icon name="topf" groesse={20} /></span>
+          <span className="mini-text"><strong>Produktion</strong><small>{produktionText}</small></span>
+        </button>
+        <button type="button" className="mini-kachel" onClick={() => onBereich('einkauf')} aria-label={`Einkauf: ${einkaufText}`}>
+          <span className="mini-icon ton-gruen"><Icon name="wagen" groesse={20} /></span>
+          <span className="mini-text"><strong>Einkauf</strong><small>{einkaufText}{offen.length > 0 && liste.kosten.bekannt_cent ? ` · ${einkaufKosten(liste.kosten).split(' · ')[0]}` : ''}</small></span>
+        </button>
       </div>
     ),
-    // Produktion und Einkauf stehen nebeneinander – gerendert beim Einkauf (oder allein, wenn es keinen gibt)
-    produktion: () => (folge.includes('einkauf') ? null : <div key="produktion" className="zwei">{produktionBox}</div>),
-    einkauf: () => <div key="einkauf" className="zwei">{folge.includes('produktion') && produktionBox}{einkaufBox}</div>,
   };
 
   return (
-    <>
+    <div className="start">
       {folge.map((a) => teile[a]())}
       {geldOffen && <GeldBlatt b={bilanz} h={h} heute={heute} onMeldung={onMeldung} onGeaendert={onGeaendert} onSchliessen={() => setGeldOffen(false)} />}
-    </>
+      {tagOffen && (
+        <TagBlatt t={tag} h={h} heute={heute} ziel={ziel}
+          onZiel={(z) => {
+            setZiel(z);
+            try {
+              if (z === null) localStorage.removeItem(ZIEL_SPEICHER);
+              else localStorage.setItem(ZIEL_SPEICHER, String(z));
+            } catch {
+              // nur Komfort
+            }
+          }}
+          onSchliessen={() => setTagOffen(false)} />
+      )}
+    </div>
   );
 }
 
-/** „Tomaten laufen bald ab“ – der dringendste Grund aus dem Vorrat, sonst was verwertet wird */
-function produktionsGrund(t: Extract<ProduktionsTipp, { art: 'idee' }>, bestand: Sorte[], heute: string): string {
-  for (const name of t.komponente.verwertet) {
-    const s = bestand.find((b) => b.name === name);
-    const z = s ? zustand(s, heute) : null;
-    if (s && z && z.art !== 'niedrig') return `${s.name}: ${z.art === 'bald' ? z.text : z.titel.toLocaleLowerCase('de-DE')}`;
+/** „1.840 kcal“ · „ab 1.200 kcal“ · „kcal unbekannt“ – nie geschätzt */
+function kcalText(t: Tagesuebersicht): string {
+  if (t.kcal_status === 'leer') return '0 kcal';
+  if (t.kcal === null) return 'kcal unbekannt';
+  return `${t.kcal_status === 'teilweise' ? 'ab ' : ''}${kcalZahl(t.kcal)} kcal`;
+}
+
+function kostenText(t: Tagesuebersicht): string {
+  if (t.kosten_status === 'leer') return '0,00 €';
+  if (t.kosten_cent === null) return 'unbekannt';
+  return `${t.kosten_status === 'teilweise' ? 'ab ' : ''}${euro(t.kosten_cent)}`;
+}
+
+/** HEUTE · 🍽️ 1.840 kcal · 2 Mahlzeiten · € 4,82 – kompakt, ein Tipp öffnet die Details. */
+function HeuteKarte({ t, protokoll, onOeffnen }: { t: Tagesuebersicht; protokoll: boolean; onOeffnen: () => void }) {
+  const arten: [keyof Tagesuebersicht['mahlzeit_arten'], string][] = [['fruehstueck', 'Frühstück'], ['mittag', 'Mittag'], ['abend', 'Abendessen']];
+  return (
+    <button type="button" className="heute-karte" onClick={onOeffnen} aria-label={`Heute: ${kcalText(t)}, ${t.mahlzeiten} Mahlzeiten, Essen ${kostenText(t)} – Details`}>
+      <span className="ueber">Heute</span>
+      {!protokoll ? (
+        <span className="heute-leer">Kalorien und Essenskosten erscheinen nach der Migration „kosten_naehrwerte“.</span>
+      ) : (
+        <>
+          <span className="heute-zahlen">
+            <span className="heute-zahl">
+              <span className="heute-emoji" aria-hidden="true">🍽️</span>
+              <strong>{t.ziel !== null && t.kcal !== null && t.kcal_status === 'berechnet' ? `${kcalZahl(t.kcal)} / ${kcalZahl(t.ziel)} kcal` : kcalText(t)}</strong>
+              <small>{t.mahlzeiten === 0 ? 'noch keine Mahlzeit' : `${t.mahlzeiten} ${t.mahlzeiten === 1 ? 'Mahlzeit' : 'Mahlzeiten'} · pro Person`}</small>
+            </span>
+            <span className="heute-zahl rechts">
+              <strong>{kostenText(t)}</strong>
+              <small>Essen heute</small>
+            </span>
+          </span>
+          {t.anteil !== null && (
+            <span className="ziel-balken" aria-hidden="true"><span style={{ width: `${Math.min(100, t.anteil * 100)}%` }} className={t.anteil > 1 ? 'drueber' : ''} /></span>
+          )}
+          <span className="mahlzeit-arten" aria-hidden="true">
+            {arten.map(([id, name]) => <span key={id} className={t.mahlzeit_arten[id] ? 'an' : ''}>{name}</span>)}
+          </span>
+        </>
+      )}
+    </button>
+  );
+}
+
+/** Heute im Detail: was gegessen wurde, woher die Zahlen kommen – und ein optionales Tagesziel. */
+function TagBlatt({ t, h, heute, ziel, onZiel, onSchliessen }: {
+  t: Tagesuebersicht; h: Haushaltsdaten; heute: string; ziel: number | null; onZiel: (z: number | null) => void; onSchliessen: () => void;
+}) {
+  const [eingabe, setEingabe] = useState(ziel ? String(ziel) : '');
+  const [fehler, setFehler] = useState<string | null>(null);
+  const mahlzeiten = h.mahlzeiten.filter((m) => !m.rueckgaengig && m.datum === heute);
+  const sonstige = h.sonstige.filter((a) => !a.entfernt && a.datum === heute);
+
+  function speichern(e: FormEvent) {
+    e.preventDefault();
+    const text = eingabe.trim();
+    if (!text) {
+      onZiel(null);
+      setFehler(null);
+      return;
+    }
+    const z = Math.round(Number(text.replace(/\./g, '').replace(',', '.')));
+    if (!Number.isFinite(z) || z < 500 || z > 8000) return setFehler('Bitte ein Ziel zwischen 500 und 8.000 kcal eingeben.');
+    setFehler(null);
+    onZiel(z);
   }
-  return t.grund;
+
+  return (
+    <Blatt titel="Heute" untertitel="Nur aus hinterlegten Nährwerten und echten Beträgen – nichts geschätzt." onSchliessen={onSchliessen}>
+      {mahlzeiten.length + sonstige.length === 0 ? (
+        <p className="leise klein">Heute ist noch nichts gekocht oder eingetragen. Gekocht wird über „Kochen starten“ – dann stehen Kalorien und Kosten hier.</p>
+      ) : (
+        <ul className="liste">
+          {mahlzeiten.map((m, i) => (
+            <li key={`m${i}`}>
+              <div className="zeile">
+                <span className="zeile-haupt">
+                  <span className="zeile-titel">{m.titel}</span>
+                  <span className="zeile-meta">
+                    {m.portionen} {m.portionen === 1 ? 'Portion' : 'Portionen'} · {m.kcal === null ? 'kcal unbekannt' : `${m.kcal_unbekannt ? 'ab ' : ''}${kcalZahl(Math.round(m.kcal / Math.max(1, m.portionen)))} kcal pro Person`}
+                  </span>
+                </span>
+                <span className="zeile-wert"><strong>{m.kosten_cent === null ? '–' : `${m.kosten_unbekannt ? 'ab ' : ''}${euro(m.kosten_cent)}`}</strong></span>
+              </div>
+            </li>
+          ))}
+          {sonstige.map((a) => (
+            <li key={`s${a.id}`}>
+              <div className="zeile">
+                <span className="zeile-haupt"><span className="zeile-titel">{a.notiz || 'Sonstiges'}</span><span className="zeile-meta">Sonstige Ausgabe</span></span>
+                <span className="zeile-wert"><strong>{euro(a.betrag_cent)}</strong></span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="abschnitt-fuss">
+        Kalorien je Person = Kalorien der entnommenen Mengen ÷ Portionen. Eine Portion Komponente zählt mit ihren eigenen Werten – ihre Zutaten nicht noch einmal.
+        {t.kcal_status === 'teilweise' && ' Für manche Sorten fehlen Nährwerte – deshalb „ab“.'}
+      </p>
+      <form className="ausgabe-form abstand-oben" onSubmit={speichern}>
+        <input type="text" inputMode="numeric" placeholder="Tagesziel, z. B. 2200" value={eingabe} onChange={(e) => setEingabe(e.target.value)} aria-label="Persönliches Tagesziel in kcal" />
+        <button type="submit" className="knopf pillen-knopf">Ziel</button>
+      </form>
+      {fehler && <p className="fehlertext">{fehler}</p>}
+      <p className="abschnitt-fuss">Das Tagesziel ist optional und bleibt nur auf diesem Gerät. Leer lassen und „Ziel“ tippen entfernt es.</p>
+    </Blatt>
+  );
 }
 
 /** Wischbare Vorschläge mit Punkten darunter */
@@ -218,7 +327,8 @@ function Karussell({ children }: { children: ReactNode[] }) {
     <>
       <div className="karussell" onScroll={(e) => {
         const el = e.currentTarget;
-        setAktiv(Math.round(el.scrollLeft / Math.max(1, el.clientWidth - 28)));
+        const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth - 28));
+        if (i !== aktiv) setAktiv(i);
       }}>
         {children}
       </div>
@@ -229,75 +339,57 @@ function Karussell({ children }: { children: ReactNode[] }) {
   );
 }
 
-function GerichtFotoKarte({ g, geplant, bestand, onKochen, onMehr }: {
-  g: Gericht; geplant: boolean; bestand: Sorte[]; onKochen: () => void; onMehr: () => void;
-}) {
+/** Kleine Rezeptkarte: Bild, Name, Zeit · Kosten · kcal, verfügbar, KOCHEN. */
+function RezeptKompakt({ g, geplant, bestand, onKochen }: { g: Gericht; geplant: boolean; bestand: Sorte[]; onKochen: () => void }) {
   const farbe = g.zutaten.find((z) => z.quelle !== 'grundausstattung' && z.farbe)?.farbe ?? null;
+  // Die erste Karte ist sichtbar – ihr Bild darf einmalig gesucht werden; der Cache verhindert Wiederholungen
+  const foto = useBild(g.bild, true);
+  const n = naehrwerteGericht(g, bestand);
   return (
-    <article className="foto-karte">
-      <div className="foto-karte-bild"><Bild name={g.name} emoji={g.emoji} farbe={farbe} art="flaeche" /></div>
-      <div className="foto-karte-inhalt">
-        <p className="ueber">{geplant ? 'Heute geplant' : 'Was möchtest du essen?'}</p>
+    <article className="rezept-kompakt">
+      <div className="rk-bild"><Bild name={g.name} emoji={g.emoji} farbe={farbe} art="kachel" bild={foto} onKaputt={() => bildKaputt(g.bild?.schluessel)} /></div>
+      <div className="rk-text">
+        {geplant && <p className="rk-ueber">Heute geplant</p>}
         <h3>{g.name}</h3>
-        <MetaIcons g={g} n={naehrwerteGericht(g, bestand)} />
-        <Verfuegbar g={g} />
-        <button type="button" className="knopf pillen-knopf gross-schrift" onClick={onKochen}>
-          Kochen <Icon name="pfeil" groesse={16} />
-        </button>
-        <button type="button" className="vor-knopf icon-knopf klein" onClick={onMehr} aria-label="Andere Vorschläge"><Icon name="pfeil" groesse={16} /></button>
+        <p className="rk-meta">
+          <span><Icon name="uhr" groesse={14} /> {g.zeit_min} Min</span>
+          <span>{euroKurz(g.kosten)}</span>
+          <span><Icon name="flamme" groesse={14} className="flamme" /> {kcalKurz(n)}</span>
+        </p>
+        <div className="rk-unten">
+          <span className={`rk-da ${g.fehlt.length === 0 ? 'status-ok' : 'status-achtung'}`}>
+            {g.fehlt.length === 0 ? '✓ Alles da' : `Fehlt: ${g.fehlt.map((f) => f.name).join(', ')}`}
+          </span>
+          <button type="button" className="knopf pillen-knopf rk-kochen" onClick={onKochen}>Kochen</button>
+        </div>
       </div>
     </article>
   );
 }
 
-/** Geld diesen Monat – wie im Entwurf, aber ehrlich: die Summe ist nur echtes Geld (Einkäufe + Sonstiges). */
-function GeldKarte({ b, h, onOeffnen }: { b: Monatsbilanz; h: Haushaltsdaten; onOeffnen: () => void }) {
-  const bezug = Math.max(b.gesamt_cent, b.vormonat?.cent ?? 0, 1);
-  const anteil = (c: number) => `${Math.max(0, (c / bezug) * 100)}%`;
+/** SEPTEMBER · Einkäufe · Sonstiges · Ø / Mahlzeit – Produktion nur als Warenwert, nie addiert. */
+function MonatKarte({ b, h, onOeffnen }: { b: Monatsbilanz; h: Haushaltsdaten; onOeffnen: () => void }) {
+  const schnitt = b.gekocht.pro_mahlzeit_cent !== null ? euroKompakt(b.gekocht.pro_mahlzeit_cent) : '–';
   return (
-    <button type="button" className="geld-held" onClick={onOeffnen} aria-label={`Diesen Monat ${euro(b.gesamt_cent)} ausgegeben – Details`}>
-      <img src={DEKO.heldTomaten} alt="" aria-hidden="true" />
-      <p className="geld-titel">Diesen Monat</p>
-      <div className="geld-summe">
-        <span className="geld-zahl">{euro(b.gesamt_cent)}</span>
+    <button type="button" className="monat-karte" onClick={onOeffnen} aria-label={`${b.monat}: ${euro(b.gesamt_cent)} ausgegeben – Details`}>
+      <span className="monat-kopf">
+        <span className="ueber">{b.monat}</span>
         {b.vormonat && (
-          <span className="trend">
-            <span className={`trend-chip ${b.vormonat.aenderung_prozent <= 0 ? 'runter' : 'hoch'}`}>
-              {b.vormonat.aenderung_prozent <= 0 ? '↓' : '↑'} {Math.abs(b.vormonat.aenderung_prozent)} %
-            </span>
-            <small>im Vergleich zum Vormonat</small>
+          <span className={`trend-chip ${b.vormonat.aenderung_prozent <= 0 ? 'runter' : 'hoch'}`}>
+            {b.vormonat.aenderung_prozent <= 0 ? '↓' : '↑'} {Math.abs(b.vormonat.aenderung_prozent)} %
           </span>
         )}
-      </div>
-      <div className="geld-mitte">
-        <div className="teilbalken" aria-hidden="true">
-          {b.ausgegeben.cent > 0 && <span style={{ width: anteil(b.ausgegeben.cent), background: 'var(--ok)' }} />}
-          {b.sonstiges.cent > 0 && <span style={{ width: anteil(b.sonstiges.cent), background: 'var(--gelb)' }} />}
-          {b.gesamt_cent < bezug && <span className="leer" />}
-        </div>
-        {b.gekocht.pro_mahlzeit_cent !== null && (
-          <span className="geld-schnitt">
-            <Icon name="essen" groesse={22} />
-            <span><strong>Ø {euro(b.gekocht.pro_mahlzeit_cent)}</strong><small>pro Mahlzeit</small></span>
-          </span>
-        )}
-      </div>
-      <div className="geld-spalten">
-        <span className="geld-spalte">
-          <span><Icon name="wagen" groesse={16} className="status-ok" /> Einkäufe</span>
-          <strong>{euro(b.ausgegeben.cent)}</strong>
-        </span>
-        <span className="geld-spalte">
-          <span><Icon name="topf" groesse={16} className="status-achtung" /> Produktion</span>
-          <strong>{b.produktion.anzahl ? `${b.produktion.vollstaendig ? '' : 'ab '}${euro(b.produktion.cent)}` : '–'}</strong>
-          <small>Warenwert</small>
-        </span>
-        <span className="geld-spalte">
-          <span><Icon name="sonstiges" groesse={16} /> Sonstiges</span>
-          <strong>{h.ausgaben ? euro(b.sonstiges.cent) : '–'}</strong>
-        </span>
-      </div>
-      {b.leer && <p className="geld-leer">Noch nichts erfasst. Beim Einbuchen den bezahlten Betrag angeben – dann steht er hier.</p>}
+        <Icon name="pfeil" groesse={15} className="zeile-pfeil" />
+      </span>
+      <span className="monat-zahlen">
+        <span><strong>{euroKompakt(b.ausgegeben.cent)}</strong><small>Einkäufe</small></span>
+        <span><strong>{h.ausgaben ? euroKompakt(b.sonstiges.cent) : '–'}</strong><small>Sonstiges</small></span>
+        <span><strong>{schnitt}</strong><small>Ø / Mahlzeit</small></span>
+      </span>
+      {b.produktion.anzahl > 0 && (
+        <small className="monat-fuss">Produktion: {b.produktion.vollstaendig ? '' : 'ab '}{euro(b.produktion.cent)} Warenwert – steckt schon in den Einkäufen</small>
+      )}
+      {b.leer && <small className="monat-fuss">Noch nichts erfasst – beim Einbuchen den bezahlten Betrag angeben.</small>}
     </button>
   );
 }

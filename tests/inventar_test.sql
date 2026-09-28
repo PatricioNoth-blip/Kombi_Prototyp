@@ -871,6 +871,67 @@ reset role;
 \echo 'ok  Sonstige Ausgaben: eintragen, entfernen und zurückholen – nicht löschbar, Betrag fest'
 
 
+-- ─── Bilder und semantische Zutaten ───
+set local role anon;
+do $$
+declare
+  v_id  bigint;
+  v_b   bigint;
+  v_zeit timestamptz;
+begin
+  -- Sorte: eigenes Bild (https) und semantische Zutat – Produkt und Zutat bleiben getrennt
+  insert into block_typ (name, farbe, art, einheit, zutat, image_url, image_source, image_status)
+  values ('Test REWE Strauchtomaten 500 g', 'gruen', 'zutat', 'g', 'tomate', 'https://mein-server.de/tomaten.jpg', 'eigen', 'ok')
+  returning id into v_id;
+  assert (select zutat from bestand where id = v_id) = 'tomate', 'View liefert die Zutat';
+  assert (select image_url from bestand where id = v_id) = 'https://mein-server.de/tomaten.jpg', 'View liefert das Bild';
+  assert (select image_generated from bestand where id = v_id) = false, 'nicht generiert';
+  assert pg_temp.fehler(format($q$update block_typ set image_url = 'http://unsicher.de/a.jpg' where id = %s$q$, v_id)) like '%check constraint%', 'nur https';
+  assert pg_temp.fehler(format($q$update block_typ set image_url = 'javascript:alert(1)' where id = %s$q$, v_id)) like '%check constraint%', 'keine Skript-URL';
+  assert pg_temp.fehler(format($q$update block_typ set zutat = 'Tomate!' where id = %s$q$, v_id)) like '%check constraint%', 'Zutat nur als Katalog-id';
+  assert pg_temp.fehler(format($q$update block_typ set image_source = 'erfunden' where id = %s$q$, v_id)) like '%check constraint%', 'nur bekannte Bildquellen';
+
+  -- Bild-Cache: gefundenes Foto mit Lizenz und Quelle
+  insert into bild (schluessel, art, image_url, image_source, image_query, image_alt, lizenz, urheber, quelle_seite)
+  values ('komponente:falafel:leer', 'komponente', 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/F.jpg/800px-F.jpg', 'gefunden',
+          'falafel', 'Foto: Falafel', 'CC BY-SA 4.0', 'Anna Beispiel', 'https://commons.wikimedia.org/wiki/File:F.jpg')
+  returning id into v_b;
+  assert (select image_status from bild where id = v_b) = 'ok', 'neu = ok';
+  -- generiertes Bild aus dem eigenen Speicher
+  insert into bild (schluessel, art, image_url, image_source, image_generated, lizenz)
+  values ('gericht:bowl:gurke+joghurt+tomate', 'gericht', 'https://abcd.supabase.co/storage/v1/object/public/bilder/generiert/1a2b3c4d.webp',
+          'generiert', true, 'KI-generiert (openai: gpt-image-1)');
+
+  assert pg_temp.fehler($q$insert into bild (schluessel, art, image_url, image_source, lizenz, quelle_seite)
+    values ('gericht:x:y', 'gericht', 'https://irgendwas.example/bild.jpg', 'gefunden', 'CC0', 'https://x.y')$q$) like '%check constraint%',
+    'keine zufälligen Hotlinks';
+  assert pg_temp.fehler($q$insert into bild (schluessel, art, image_url, image_source)
+    values ('gericht:x:y', 'gericht', 'https://upload.wikimedia.org/a.jpg', 'gefunden')$q$) like '%check constraint%',
+    'gefundenes Bild ohne Lizenz/Quelle abgelehnt';
+  assert pg_temp.fehler($q$insert into bild (schluessel, art, image_url, image_source, image_generated)
+    values ('gericht:x:y', 'gericht', 'https://abcd.supabase.co/storage/v1/object/public/bilder/a.webp', 'generiert', false)$q$) like '%check constraint%',
+    'generiert = image_generated';
+  assert pg_temp.fehler($q$insert into bild (schluessel, art, image_url, image_source, image_generated)
+    values ('Drop Table', 'gericht', 'https://abcd.supabase.co/storage/v1/object/public/bilder/a.webp', 'generiert', true)$q$) like '%check constraint%',
+    'Schlüssel nur im erwarteten Format';
+  assert pg_temp.fehler($q$insert into bild (schluessel, art, image_url, image_source, image_generated, image_status)
+    values ('gericht:x:y', 'gericht', 'https://abcd.supabase.co/storage/v1/object/public/bilder/a.webp', 'generiert', true, 'fehler')$q$) like 'permission denied%',
+    'Status beim Anlegen nicht setzbar';
+
+  -- kaputtes Bild: nur als „fehler“ markieren, nichts löschen oder umbiegen
+  v_zeit := (select image_updated_at from bild where id = v_b);
+  perform pg_sleep(0.01);
+  update bild set image_status = 'fehler' where id = v_b;
+  assert (select image_status from bild where id = v_b) = 'fehler', 'als kaputt markiert';
+  assert (select image_updated_at from bild where id = v_b) > v_zeit, 'Zeitstempel aktualisiert';
+  assert pg_temp.fehler(format($q$update bild set image_url = 'https://upload.wikimedia.org/b.jpg' where id = %s$q$, v_b)) like 'permission denied%', 'URL nicht änderbar';
+  assert pg_temp.fehler($q$delete from bild$q$) like 'permission denied%', 'nichts löschbar';
+  assert pg_temp.fehler(format($q$update bild set image_status = 'weg' where id = %s$q$, v_b)) like '%check constraint%', 'nur ok/fehler';
+end $$;
+reset role;
+\echo 'ok  Bilder & Zutaten: nur https, keine Hotlinks, Lizenz Pflicht, Cache ohne Löschen, Zutat getrennt vom Produkt'
+
+
 rollback;
 \echo ''
 \echo 'Alle Tests bestanden.'

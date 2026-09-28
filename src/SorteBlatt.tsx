@@ -15,6 +15,8 @@ import { fuellstand, plusTageIso, zustand } from './dashboard';
 import { zustandKlasse } from './Vorrat';
 import { naehrwertAus } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
 import { Bild } from './Bild';
+import { bildKaputt, sortenBild, useBild } from './bildApi';
+import { bildAnfrageFuerKomponente, bildAnfrageFuerZutat } from '../supabase/functions/_shared/kombi/bilder.ts';
 
 type Props = {
   sorte: Sorte;
@@ -128,7 +130,7 @@ export function SorteBlatt({
     <Blatt titel={sorte.name} onSchliessen={onSchliessen}>
       {/* Ebene 1: wie viel, wie dringend */}
       <div className={`sorte-kopf f-${sorte.farbe}`}>
-        <Bild name={sorte.name} farbe={sorte.farbe} art="rund" />
+        <SortenFoto sorte={sorte} />
         <div>
         <p className="sorte-art">
           <span className="punkt" aria-hidden="true" />
@@ -293,4 +295,18 @@ export function SorteBlatt({
       </div>
     </Blatt>
   );
+}
+
+/**
+ * Bild einer Sorte: eigenes Bild zuerst; sonst ein echtes Foto (einmalig gesucht, dann aus dem Cache)
+ * – für Zutaten nur, wenn sie semantisch bekannt sind, für Komplettgerichte nie (Inhalt oft unbekannt).
+ */
+function SortenFoto({ sorte }: { sorte: Sorte }) {
+  const eigen = sortenBild(sorte);
+  const art = artVon(sorte);
+  const anfrage = eigen || art === 'komplettgericht' ? null
+    : art === 'zutat' ? bildAnfrageFuerZutat(sorte.name, sorte.zutat)
+      : bildAnfrageFuerKomponente({ name: sorte.name, zutaten: [], zusammensetzung: sorte.zusammensetzung ?? null, zutat_id: sorte.zutat });
+  const gefunden = useBild(anfrage, true);
+  return <Bild name={sorte.name} farbe={sorte.farbe} art="rund" bild={eigen ?? gefunden} onKaputt={() => bildKaputt(anfrage?.schluessel)} />;
 }

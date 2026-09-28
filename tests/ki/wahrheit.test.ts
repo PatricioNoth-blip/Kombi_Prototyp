@@ -2,7 +2,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pruefeGericht } from '../../supabase/functions/_shared/kombi/validierung.ts';
-import { erwaehnteZutaten, namensQualitaet } from '../../supabase/functions/_shared/kombi/wahrheit.ts';
+import { bereinigeText, deckungstext, erwaehnteZutaten, namensQualitaet, pruefeName } from '../../supabase/functions/_shared/kombi/wahrheit.ts';
 import { OPTIONEN, SEED, snapshot } from './fixtures.ts';
 
 const mitPizza = (zusammensetzung: string[] | null) =>
@@ -127,5 +127,33 @@ describe('Namensqualität', () => {
     assert.equal(gut, 1);
     assert.ok(namensQualitaet('Linsen-Tomaten-Gemüse-Wrap', bestand) < gut);
     assert.ok(namensQualitaet('Linsen gekocht mit TK-Gemüsemix und Curry-Basis Kokos', bestand) <= 0.25);
+  });
+});
+
+describe('Keine erfundenen Mengen, Nährwerte oder Bildquellen in KI-Texten', () => {
+  const deckung = deckungstext(['Tomaten', 'Joghurt', 'Gurke', 'Linsen']);
+  const r = { hausgemacht_erlaubt: false };
+
+  test('Bestandsmengen („Du hast 3 Tomaten“) werden entfernt – Zeitangaben bleiben', () => {
+    for (const satz of ['Du hast noch 3 Tomaten im Kühlschrank.', 'Im Vorrat sind 2 Dosen Tomaten.', '3 Tomaten sind noch da.', 'Übrig bleiben 2 Portionen Linsen.']) {
+      assert.deepEqual(bereinigeText(satz, deckung, r), { text: '', entfernt: ['Bestandsmenge'] }, satz);
+    }
+    for (const satz of ['Etwa 20 Minuten köcheln lassen.', 'Noch 10 Minuten im Ofen backen.', 'Bei 200 Grad backen.', 'Die Tomaten sind noch da und schmecken frisch.']) {
+      assert.equal(bereinigeText(satz, deckung, r).text, satz, satz);
+    }
+  });
+
+  test('Kalorien- und Nährwertbehauptungen werden entfernt – die rechnet die Software', () => {
+    assert.deepEqual(bereinigeText('Die Bowl hat nur 450 kcal. Mit Joghurt und Gurke.', deckung, r),
+      { text: 'Mit Joghurt und Gurke.', entfernt: ['Nährwertangabe'] });
+    assert.equal(bereinigeText('Ein proteinreiches Abendessen.', deckung, r).text, '');
+    assert.equal(bereinigeText('Liefert 30 g Protein.', deckung, r).text, '');
+    assert.equal(pruefeName('Proteinreiche Linsen-Bowl', deckung, r).name, 'Linsen-Bowl');
+  });
+
+  test('Links und Bild-URLs werden entfernt; ein Name mit Link ist unbrauchbar', () => {
+    assert.deepEqual(bereinigeText('Sieht so aus: https://bilder.example/bowl.jpg', deckung, r), { text: '', entfernt: ['Link/Bildquelle'] });
+    assert.equal(bereinigeText('Foto unter www.example.com.', deckung, r).text, '');
+    assert.ok('fehler' in pruefeName('Bowl www.example.com', deckung, r));
   });
 });

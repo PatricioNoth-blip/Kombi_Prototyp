@@ -12,6 +12,8 @@ import { Icon } from './Icon';
 import { euroKurz, kcalKurz, mengeText } from './format';
 import { PostenListe } from './PostenListe';
 import { Bild } from './Bild';
+import { bildKaputt, useBild } from './bildApi';
+import { bildNachweis } from '../supabase/functions/_shared/kombi/bilder.ts';
 
 type Props = {
   gericht: Gericht;
@@ -46,6 +48,9 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
   const [gebucht, setGebucht] = useState<Gebucht | null>(null);
   const [erledigt, setErledigt] = useState<Set<number>>(new Set());
   const [gemerkt, setGemerkt] = useState(false);
+  // Das große Bild: aus dem Cache oder einmalig über die Bildpipeline – sonst lokal
+  const foto = useBild(g.bild, true);
+  const nachweis = bildNachweis(foto);
 
   useScrollSperre();
   // Beim Kochen soll das Display anbleiben (wo der Browser es kann).
@@ -141,6 +146,12 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
 
   const farbe = g.zutaten.find((z) => z.farbe)?.farbe ?? 'neutral';
   const zeilen = daten.zeilen.filter((z) => z.quelle !== 'grundausstattung');
+  // Verwendete Komponenten und Komplettgerichte getrennt von einzelnen Zutaten – wie im Baukasten
+  const bausteine = zeilen.filter((z) => z.art === 'komponente' || z.art === 'komplettgericht');
+  const gruppen = [
+    { titel: bausteine.length ? 'Deine Komponenten' : 'Deine Zutaten', zeilen: bausteine.length ? bausteine : zeilen },
+    ...(bausteine.length ? [{ titel: 'Deine Zutaten', zeilen: zeilen.filter((z) => !bausteine.includes(z)) }] : []),
+  ];
   const grund = daten.zeilen.filter((z) => z.quelle === 'grundausstattung').map((z) => z.name);
   const UNBEKANNT = /^Zusammensetzung von (.+) unbekannt\.?$/;
   const unbekannt = daten.hinweise.map((h) => UNBEKANNT.exec(h)?.[1]).filter((x): x is string => !!x);
@@ -174,7 +185,17 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
 
       <div className="kochen-inhalt">
         <header className="kochen-kopf">
-          {!kochmodus && <div className="kochen-foto"><Bild name={g.name} emoji={g.emoji} farbe={farbe === 'neutral' ? null : farbe} art="flaeche" /></div>}
+          {!kochmodus && (
+            <div className="kochen-foto">
+              <Bild name={g.name} emoji={g.emoji} farbe={farbe === 'neutral' ? null : farbe} art="flaeche" bild={foto}
+                alt={foto ? g.bild?.alt ?? g.name : undefined} onKaputt={() => bildKaputt(g.bild?.schluessel)} />
+              {nachweis && (
+                <small className="bild-nachweis">
+                  {foto?.quelle_seite ? <a href={foto.quelle_seite} target="_blank" rel="noopener noreferrer">{nachweis}</a> : nachweis}
+                </small>
+              )}
+            </div>
+          )}
           <h1>{g.name}</h1>
           <p className="meta-icons">
             <span><Icon name="uhr" groesse={18} /> {g.zeit_min} Min</span>
@@ -199,11 +220,11 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
           </div>
         )}
 
-        {!kochmodus && (
-          <section className="abschnitt">
-            <div className="abschnitt-kopf"><h2>Deine Zutaten</h2></div>
+        {!kochmodus && gruppen.map((gruppe) => gruppe.zeilen.length > 0 && (
+          <section key={gruppe.titel} className="abschnitt">
+            <div className="abschnitt-kopf"><h2>{gruppe.titel}</h2></div>
             <ul className="liste">
-              {zeilen.map((z, i) => (
+              {gruppe.zeilen.map((z, i) => (
                 <li key={`${z.name}-${i}`} className={`f-${z.farbe ?? 'kuehlschrank'}`}>
                   <div className="zeile">
                     <span className="punkt" aria-hidden="true" />
@@ -216,13 +237,13 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
                 </li>
               ))}
             </ul>
-            {(grund.length > 0 || unbekannt.length > 0) && (
-              <p className="abschnitt-fuss">
-                {grund.length > 0 && `Außerdem: ${grund.join(', ')}. `}
-                {unbekannt.length > 0 && `Zusammensetzung unbekannt: ${unbekannt.join(', ')} – Kombi erfindet nichts dazu.`}
-              </p>
-            )}
           </section>
+        ))}
+        {!kochmodus && (grund.length > 0 || unbekannt.length > 0) && (
+          <p className="abschnitt-fuss">
+            {grund.length > 0 && `Außerdem: ${grund.join(', ')}. `}
+            {unbekannt.length > 0 && `Zusammensetzung unbekannt: ${unbekannt.join(', ')} – Kombi erfindet nichts dazu.`}
+          </p>
         )}
 
         {!kochmodus && g.fehlt.length > 0 && (

@@ -2,7 +2,8 @@
 // Die KI läuft in der Edge Function „was-essen“ (dort liegt der API-Key). Ist sie nicht eingerichtet
 // oder gerade nicht verfügbar, rechnet die App selbst mit dem regelbasierten Anbieter (Demo-Modus).
 // Protokollieren ist „best effort“: Klappt es nicht (z. B. Migration fehlt), läuft alles trotzdem.
-import { supabase } from './supabase';
+import { supabase, SUPABASE_KEY, SUPABASE_URL } from './supabase';
+import { ENGINE_VERSION, type Gesundheit, type KiProbe } from '../supabase/functions/_shared/kombi/gesundheit.ts';
 import { fehltMigration, ladeBestand, type Sorte } from './api';
 import { baueSnapshot, type BestandZeile } from '../supabase/functions/_shared/kombi/snapshot.ts';
 import { erzeugeKomponenten, erzeugeVorschlaege, erzeugeWoche } from '../supabase/functions/_shared/kombi/engine.ts';
@@ -113,15 +114,54 @@ export function normalisiereErgebnis(e: Ergebnis): { ergebnis: Ergebnis; veralte
 }
 
 const ALTE_VERSION = 'Die KI-Funktion auf Supabase ist noch die alte Version – bitte neu deployen (siehe README).';
+/** Länger wartet niemand am Handy – danach übernehmen die Kombi-Regeln. */
+const KI_ZEITLIMIT_MS = 40_000;
 
 /** Ruft die Edge Function; liefert die Antwort oder einen verständlichen Hinweis. */
 async function rufeKi(anfrage: KiAnfrage): Promise<{ daten: Record<string, unknown> } | { hinweis: string }> {
   try {
-    const { data, error } = await supabase.functions.invoke('was-essen', { body: anfrage });
+    const zeitlimit = new Promise<'zeit'>((ja) => setTimeout(() => ja('zeit'), KI_ZEITLIMIT_MS));
+    const r = await Promise.race([supabase.functions.invoke('was-essen', { body: anfrage }), zeitlimit]);
+    if (r === 'zeit') return { hinweis: 'Die KI hat zu lange gebraucht – Vorschläge nach Kombi-Regeln.' };
+    const { data, error } = r as { data: unknown; error: unknown };
     if (!error && data && typeof data === 'object') return { daten: data as Record<string, unknown> };
     return { hinweis: await hinweisAus(error) };
   } catch {
     return { hinweis: 'KI nicht erreichbar.' };
+  }
+}
+
+/** Hinweis, wenn die Function eine andere Engine-Version hat (Prüflogik könnte veraltet sein). */
+function versionsHinweis(daten: Record<string, unknown>): string | null {
+  const v = daten.version;
+  if (typeof v !== 'string') return null; // ältere Function ohne Versionsangabe → siehe ALTE_VERSION
+  return v === ENGINE_VERSION ? null : `Die KI-Funktion auf Supabase hat Version ${v}, die App ${ENGINE_VERSION} – bitte neu deployen.`;
+}
+
+export type KiStatus =
+  | { art: 'laedt' }
+  | { art: 'nicht_erreichbar'; hinweis: string }
+  | { art: 'alt'; hinweis: string }
+  | { art: 'ok'; gesundheit: Gesundheit; aktuell: boolean };
+
+/**
+ * Health-Check der Edge Function (GET, ohne Keys). Mit probe=true zusätzlich ein echter kleiner
+ * KI-Aufruf: Antwortzeit, JSON, Schema, Prüfergebnis. Ändert nichts im Haushalt.
+ */
+export async function pruefeKi(probe = false): Promise<KiStatus & { probe?: KiProbe }> {
+  if (!SUPABASE_URL) return { art: 'nicht_erreichbar', hinweis: 'Supabase ist nicht eingerichtet.' };
+  try {
+    const r = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/was-essen${probe ? '?probe=1' : ''}`, {
+      headers: { apikey: SUPABASE_KEY, authorization: `Bearer ${SUPABASE_KEY}` },
+      signal: AbortSignal.timeout(probe ? 60_000 : 15_000),
+    });
+    if (r.status === 404) return { art: 'nicht_erreichbar', hinweis: 'Die KI-Funktion ist noch nicht deployt – Vorschläge kommen nach Kombi-Regeln (Demo).' };
+    if (r.status === 405) return { art: 'alt', hinweis: ALTE_VERSION };
+    if (!r.ok) return { art: 'nicht_erreichbar', hinweis: `KI-Funktion antwortet mit Fehler ${r.status}.` };
+    const g = (await r.json()) as Gesundheit;
+    return { art: 'ok', gesundheit: g, aktuell: g.version === ENGINE_VERSION, probe: g.probe };
+  } catch {
+    return { art: 'nicht_erreichbar', hinweis: 'KI-Funktion nicht erreichbar (offline?).' };
   }
 }
 
@@ -134,7 +174,7 @@ export async function holeVorschlaege(anfrage: KiAnfrage): Promise<Antwort> {
     // Ältere Versionen (ohne Feld „aufgabe“) kennen den Reste-Modus nicht – dann lokal nach Kombi-Regeln.
     const kenntReste = !veraltet && 'aufgabe' in r.daten;
     if (anfrage.modus.art !== 'reste' || kenntReste) {
-      return { ergebnis, quelle: 'ki', hinweis: veraltet ? ALTE_VERSION : null };
+      return { ergebnis, quelle: 'ki', hinweis: veraltet ? ALTE_VERSION : versionsHinweis(r.daten) };
     }
     hinweis = ALTE_VERSION;
   } else {

@@ -227,6 +227,8 @@ export function Inventar() {
   const offeneEinkaeufe = liste.zeilen.filter((z) => z.status === 'offen').length;
   const auftauFaellig = heuteAuftauen(h.auftauen, heute).length + auftauHinweise.filter((v) => v.auftauen_am <= heute).length;
 
+  // Migration „bilder_zutaten“: die View liefert dann image_url und zutat
+  const bilderMigration = !!bestand?.length && 'image_url' in bestand[0];
   const finde = (id: number | null) => bestand?.find((s) => s.id === id) ?? null;
   const offeneSorte = finde(nav.sorte);
   const bearbeiteSorte = finde(bearbeiteSorteId);
@@ -251,6 +253,7 @@ export function Inventar() {
     !h.planung && '„planung_einkauf“ (Einkaufsliste, Woche, Auftauen, Produktion)',
     h.planung && !h.protokoll && '„kosten_naehrwerte“ (Ausgaben, Kosten je Mahlzeit, Kalorien)',
     h.planung && !h.ausgaben && '„ausgaben“ (sonstige Ausgaben)',
+    h.ausgaben && !bilderMigration && '„bilder_zutaten“ (eigene Bilder, Bild-Cache, Zutaten)',
   ].filter((x): x is string => !!x);
 
   const datumText = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -324,7 +327,6 @@ export function Inventar() {
                 auftauFaellig={auftauFaellig}
                 ideen={ideen}
                 onKochen={(g, planId) => setKochen({ g, planId })}
-                onOeffnen={oeffneSorte}
                 onBereich={wechsle}
                 onMeldung={melde}
                 onGeaendert={() => void laden()}
@@ -454,6 +456,7 @@ export function Inventar() {
           baukasten={baukasten}
           planung={h.planung}
           naehrwerte={h.protokoll}
+          bilder={bilderMigration}
           onFertig={(text) => {
             setNeueSorte(false);
             zeige({ text });
@@ -498,6 +501,7 @@ export function Inventar() {
           baukasten={baukasten}
           planung={h.planung}
           naehrwerte={h.protokoll}
+          bilder={bilderMigration}
           onFertig={(text) => {
             setBearbeiteSorteId(null);
             zeige({ text });

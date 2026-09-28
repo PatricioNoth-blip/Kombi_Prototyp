@@ -6,6 +6,7 @@ import { Icon, type IconName } from './Icon';
 import { artVon, einheitVon, euro, mengeKurz, mengeText, portionMengeVon } from './format';
 import { heuteWichtig, ortKacheln, sortenFuer, vorratswert, zustand, type Wichtig } from './dashboard';
 import { Bild, DEKO, ORT_FOTO } from './Bild';
+import { sortenBild } from './bildApi';
 import { Box, tonVon, WarnIcon, WichtigKacheln, zustandKurz } from './Karten';
 import type { NavZustand } from './navigation';
 
@@ -63,7 +64,7 @@ function SorteZeile({ s, heute, reserviert, zeigeOrt, laeuft, onOeffnen, onEntne
     <li className={`vorrat-zeile f-${s.farbe}`}>
       <div className={`zeile${s.anzahl === 0 ? ' leer' : ''}`}>
         <button type="button" className="zeile-knopf" onClick={() => onOeffnen(s)}>
-          <Bild name={s.name} farbe={s.farbe} art="klein" />
+          <Bild name={s.name} farbe={s.farbe} art="klein" bild={sortenBild(s)} />
           <span className="zeile-haupt">
             <span className="zeile-titel">{s.name}</span>
             <span className="zeile-meta">{unter}</span>
@@ -250,7 +251,7 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
             return (
               <li key={s.id}>
                 <button type="button" className="zeile" onClick={() => onOeffnen(s)}>
-                  <Bild name={s.name} farbe={s.farbe} art="rund" />
+                  <Bild name={s.name} farbe={s.farbe} art="rund" bild={sortenBild(s)} />
                   <span className="zeile-haupt">
                     <span className="zeile-titel">{s.name}</span>
                     <span className="zeile-meta ort-meta">

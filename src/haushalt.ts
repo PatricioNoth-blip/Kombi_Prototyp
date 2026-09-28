@@ -84,7 +84,7 @@ export async function ladeHaushalt(): Promise<Haushaltsdaten> {
     supabase.from('nutzung').select('*'),
     supabase.from('einkauf_buchung').select('erstellt_am, preis_cent, rueckgaengig').gte('erstellt_am', ab),
     supabase.from('herstellung').select('datum, kosten_cent, kosten_unbekannt, rueckgaengig').gte('datum', ab),
-    supabase.from('mahlzeit').select('datum, titel, portionen, kosten_cent, kosten_unbekannt, kcal, kcal_unbekannt, rueckgaengig').gte('datum', ab),
+    supabase.from('mahlzeit').select('datum, titel, portionen, kosten_cent, kosten_unbekannt, kcal, kcal_unbekannt, rueckgaengig, erstellt_am').gte('datum', ab),
     supabase.from('ausgabe').select('id, datum, betrag_cent, notiz, entfernt').gte('datum', ab).order('datum', { ascending: false }),
   ]);
   if (plaene.error) return LEER; // Migration fehlt (oder keine Verbindung) → ohne Planung weiter

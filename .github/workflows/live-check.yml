@@ -32,5 +32,5 @@ jobs:
         if: always()
         with:
           name: live-check-screenshot
-          path: live-check-uebersicht.png
+          path: live-check-*.png
           if-no-files-found: ignore

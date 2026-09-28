@@ -47,8 +47,10 @@
   --r-klein: 13px;
   --sicher-unten: env(safe-area-inset-bottom, 0px);
   --tabbar-h: 68px;
+  /* seitlicher Rand – überall gleich, auch für Elemente, die bis an den Rand wischen */
+  --gutter: 20px;
 
-  --t-seite: 32px;
+  --t-seite: 28px;
   --t-abschnitt: 21px;
   --t-titel: 17px;
   --t-sekundaer: 15px;
@@ -194,11 +196,11 @@ ul, ol { margin: 0; padding: 0; }
 .kopf h1 { display: flex; align-items: center; gap: 10px; font-size: var(--t-seite); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
 .kopf h1 .icon { color: #e6a42b; }
 .kopf-unter { color: var(--text-2); font-size: var(--t-sekundaer); margin-top: 3px; }
-.kopf-icon { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--gruen-weich); color: var(--titel); }
-.kopf-aktion { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border: 0; border-radius: 50%; background: var(--gruen-weich); color: var(--gruen); }
+.kopf-icon { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--gruen-weich); color: var(--titel); }
+.kopf-aktion { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--gruen-weich); color: var(--gruen); }
 .kopf-aktion:active { transform: scale(0.95); }
 
-.inhalt { padding: 4px 20px calc(var(--tabbar-h) + var(--sicher-unten) + 48px); }
+.inhalt { padding: 4px var(--gutter) calc(var(--tabbar-h) + var(--sicher-unten) + 48px); }
 
 .unten {
   position: fixed;
@@ -296,10 +298,10 @@ details.hinweisbox > summary { cursor: pointer; font-weight: 600; color: var(--t
 
 /* ───────── Bausteine ───────── */
 /* Karte als Abschnitt: Kopf (Icon, Titel, „Alle anzeigen ›“) und Inhalt */
-.box { margin-top: 16px; padding: 18px; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
+.box { margin-top: 12px; padding: 16px; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
 .box:first-child { margin-top: 6px; }
-.box-kopf { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.box-kopf h2 { flex: 1; min-width: 0; font-size: clamp(18px, 4.9vw, 21px); font-weight: 750; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.box-kopf { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.box-kopf h2 { flex: 1; min-width: 0; font-size: clamp(17px, 4.6vw, 19px); font-weight: 750; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .box-kopf > .icon { color: var(--titel); }
 .box-kopf .warn-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--kritisch); color: #fff; }
 .mehr-link { flex: none; display: inline-flex; align-items: center; gap: 1px; padding: 4px 0; border: 0; background: none; color: var(--gruen); font-size: 14px; font-weight: 600; }
@@ -400,7 +402,7 @@ button.zeile:active { background: var(--flaeche-2); }
 .icon-knopf.akzent { background: var(--akzent); color: var(--akzent-text); }
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.chips.scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -20px; padding: 0 20px 4px; }
+.chips.scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter) 4px; }
 .chips.scroll::-webkit-scrollbar { display: none; }
 .chip { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--flaeche); color: var(--text); font-size: var(--t-sekundaer); box-shadow: 0 1px 2px rgb(70 45 20 / 0.05); }
 .chip small { color: var(--text-2); font-size: var(--t-meta); }
@@ -447,49 +449,107 @@ span.chip { cursor: default; }
 /* Getönte Kacheln „Heute wichtig“ */
 .kacheln { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(168px, 48%); gap: 10px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x mandatory; margin: 0 -4px; padding: 0 4px 2px; }
 .kacheln::-webkit-scrollbar { display: none; }
-.kachel { scroll-snap-align: start; display: flex; align-items: center; gap: 10px; min-height: 76px; padding: 10px 12px 10px 10px; border: 0; border-radius: var(--r); background: var(--t-grund, var(--flaeche-2)); text-align: left; }
+.kachel { scroll-snap-align: start; display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 10px 12px 10px 10px; border: 0; border-radius: var(--r); background: var(--t-grund, var(--flaeche-2)); text-align: left; }
 .kachel-text { min-width: 0; display: grid; gap: 1px; }
 .kachel-text strong { font-size: 16px; font-weight: 650; color: var(--text); overflow-wrap: break-word; hyphens: auto; line-height: 1.2; }
 .kachel-text span { display: flex; align-items: center; gap: 6px; font-size: var(--t-meta); color: var(--t-text, var(--text-2)); }
 .kachel-text .zustand-punkt { width: 8px; height: 8px; border-radius: 50%; background: var(--t-text); }
-.kachel .bild-rund { width: 48px; height: 48px; box-shadow: 0 2px 6px rgb(60 30 10 / 0.12); }
+.kachel .bild-rund { width: 42px; height: 42px; box-shadow: 0 2px 6px rgb(60 30 10 / 0.12); }
 .kachel .bild-rund.bild-symbol { font-size: 26px; }
 
 /* ───────── Start ───────── */
-.geld-held { position: relative; overflow: hidden; margin-top: 6px; padding: 20px 20px 18px; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); cursor: pointer; text-align: left; width: 100%; display: block; }
-.geld-held > img { position: absolute; top: 0; right: 0; width: 60%; height: 100%; object-fit: cover; -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 45%), linear-gradient(to bottom, #000 50%, transparent 78%); -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent 0%, #000 45%), linear-gradient(to bottom, #000 50%, transparent 78%); mask-composite: intersect; }
-.geld-held::before { content: ''; position: absolute; inset: 0; background: var(--geld-grund); }
-.geld-held > * { position: relative; }
-.geld-held > img { position: absolute; }
-.geld-titel { font-size: var(--t-titel); font-weight: 650; color: var(--titel); }
-.geld-summe { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-top: 2px; }
-.geld-zahl { font-size: 44px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; color: var(--titel); font-variant-numeric: tabular-nums; }
-.trend { display: grid; gap: 1px; }
-.trend-chip { justify-self: start; display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 9px; background: color-mix(in srgb, var(--flaeche) 70%, transparent); font-size: var(--t-meta); font-weight: 700; }
+/* kompakt: viele Informationen auf wenig Raum – Heute, Hinweis, Was essen wir?, Monat, zwei Kacheln */
+.ansicht-start .kopf { padding-bottom: 8px; }
+.ansicht-start .kopf-zeile { min-height: 40px; }
+.ansicht-start .kopf h1 { font-size: 22px; font-weight: 750; gap: 8px; }
+.ansicht-start .kopf h1 .icon { width: 22px; height: 22px; }
+.ansicht-start .kopf-unter { font-size: var(--t-meta); margin-top: 1px; }
+.start { display: grid; gap: 12px; margin-top: 4px; }
+.start .box { margin-top: 0; }
+.ueber { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
+
+.heute-karte, .monat-karte, .mini-kachel, .rezept-kompakt {
+  border: 1px solid var(--rand); border-radius: var(--r); background: var(--flaeche); box-shadow: var(--karte-schatten);
+}
+.heute-karte { display: grid; gap: 8px; width: 100%; padding: 12px 16px; text-align: left; }
+.heute-zahlen { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; min-width: 0; }
+.heute-zahl { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; align-items: center; min-width: 0; }
+.heute-zahl.rechts { flex: none; grid-template-columns: minmax(0, 1fr); text-align: right; }
+.heute-emoji { grid-row: span 2; font-size: 26px; line-height: 1; }
+.heute-zahl strong { font-size: clamp(18px, 5.4vw, 22px); font-weight: 800; letter-spacing: -0.02em; color: var(--titel); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.heute-zahl small { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.heute-leer { font-size: var(--t-meta); color: var(--text-2); }
+.ziel-balken { display: block; height: 6px; border-radius: 3px; background: var(--flaeche-3); overflow: hidden; }
+.ziel-balken > span { display: block; height: 100%; border-radius: 3px; background: var(--ok); transition: width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ziel-balken > span.drueber { background: var(--achtung); }
+.mahlzeit-arten { display: flex; gap: 6px; flex-wrap: wrap; }
+.mahlzeit-arten span { padding: 2px 9px; border-radius: 10px; background: var(--flaeche-2); color: var(--text-3); font-size: 12px; font-weight: 600; }
+.mahlzeit-arten span.an { background: var(--ok-weich); color: var(--ok); }
+
+.start-hinweis { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--kritisch-weich); color: var(--kritisch); font-size: var(--t-meta); font-weight: 600; text-align: left; }
+.start-hinweis .icon { margin-left: auto; }
+.hinweis-punkt { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--kritisch); }
+
+.start-block { display: grid; gap: 6px; min-width: 0; }
+.start-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.start-kopf h2 { font-size: 13px; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-2); }
+.start .punkte { margin-top: 2px; }
+
+.rezept-kompakt { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; padding: 10px; }
+.rezept-kompakt.leer { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px 16px; }
+.rezept-kompakt.leer .knopf { justify-self: start; }
+.rk-bild .bild { width: 84px; height: 84px; border-radius: 14px; }
+.rk-bild .bild-symbol { font-size: 40px; }
+.rk-text { min-width: 0; display: grid; gap: 3px; align-content: start; }
+.rk-ueber { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--akzent); }
+.rk-text h3 { font-size: 17px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.rk-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12.5px; color: var(--text-2); }
+.rk-meta > span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.rk-meta .flamme { color: var(--akzent); }
+.rk-unten { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; min-width: 0; }
+.rk-da { min-width: 0; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.knopf.rk-kochen { flex: none; min-height: 36px; padding: 0 16px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.monat-karte { display: grid; gap: 8px; width: 100%; padding: 12px 16px; text-align: left; }
+.monat-kopf { display: flex; align-items: center; gap: 8px; }
+.monat-kopf .zeile-pfeil { margin-left: auto; }
+.trend-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 9px; background: var(--flaeche-2); font-size: 12px; font-weight: 700; }
 .trend-chip.runter { color: var(--ok); }
 .trend-chip.hoch { color: var(--kritisch); }
-.trend small { font-size: 12px; color: var(--text-2); }
-.geld-mitte { display: flex; align-items: center; gap: 14px; margin: 14px 0 16px; min-height: 12px; }
-.geld-mitte .teilbalken { flex: 1; max-width: 62%; }
-.geld-spalten { display: flex; gap: 0; }
-.geld-spalte { flex: 1; min-width: 0; display: grid; gap: 2px; padding: 0 12px; }
-.geld-spalte:first-child { padding-left: 0; }
-.geld-spalte + .geld-spalte { border-left: 1px solid var(--trenn); }
-.geld-spalte span { display: flex; align-items: center; gap: 6px; font-size: var(--t-meta); color: var(--text); white-space: nowrap; }
-.geld-spalte strong { font-size: var(--t-sekundaer); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.geld-spalte small { font-size: 11px; color: var(--text-2); }
-.geld-schnitt { margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 18px; background: color-mix(in srgb, var(--flaeche) 90%, transparent); box-shadow: var(--karte-schatten); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
-.geld-schnitt .icon { color: var(--gruen); }
-.geld-schnitt strong { display: block; font-size: var(--t-titel); font-weight: 750; color: var(--titel); line-height: 1.1; }
-.geld-schnitt small { font-size: 12px; color: var(--text-2); }
-.geld-leer { margin-top: 10px; max-width: 62%; font-size: var(--t-meta); color: var(--text-2); }
+.monat-zahlen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.monat-zahlen > span { display: grid; gap: 1px; min-width: 0; padding: 0 10px; }
+.monat-zahlen > span:first-child { padding-left: 0; }
+.monat-zahlen > span + span { border-left: 1px solid var(--trenn); }
+.monat-zahlen strong { font-size: 17px; font-weight: 750; color: var(--titel); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.monat-zahlen small { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.monat-fuss { font-size: 12px; color: var(--text-2); }
+
+.kachel-paar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mini-kachel { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 60px; padding: 10px 12px; text-align: left; }
+.mini-icon { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--t-grund); color: var(--t-text); }
+.mini-text { min-width: 0; display: grid; gap: 1px; }
+.mini-text strong { font-size: 15px; font-weight: 700; color: var(--titel); }
+.mini-text small { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.heute-karte:active, .monat-karte:active, .mini-kachel:active, .start-hinweis:active { transform: scale(0.99); }
+
+/* KI-Status (Essen → Ändern) */
+.option-zeile.ki-status { align-items: flex-start; padding: 12px 0; }
+.ki-status-text { flex: 1; min-width: 0; display: grid; gap: 2px; text-align: right; }
+.ki-status-text small { font-size: 12px; overflow-wrap: anywhere; }
+.ki-status .link { padding: 0; font-size: 13px; }
+
+/* Nachweis eines gefundenen oder generierten Fotos */
+.bild-nachweis { position: absolute; right: 8px; bottom: 8px; max-width: calc(100% - 16px); padding: 2px 8px; border-radius: 8px; background: rgb(0 0 0 / 0.5); color: #fff; font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bild-nachweis a { color: inherit; text-decoration: none; }
+.geld-titel { font-size: var(--t-titel); font-weight: 650; color: var(--titel); }
+.geld-zahl { font-size: 36px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; color: var(--titel); font-variant-numeric: tabular-nums; }
 
 /* Gericht mit Foto links (Start, Produktion) */
 .foto-karte { display: grid; grid-template-columns: minmax(112px, 40%) minmax(0, 1fr); overflow: hidden; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
 .foto-karte.getoent { grid-template-columns: minmax(0, 1fr); background: linear-gradient(135deg, var(--akzent-weich), color-mix(in srgb, var(--akzent-weich) 35%, var(--flaeche))); border: 0; box-shadow: none; border-radius: var(--r); }
-.foto-karte.getoent .foto-karte-bild { min-height: 150px; height: 150px; border-radius: var(--r) var(--r) 0 0; }
+.foto-karte.getoent .foto-karte-bild { min-height: 130px; height: 130px; border-radius: var(--r) var(--r) 0 0; }
 .foto-karte.getoent .knopf.pillen-knopf { justify-self: stretch; }
-.foto-karte-bild { position: relative; min-height: 170px; border-radius: inherit; border-top-right-radius: 0; border-bottom-right-radius: 0; overflow: hidden; }
+.foto-karte-bild { position: relative; min-height: 150px; border-radius: inherit; border-top-right-radius: 0; border-bottom-right-radius: 0; overflow: hidden; }
 .foto-karte.getoent .foto-karte-bild { border-radius: var(--r); margin: 0; }
 .foto-karte-bild > .bild { position: absolute; inset: 0; border-radius: 0; }
 .foto-karte-inhalt { min-width: 0; display: grid; align-content: start; gap: 10px; padding: 16px 16px 16px 16px; }
@@ -503,49 +563,29 @@ span.chip { cursor: default; }
 .warnzeile .warn-punkt { flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin-top: 1px; border-radius: 50%; background: var(--kritisch); color: #fff; font-size: 13px; font-weight: 800; }
 .warnzeile small { display: block; color: var(--text-2); font-weight: 400; font-size: var(--t-meta); }
 
-.karussell { display: grid; grid-auto-flow: column; grid-auto-columns: 100%; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -20px; padding: 2px 20px 6px; scroll-padding: 0 20px; }
+.karussell { display: grid; grid-auto-flow: column; grid-auto-columns: 100%; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 calc(-1 * var(--gutter)); padding: 2px var(--gutter) 6px; scroll-padding: 0 var(--gutter); }
 .karussell::-webkit-scrollbar { display: none; }
 .karussell > * { scroll-snap-align: start; }
 .punkte { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
 .punkte span { width: 7px; height: 7px; border-radius: 50%; background: var(--flaeche-3); transition: background 0.2s, width 0.2s; }
 .punkte span.an { background: var(--akzent); }
 .foto-karte { position: relative; }
-.vor-knopf { position: absolute; right: 10px; top: 10px; }
-.foto-karte-inhalt .ueber { padding-right: 34px; }
 
-.zwei { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
-.zwei > .box { margin-top: 0; display: flex; flex-direction: column; padding: 16px; }
-.zwei > .box:only-child { grid-column: 1 / -1; }
-.zwei .box-kopf h2 { font-size: 16px; }
-.zwei .box-kopf { margin-bottom: 12px; gap: 8px; }
-.mini-tipp { display: grid; gap: 10px; margin-bottom: 14px; }
-.mini-tipp .bild-kachel { width: 100%; height: 86px; border-radius: 14px; }
-.mini-tipp strong { display: block; font-size: var(--t-titel); font-weight: 700; color: var(--titel); line-height: 1.2; }
-.mini-tipp small { display: block; font-size: var(--t-meta); color: var(--text-2); margin-top: 2px; }
-.einkauf-kurz strong { display: block; font-size: 19px; font-weight: 750; color: var(--titel); }
-.einkauf-kurz span { font-size: var(--t-sekundaer); color: var(--text-2); }
-.bilder-reihe { display: flex; gap: 8px; margin: 12px 0 14px; }
-.bilder-reihe .bild-klein { width: 38px; height: 38px; }
-.zwei .knopf { margin-top: auto; width: 100%; justify-content: space-between; padding: 0 16px; font-size: 13px; }
-.einkauf-kurz small { display: block; font-size: var(--t-meta); color: var(--text-2); }
-.karussell-fuss { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 4px 0; }
-.karussell-fuss .heute-gekocht { margin: 0; }
-.heute-gekocht { margin: 10px 4px 0; font-size: var(--t-meta); color: var(--text-2); }
 
 /* ───────── Vorrat ───────── */
-.vorrat-held { position: relative; overflow: hidden; margin-top: 16px; padding: 20px; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
+.vorrat-held { position: relative; overflow: hidden; margin-top: 12px; padding: 16px; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
 .vorrat-held > img { position: absolute; top: 0; right: 0; width: 48%; height: 70%; object-fit: cover; -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 45%), linear-gradient(to bottom, #000 55%, transparent); -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent 0%, #000 45%), linear-gradient(to bottom, #000 55%, transparent); mask-composite: intersect; }
 .vorrat-held::before { content: ''; position: absolute; inset: 0; background: var(--vorrat-grund); }
 .vorrat-held > * { position: relative; }
 .vorrat-held > img { position: absolute; }
 .vorrat-held-kopf { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 22px; max-width: 70%; }
-.vorrat-held-kopf .geld-zahl { font-size: 34px; }
+.vorrat-held-kopf .geld-zahl { font-size: 28px; }
 .fuellung strong.status-achtung { color: var(--achtung); }
 .fuellung { display: flex; gap: 8px; align-items: flex-start; }
 .fuellung .icon { color: var(--gruen); margin-top: 2px; }
 .fuellung strong { display: block; font-size: var(--t-sekundaer); font-weight: 650; color: var(--gruen); }
 .fuellung small { font-size: 12px; color: var(--text-2); }
-.vorrat-held .teilbalken { width: 62%; margin: 14px 0 16px; }
+.vorrat-held .teilbalken { width: 62%; margin: 10px 0 12px; }
 .vorrat-zahlen { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
 .vorrat-zahl { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 6px; row-gap: 2px; min-width: 0; padding: 0 5px; border: 0; background: none; text-align: left; }
 .vorrat-zahl:first-child { padding-left: 0; }
@@ -558,12 +598,12 @@ span.chip { cursor: default; }
 .farbe-vorrat { color: var(--achtung); }
 .farbe-komp { color: var(--braun); }
 
-.ort-karten { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.ort-karten { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .ort-karte { display: grid; overflow: hidden; padding: 0; border: 1px solid var(--rand); border-radius: var(--r); background: var(--t-grund); box-shadow: var(--karte-schatten); text-align: left; }
 .ort-karte { position: relative; }
-.ort-karte img { width: 100%; height: 72px; object-fit: cover; }
+.ort-karte img { width: 100%; height: 60px; object-fit: cover; }
 .ort-karte-text { display: grid; gap: 1px; padding: 18px 8px 12px 10px; }
-.ort-karte-text .icon-rund { position: absolute; left: 10px; top: 56px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--flaeche); color: var(--t-text); box-shadow: 0 2px 6px rgb(60 30 10 / 0.12); }
+.ort-karte-text .icon-rund { position: absolute; left: 10px; top: 44px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--flaeche); color: var(--t-text); box-shadow: 0 2px 6px rgb(60 30 10 / 0.12); }
 .ort-karte-text strong { font-size: 13px; font-weight: 700; letter-spacing: -0.02em; color: var(--titel); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ort-karte-text small { font-size: var(--t-meta); color: var(--text-2); }
 .ort-karte.ton-gruen { --t-grund: color-mix(in srgb, var(--ok-weich) 55%, var(--flaeche)); }
@@ -571,7 +611,7 @@ span.chip { cursor: default; }
 .ort-karte.ton-gelb { --t-grund: color-mix(in srgb, var(--achtung-weich) 60%, var(--flaeche)); }
 
 .bild-zeile .zeile { gap: 12px; padding: 9px 12px; }
-.bild-zeile .bild-rund { width: 52px; height: 52px; }
+.bild-zeile .bild-rund { width: 44px; height: 44px; }
 .vorrat-zahl { cursor: pointer; }
 .ort-meta > span { white-space: nowrap; }
 .ort-meta .icon { display: inline-block; vertical-align: -2px; margin: 0 1px 0 2px; }
@@ -603,7 +643,7 @@ span.chip { cursor: default; }
 .mini-knopf.aktiv { background: var(--akzent-weich); color: var(--akzent); }
 
 /* ───────── Produktion ───────── */
-.empfohlen { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(160px, 46%); gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -18px; padding: 2px 18px 4px; scroll-padding: 0 18px; }
+.empfohlen { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(160px, 46%); gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px 4px; scroll-padding: 0 16px; }
 .empfohlen::-webkit-scrollbar { display: none; }
 .empfohlen-karte { scroll-snap-align: start; display: grid; align-content: start; overflow: hidden; padding: 0; border: 1px solid var(--rand); border-radius: var(--r); background: var(--flaeche); box-shadow: var(--karte-schatten); text-align: left; }
 .empfohlen-karte .empf-bild { height: 100px; }
@@ -649,10 +689,10 @@ span.chip { cursor: default; }
 .einstellungen .meta { flex: 1; }
 
 .gericht { overflow: hidden; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
-.gericht-kopf { position: relative; display: grid; place-items: center; height: 190px; background: var(--ton, var(--ton-neutral)); font-size: 64px; line-height: 1; }
+.gericht-kopf { position: relative; display: grid; place-items: center; height: 168px; background: var(--ton, var(--ton-neutral)); font-size: 64px; line-height: 1; }
 .gericht-kopf > .bild { position: absolute; inset: 0; border-radius: 0; }
 .gericht-inhalt { display: grid; gap: 12px; padding: 18px 18px 16px; }
-.gericht-name { font-size: 25px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.15; color: var(--titel); }
+.gericht-name { font-size: 23px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.15; color: var(--titel); }
 .gericht-text { color: var(--text-2); font-size: var(--t-sekundaer); line-height: 1.45; }
 .gericht-zutaten, .gericht-fehlt { font-size: var(--t-sekundaer); }
 .gericht-zutaten strong { font-weight: 650; }
@@ -747,7 +787,7 @@ details.mehr-infos[open] { display: grid; gap: 12px; padding-bottom: 6px; }
 }
 .kochen-leiste .platz { width: 42px; }
 .kochen-inhalt { max-width: 560px; margin: 0 auto; padding: 8px 20px calc(120px + var(--sicher-unten)); }
-.kochen-foto { height: 210px; margin: 0 0 18px; border-radius: var(--r-karte); overflow: hidden; box-shadow: var(--karte-schatten); }
+.kochen-foto { position: relative; height: 220px; margin: 0 0 18px; border-radius: var(--r-karte); overflow: hidden; box-shadow: var(--karte-schatten); }
 .kochen-foto .bild { width: 100%; height: 100%; border-radius: 0; }
 .kochen-kopf { display: grid; gap: 12px; }
 .kochen-kopf h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.12; }
@@ -888,18 +928,19 @@ details.mehr input, details.mehr textarea, details.mehr select { background: var
 @keyframes einblenden { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pulsieren { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 @keyframes abhaken { 0% { transform: scale(0.8); } 60% { transform: scale(1.1); } 100% { transform: scale(1); } }
-.box, .geld-held, .vorrat-held, .foto-karte, .ort-karte { animation: auftauchen 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.box, .heute-karte, .rezept-kompakt, .monat-karte, .kachel-paar, .vorrat-held, .foto-karte, .ort-karte { animation: auftauchen 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 
 /* ───────── Kleine Bildschirme ───────── */
 @media (max-width: 380px) {
-  .inhalt { padding-left: 16px; padding-right: 16px; }
+  :root { --gutter: 16px; }
   .kopf { padding-left: 16px; padding-right: 16px; }
-  .geld-spalten { max-width: 100%; }
-  .geld-schnitt { position: static; margin-top: 14px; justify-self: start; display: inline-flex; }
-  .zwei { grid-template-columns: 1fr; }
+  .monat-zahlen > span { padding: 0 6px; }
+  .monat-zahlen strong { font-size: 15px; }
+  .rezept-kompakt { grid-template-columns: 72px minmax(0, 1fr); }
+  .rk-bild .bild { width: 72px; height: 72px; }
   .vorrat-zahl small { font-size: 10.5px; }
 }
 @media (max-width: 360px) {

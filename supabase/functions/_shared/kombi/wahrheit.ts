@@ -164,6 +164,20 @@ export function ungedeckt(text: string, deckung: string): string[] {
 // ───────── Behauptungen, die die KI nicht machen darf ─────────
 
 const PREIS = /\d+(?:[.,]\d+)?\s*(?:€|euro\b|eur\b|cent\b|ct\b)|€|\beuro\b|\bcent\b/i;
+/** Kalorien und Nährwerte rechnet nur die Software – aus hinterlegten Daten. */
+const NAEHRWERT = /\d+(?:[.,]\d+)?\s*(?:kcal|kalorien|kj\b|g (?:eiweiß|eiweiss|protein|fett|kohlenhydrate))|\b(kalorienarm\w*|kalorienreich\w*|proteinreich\w*|eiweißreich\w*|eiweissreich\w*|fettarm\w*|low[- ]carb|high[- ]protein)\b/i;
+/** Links und Bildquellen erfindet die KI nicht. */
+const LINK = /https?:\/\/|\bwww\.|\.(?:jpe?g|png|webp|gif)\b/i;
+/**
+ * Bestandsmengen nennt nur die Software („Du hast 3 Tomaten“ wäre eine Behauptung, die die KI nicht
+ * prüfen kann – z. B. wenn nur „Tomaten vorhanden“ bekannt ist). Zeitangaben bleiben erlaubt.
+ */
+const BESTAND = new RegExp(
+  '(?<!\\p{L})(du hast|ihr habt|hast du|habt ihr|im vorrat|im kühlschrank|im kuehlschrank|vorrätig|vorraetig|übrig|uebrig|vorhanden|noch da)(?!\\p{L})' +
+    '[^.!?]{0,40}?(?<![\\d.,])\\d+(?:[.,]\\d+)?(?![\\d.,]|\\s*(?:min|minuten|sek|sekunden|std|stunden|grad|°|%))' +
+    '|(?<![\\d.,])\\d+(?:[.,]\\d+)?\\s*(?:g|kg|ml|l|stück|stueck|portionen?|dosen?|packungen?)?\\s+[\\p{L}-]+\\s+(?:sind|ist|hast du|habt ihr)\\s+(?:noch\\s+)?(?:da|vorhanden|übrig|uebrig)(?!\\p{L})',
+  'iu',
+);
 const DIAET = /\b(vegan\w*|vegetarisch\w*|glutenfrei\w*|laktosefrei\w*|bio)\b/i;
 const HAUSGEMACHT = /\b(hausgemacht\w*|selbstgemacht\w*|selbst gemacht\w*|selbstgekocht\w*)\b/i;
 
@@ -174,6 +188,9 @@ export type Regeln = {
 
 function verboteneBehauptung(satz: string, r: Regeln): string | null {
   if (PREIS.test(satz)) return 'Preisangabe';
+  if (NAEHRWERT.test(satz)) return 'Nährwertangabe';
+  if (LINK.test(satz)) return 'Link/Bildquelle';
+  if (BESTAND.test(satz)) return 'Bestandsmenge';
   if (DIAET.test(satz)) return 'Diät-Behauptung';
   if (!r.hausgemacht_erlaubt && HAUSGEMACHT.test(satz)) return '„hausgemacht“ ohne Grundlage';
   return null;
@@ -215,7 +232,8 @@ export function bereinigeText(text: string, deckung: string, r: Regeln): Bereini
  * nennt der Name Zutaten, die nicht drin sind, ist er unbrauchbar (→ Gericht verwerfen).
  */
 export function pruefeName(name: string, deckung: string, r: Regeln): { name: string } | { fehler: string } {
-  let n = name.replace(DIAET, ' ');
+  if (LINK.test(name)) return { fehler: 'Name enthält einen Link' };
+  let n = name.replace(DIAET, ' ').replace(NAEHRWERT, ' ');
   if (!r.hausgemacht_erlaubt) n = n.replace(HAUSGEMACHT, ' ');
   n = n
     .replace(/\s*\(?\d+(?:[.,]\d+)?\s*(?:€|euro|eur|cent|ct)\)?/gi, ' ')

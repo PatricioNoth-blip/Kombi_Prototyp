@@ -7,6 +7,7 @@
 import { supabase } from './supabase';
 import type { Farbe, LagerortId } from './farben';
 import type { Art, Einheit, Gerichtstyp, Gewuerzrichtung, Herkunft } from '../supabase/functions/_shared/kombi/typen.ts';
+import type { BildQuelle, BildStatus } from '../supabase/functions/_shared/kombi/bilder.ts';
 
 export type Lagerort = LagerortId;
 export type { Art, Einheit, Gerichtstyp, Gewuerzrichtung, Herkunft };
@@ -51,6 +52,15 @@ export type Sorte = {
   kohlenhydrate_g?: number | string | null;
   fett_g?: number | string | null;
   naehrwert_menge?: number | null;
+  // ab Migration „bilder_zutaten“: eigenes Bild und semantische Zutat (leer = automatisch erkannt)
+  image_url?: string | null;
+  image_source?: BildQuelle | null;
+  image_status?: BildStatus | null;
+  image_query?: string | null;
+  image_alt?: string | null;
+  image_generated?: boolean;
+  image_updated_at?: string | null;
+  zutat?: string | null;
 };
 
 export type SorteDaten = Pick<
@@ -59,6 +69,7 @@ export type SorteDaten = Pick<
   | 'art' | 'herkunft' | 'einheit' | 'portion_menge' | 'kosten_menge' | 'zusammensetzung' | 'notiz'
   | 'gerichtstypen' | 'richtung'
   | 'kcal' | 'protein_g' | 'kohlenhydrate_g' | 'fett_g' | 'naehrwert_menge'
+  | 'image_url' | 'image_source' | 'image_status' | 'image_alt' | 'image_updated_at' | 'zutat'
 >;
 
 export type Charge = {

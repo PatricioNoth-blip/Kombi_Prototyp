@@ -1,5 +1,7 @@
 // Eine Sorte anlegen oder bearbeiten – mit schrittweise aufklappbaren Details.
 import { useState, type FormEvent } from 'react';
+import { sichereBildUrl } from '../supabase/functions/_shared/kombi/bilder.ts';
+import { erkenneZutat, KATEGORIE_NAME } from '../supabase/functions/_shared/kombi/zutaten.ts';
 import {
   fehlerText, speichereSorte, type Art, type Einheit, type Gerichtstyp, type Gewuerzrichtung, type Herkunft, type Lagerort,
   type Sorte, type SorteDaten,
@@ -44,6 +46,8 @@ type FormularProps = {
   planung?: boolean;
   /** Migration „kosten_naehrwerte“: Nährwerte speicherbar */
   naehrwerte?: boolean;
+  /** Migration „bilder_zutaten“: eigenes Bild und Zutat speicherbar */
+  bilder?: boolean;
   /** Vorbelegung für eine neue Sorte, z. B. aus einer Komponenten-Idee */
   vorlage?: Partial<SorteDaten>;
   titel?: string;
@@ -51,7 +55,7 @@ type FormularProps = {
   onSchliessen: () => void;
 };
 
-export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = false, vorlage, titel, onFertig, onSchliessen }: FormularProps) {
+export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = false, bilder = false, vorlage, titel, onFertig, onSchliessen }: FormularProps) {
   const start = { ...vorlage, ...(sorte ?? {}) } as Partial<Sorte>;
   const [name, setName] = useState(start.name ?? '');
   const [art, setArt] = useState<Art>(sorte ? artVon(sorte) : vorlage?.art ?? 'komponente');
@@ -75,6 +79,8 @@ export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = 
   const [kh, setKh] = useState(zahlText(start.kohlenhydrate_g));
   const [fett, setFett] = useState(zahlText(start.fett_g));
   const [naehrMenge, setNaehrMenge] = useState(start.naehrwert_menge ? String(start.naehrwert_menge) : '');
+  const [bildUrl, setBildUrl] = useState(start.image_source === 'eigen' ? start.image_url ?? '' : '');
+  const erkannt = erkenneZutat(name);
   const [fehler, setFehler] = useState<string | null>(null);
   const [speichert, setSpeichert] = useState(false);
 
@@ -137,6 +143,17 @@ export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = 
       const bezug = naehrMenge.trim() === '' ? null : ganzeZahl(naehrMenge, 1);
       if (naehrMenge.trim() !== '' && bezug === null) return 'Nährwerte gelten für: bitte eine ganze Zahl ab 1 eingeben.';
       Object.assign(daten, werte, { naehrwert_menge: bezug });
+    }
+    // erst ab Migration „bilder_zutaten“: eigenes Bild nur als https-Adresse (nie geraten)
+    if (bilder) {
+      const url = bildUrl.trim();
+      const vorher = start.image_source === 'eigen' ? start.image_url ?? '' : '';
+      if (url && !sichereBildUrl(url, 'eigen')) return 'Bild: bitte eine https-Adresse eines Bildes eingeben – oder leer lassen.';
+      if (url !== vorher) {
+        Object.assign(daten, url
+          ? { image_url: url, image_source: 'eigen', image_status: 'ok', image_alt: `Foto: ${n}`, image_updated_at: new Date().toISOString() }
+          : { image_url: null, image_source: null, image_status: null, image_alt: null, image_updated_at: new Date().toISOString() });
+      }
     }
     return {
       ...daten,
@@ -360,6 +377,16 @@ export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = 
               </label>
               <small>Von der Packung. Leer = unbekannt – Kombi schätzt keine Kalorien.</small>
             </fieldset>
+          )}
+          {bilder && baukasten && (
+            <label className="feld">
+              <span>Eigenes Bild (optional)</span>
+              <input type="url" inputMode="url" value={bildUrl} onChange={(e) => setBildUrl(e.target.value)} placeholder="https://…" maxLength={2000} />
+              <small>
+                {erkannt ? `Erkannt als Lebensmittel: ${erkannt.name} (${KATEGORIE_NAME[erkannt.kategorie]}). ` : ''}
+                Ohne eigenes Bild sucht Kombi ein frei lizenziertes Foto oder zeigt ein passendes Symbol.
+              </small>
+            </label>
           )}
           <div className="reihe">
             <label className="feld">

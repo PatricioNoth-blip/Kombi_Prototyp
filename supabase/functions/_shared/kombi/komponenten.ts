@@ -6,6 +6,7 @@
 // Die KI (oder der Katalog im Demo-Modus) liefert Idee, Zutaten, Mengen und Verwendungen.
 // Die Software prüft alles gegen den Vorrat, rechnet Kosten und bewertet die Nutzbarkeit –
 // die Sterne sind KEINE Zahl der KI. Gespeichert wird erst nach „Komponente übernehmen“.
+import { bildAnfrageFuerKomponente } from './bilder.ts';
 import type {
   Einheit, Farbe, Gerichtstyp, KomponentenVorschlag, KomponentenZutat, Lagerort, Nutzbarkeit, RohKomponente, Snapshot,
   SnapshotZutat,
@@ -216,6 +217,7 @@ export function pruefeKomponente(roh: RohKomponente | null | undefined, snapshot
     partner,
     typ: fehlend.length ? 'neu' : 'verwerten',
     vorteil,
+    bild: bildAnfrageFuerKomponente({ name: name.name, zutaten }, roh.image_request),
   };
 }
 

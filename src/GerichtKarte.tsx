@@ -4,6 +4,7 @@ import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { Icon } from './Icon';
 import { mengeText } from './format';
 import { Bild } from './Bild';
+import { bildKaputt, useBild } from './bildApi';
 import { MetaIcons } from './Karten';
 
 /** Zutaten in Kurzform: „Tomaten-Basis, Spaghetti“ */
@@ -27,10 +28,14 @@ export function GerichtKarte({ g, naehrwerte: n, kompakt = false }: { g: Gericht
   const komponenten = echte.filter((z) => z.art === 'komponente' || z.art === 'komplettgericht');
   const andere = echte.filter((z) => !komponenten.includes(z));
   const farbe = echte.find((z) => z.farbe)?.farbe ?? 'neutral';
+  // Hauptkarte: einmalig nach einem echten/generierten Bild fragen; sonst lokal
+  const foto = useBild(g.bild, !kompakt);
 
   return (
     <article className={`gericht f-${farbe}`}>
-      <div className="gericht-kopf" aria-hidden="true"><Bild name={g.name} emoji={g.emoji} farbe={farbe === 'neutral' ? null : farbe} art="flaeche" /></div>
+      <div className="gericht-kopf" aria-hidden="true">
+        <Bild name={g.name} emoji={g.emoji} farbe={farbe === 'neutral' ? null : farbe} art="flaeche" bild={foto} onKaputt={() => bildKaputt(g.bild?.schluessel)} />
+      </div>
       <div className="gericht-inhalt">
         <h3 className="gericht-name">{g.name}</h3>
         {g.beschreibung && <p className="gericht-text">{g.beschreibung}</p>}

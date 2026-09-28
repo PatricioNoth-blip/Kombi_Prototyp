@@ -1,6 +1,6 @@
 // Vorrat als Haushalts-Übersicht: Was ist heute wichtig, was liegt wo, wie voll ist es?
 // Reine Berechnungen aus den echten Bestandsdaten – nichts wird geschätzt.
-import type { Art, Farbe } from '../supabase/functions/_shared/kombi/typen.ts';
+import type { Art, Farbe, KomponentenVorschlag } from '../supabase/functions/_shared/kombi/typen.ts';
 import { normalisiere } from '../supabase/functions/_shared/kombi/text.ts';
 import type { Sorte } from './api';
 import { artVon, einheitVon, mengeText, portionenVon } from './format.ts';
@@ -169,4 +169,29 @@ export function freieTage(heute: string, belegt: (string | null)[], n: number): 
     if (!schon.has(tag)) tage.push(tag);
   }
   return tage;
+}
+
+/**
+ * Warum jetzt produzieren? Nur aus strukturierten Daten – nichts davon kommt von der KI:
+ *   dringend: „700 g Gehackte Tomaten – noch 2 Tage“ (Menge aus dem Rezept, Zustand aus dem Vorrat)
+ *   passend:  „Passt zu 6 Sachen im Vorrat“, „Für 5 Gerichtsarten“
+ */
+export function produktionsGruende(
+  k: Pick<KomponentenVorschlag, 'zutaten' | 'partner' | 'gerichtstypen'>, bestand: Sorte[], heute: string,
+): { dringend: string[]; passend: string[] } {
+  const dringend: string[] = [];
+  for (const z of k.zutaten) {
+    if (z.quelle !== 'bestand' || !z.dringend || z.menge === null || !z.einheit) continue;
+    const s = bestand.find((b) => b.id === z.block_typ_id);
+    const w = s ? zustand(s, heute) : null;
+    const was = `${mengeText(z.menge, z.einheit)} ${z.name}`;
+    if (w?.art === 'bald') dringend.push(`${was} – ${w.text}`);
+    else if (w?.art === 'geoeffnet') dringend.push(`${was} – angebrochen`);
+    else if (w?.art === 'aufgetaut') dringend.push(`${was} – aufgetaut, heute verbrauchen`);
+    else if (w?.art !== 'abgelaufen') dringend.push(`verwertet ${was}`); // Abgelaufenes wird nie eingeplant
+  }
+  const passend: string[] = [];
+  if (k.partner.length) passend.push(`Passt zu ${k.partner.length} ${k.partner.length === 1 ? 'Sache' : 'Sachen'} im Vorrat`);
+  if (k.gerichtstypen.length) passend.push(`Für ${k.gerichtstypen.length} Gerichtsarten`);
+  return { dringend, passend };
 }
