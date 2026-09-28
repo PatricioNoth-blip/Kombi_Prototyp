@@ -93,10 +93,14 @@ echo "ok  schema-stand.sql mit Supabase-Storage: Bucket fehlt → teilweise, vor
 # Die Skripte für den SQL-Editor müssen auch funktionieren, wenn ein Editor den Text zu einer Zeile
 # zusammenzieht und z. B. für eine Zeilenbegrenzung einwickelt (Zeilenkommentare würden dann alles verschlucken).
 for skript in scripts/schema-stand.sql scripts/daten-export.sql; do
+  # Der Supabase-SQL-Editor hängt an SELECT-Abfragen „limit 1000“ an – bei langen Texten mitten
+  # hinein (beobachtet: in Zeile 100). Unter 100 Zeilen landet es am Ende.
+  (( $(wc -l < "$skript") < 100 )) || { echo "$skript hat 100 Zeilen oder mehr" >&2; exit 1; }
   zeile="$(tr '\n' ' ' < "$skript" | sed -E 's/;[[:space:]]*$//')"
-  for variante in "$zeile" "select * from ($zeile) t limit 100"; do
+  mit_limit="$(sed -E '$ s/;[[:space:]]*$//' "$skript") limit 1000;"
+  for variante in "$zeile" "select * from ($zeile) t limit 100" "$mit_limit"; do
     [[ -n "$(psql -X -q -t -A -v ON_ERROR_STOP=1 "$URL" -c "$variante")" ]] \
       || { echo "$skript liefert als eine Zeile kein Ergebnis" >&2; exit 1; }
   done
 done
-echo "ok  schema-stand.sql und daten-export.sql funktionieren auch als eine Zeile"
+echo "ok  schema-stand.sql und daten-export.sql: unter 100 Zeilen, auch als eine Zeile und mit angehängtem limit"
