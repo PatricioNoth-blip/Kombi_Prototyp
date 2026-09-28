@@ -284,6 +284,23 @@ if (ausgaben) {
   console.log('ℹ Migration „ausgaben“ noch nicht eingespielt – „Sonstiges“ auf der Startseite ist ausgeblendet.');
 }
 
+// ───────── Schema je Migration (nur lesend – Überblick, kein Fehler, wenn etwas fehlt) ─────────
+console.log('\nSchema je Migration (nur lesend)');
+try {
+  const { schemaStand } = await import('./schema-stand.mjs');
+  const { methode, ergebnis } = await schemaStand(db, env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY);
+  for (const m of ergebnis) {
+    const zeichen = { vollständig: '●', teilweise: '◐', fehlt: '○' }[m.status];
+    console.log(`${zeichen} ${m.datei}: ${m.status}` +
+      (m.status === 'teilweise' ? ` – vorhanden: ${m.da.join(', ')} · fehlt: ${m.fehlt.join(', ')}` : '') +
+      (m.status === 'vollständig' ? ` – ${m.da.length} Objekte` : '') +
+      (m.status === 'fehlt' ? ` – keines von ${m.fehlt.length} Objekten (${m.fehlt.slice(0, 4).join(', ')}${m.fehlt.length > 4 ? ' …' : ''})` : ''));
+  }
+  console.log(`ℹ Funktionen erkannt über: ${methode}. Trigger, Constraints, Fremdschlüssel, RLS und Policies: scripts/schema-stand.sql im SQL-Editor.`);
+} catch (e) {
+  console.log(`⚠ Schema-Prüfung nicht möglich: ${e.message}`);
+}
+
 // ───────── KI: Edge Function, Anbieter, Modell, echter Probelauf ─────────
 console.log('\nKI (Edge Function „was-essen“)');
 const { ENGINE_VERSION } = await import('../supabase/functions/_shared/kombi/gesundheit.ts');
@@ -292,6 +309,13 @@ const kopf = { apikey: env.VITE_SUPABASE_KEY, authorization: `Bearer ${env.VITE_
 let health = null;
 await pruefe('Health-Check', async () => {
   const r = await fetch(FUNKTION, { headers: kopf, signal: AbortSignal.timeout(20000) });
+  // Welcher Code läuft? Der Health-Check-Stand setzt an jeder Antwort „x-kombi-version“;
+  // der ältere Stand lehnt GET mit 405 „Nur POST.“ ab und setzt keinen solchen Header.
+  const kennung = r.headers.get('x-kombi-version');
+  const koerper = await r.clone().text().catch(() => '');
+  console.log(`ℹ Function antwortet auf GET: HTTP ${r.status}, x-kombi-version: ${kennung ?? 'keine'}` +
+    (r.ok ? '' : `, Antwort: ${koerper.slice(0, 80)}`) +
+    (r.status === 405 && !kennung ? ' → deployt ist der Code-Stand OHNE Health-Check (vor Commit 2f35b48)' : ''));
   if (r.status === 404) return 'ℹ nicht deployt – die App nutzt den Demo-Modus (Vorschläge nach Kombi-Regeln, keine KI)';
   if (r.status === 405) {
     // Ältere Function ohne Health-Check: ein kleiner, echter Aufruf mit dem Probe-Haushalt zeigt trotzdem,

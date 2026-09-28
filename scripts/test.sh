@@ -67,3 +67,15 @@ for datei in supabase/migrations/*.sql; do
 done
 echo "→ Tests"
 sql -f tests/inventar_test.sql
+
+# Das Diagnose-Skript für die echte Datenbank muss nach allen Migrationen „vollständig“ melden
+# (einzige Ausnahme hier: Speicher-Bucket – die Test-Datenbank hat kein Supabase-Storage).
+echo "→ scripts/schema-stand.sql"
+abweichung="$(psql -X -q -t -A -F '|' -v ON_ERROR_STOP=1 "$URL" -f scripts/schema-stand.sql \
+  | awk -F'|' '$1 !~ /^zz_/ && $2 != "vollständig" && !($1 ~ /bilder_zutaten$/ && $4 == "bucket bilder")')"
+if [[ -n "$abweichung" ]]; then
+  echo "schema-stand.sql erkennt eingespielte Migrationen nicht als vollständig:" >&2
+  echo "$abweichung" >&2
+  exit 1
+fi
+echo "ok  schema-stand.sql erkennt alle Migrationen als vollständig"
