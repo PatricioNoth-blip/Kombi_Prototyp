@@ -411,20 +411,28 @@ if (!APP_URL) {
     const tabs = await page.locator('.tabbar button > span:last-child').allTextContents();
     if (tabs.map((t) => t.trim()).join(',') !== 'Start,Essen,Vorrat,Produktion,Einkauf') throw new Error(`Bereiche: ${tabs.join(', ')}`);
     const titel = await page.textContent('.kopf h1');
-    const abschnitte = await page.locator('main > div:not([hidden]) .start > :is(.heute-karte, .start-hinweis, .start-block, .monat-karte, .kachel-paar)')
-      .evaluateAll((els) => els.map((e) => (e.querySelector('.ueber, h2, strong') ?? e).textContent.trim()));
-    if (await page.isVisible('main > div:not([hidden]) .kacheln')) throw new Error('„Heute wichtig“-Kacheln stehen noch auf dem Start');
+    if (titel?.trim() !== 'Was möchtest du heute kochen?') throw new Error(`Überschrift „${titel}“ statt der Frage „Was möchtest du heute kochen?“`);
+    const abschnitte = await page.locator('main > div:not([hidden]) .start > *')
+      .evaluateAll((els) => els.map((e) => (e.querySelector('.held-name, h2, strong') ?? e).textContent.trim()).filter(Boolean));
+    if (await page.isVisible('main > div:not([hidden]) .kacheln')) throw new Error('„Jetzt wichtig“-Kacheln stehen auf dem Start');
     const hinweis = await page.locator('main > .hinweisbox').allTextContents();
     return `„${titel}“; Abschnitte: ${abschnitte.join(', ') || '–'}` + (hinweis.length ? `; Hinweis: ${hinweis.join(' ')}` : '');
   });
   await page.screenshot({ path: 'live-check-uebersicht.png', fullPage: true });
 
-  await pruefe('Startseite kompakt', async () => {
+  await pruefe('Startseite: Vorschlag zuerst, „Jetzt kochen“ ohne Scrollen sichtbar', async () => {
     const hoehen = await page.evaluate(() => [...document.querySelectorAll('main > div:not([hidden]) .start > *')]
       .map((e) => `${e.className.split(' ')[0] || e.tagName.toLowerCase()} ${Math.round(e.getBoundingClientRect().height)} px`));
-    const ende = await page.evaluate(() => Math.round(document.querySelector('main > div:not([hidden]) .start')?.getBoundingClientRect().bottom ?? 0));
-    if (ende > 844 * 1.6) throw new Error(`Startseite ${ende} px hoch – nicht kompakt`);
-    return `${hoehen.join(' · ')}; Ende bei ${ende} px (Bildschirm 844 px)`;
+    const erstes = await page.evaluate(() => document.querySelector('main > div:not([hidden]) .start > *')?.getAttribute('aria-label') ?? '');
+    const ersterStart = await page.isVisible('main > div:not([hidden]) .start > .leer-karte');
+    if (!/Vorschl/.test(erstes) && !ersterStart) throw new Error(`Oben steht „${erstes}“ statt der Vorschläge`);
+    const knopf = await page.evaluate(() => {
+      const k = document.querySelector('main > div:not([hidden]) .held-kochen');
+      const leiste = document.querySelector('.unten')?.getBoundingClientRect().top ?? window.innerHeight;
+      return k ? { unten: Math.round(k.getBoundingClientRect().bottom), leiste: Math.round(leiste) } : null;
+    });
+    if (knopf && knopf.unten > knopf.leiste) throw new Error(`„Jetzt kochen“ endet bei ${knopf.unten} px, die Leiste beginnt bei ${knopf.leiste} px`);
+    return `${hoehen.join(' · ')}; ${knopf ? `„Jetzt kochen“ bis ${knopf.unten} px (Leiste ab ${knopf.leiste} px)` : 'kein Vorschlag – nächster Schritt angeboten'}`;
   });
 
 
@@ -661,9 +669,9 @@ if (!APP_URL) {
     return ergebnis;
   });
 
-  await pruefe('Start: Kochansicht öffnen bucht nichts', async () => {
+  await pruefe('Start: Rezeptseite öffnen und „Kochen starten“ abbrechen bucht nichts', async () => {
     await page.click('.tabbar button:has-text("Start")');
-    const knopf = page.locator('main > div:not([hidden]) .rezept-kompakt .rk-kochen').first();
+    const knopf = page.locator('main > div:not([hidden]) .held-kochen').first();
     if (!(await knopf.count())) return 'kein Vorschlag aus dem Vorrat';
     // Schreibende Anfragen der App in diesem Zeitfenster (Bild-Cache ausgenommen – kein Bestand)
     const geschrieben = [];
@@ -672,20 +680,26 @@ if (!APP_URL) {
       if (r.method() !== 'GET' && r.method() !== 'HEAD' && pfad.includes('/rest/v1/') && !pfad.endsWith('/rest/v1/bild')) geschrieben.push(`${r.method()} ${pfad.split('/rest/v1/')[1]}`);
     };
     const vorher = await bestandsStand();
-    const name = await page.locator('main > div:not([hidden]) .rezept-kompakt h3').first().textContent();
+    const name = await page.locator('main > div:not([hidden]) .held-karte .held-name').first().textContent();
     page.on('request', mitschreiben);
     await knopf.click();
-    await page.waitForSelector('.kochen');
+    await page.waitForSelector('.rezept');
     await page.waitForTimeout(300);
-    const meta = (await page.innerText('.kochen-kopf .meta-icons')).replace(/\s+/g, ' ');
-    await page.click('.kochen [aria-label="Zurück"]');
+    const meta = (await page.innerText('.rezept-fakten')).replace(/\s+/g, ' ');
+    const schritte = await page.locator('.rezept .schritt-liste li').count();
+    // „Kochen starten“ fragt erst nach – Abbrechen darf nichts buchen
+    await page.click('.rezept-unten .knopf.haupt');
+    if (await page.isVisible('.blatt')) await page.click('.blatt .link.breit:has-text("Abbrechen")');
+    else if (await page.isVisible('.kochmodus')) await page.click('.kochmodus [aria-label="Zurück zum Rezept"]');
+    await page.waitForTimeout(300);
+    await page.click('.rezept [aria-label="Zurück"]');
     await page.waitForTimeout(300);
     page.off('request', mitschreiben);
     if (geschrieben.length) throw new Error(`App hat geschrieben: ${geschrieben.join(', ')}`);
     const aenderung = await bestandsAenderung(vorher, await bestandsStand());
     // Die App hat nichts geschrieben – eine Änderung kam von außen (z. B. jemand nutzt die App gleichzeitig).
-    if (aenderung) return `${name}: ${meta} · ℹ Bestand wurde gleichzeitig von außerhalb geändert (${aenderung}) – die App selbst hat nichts geschrieben`;
-    return `${name}: ${meta}`;
+    if (aenderung) return `${name}: ${meta} · ${schritte} Schritte · ℹ Bestand wurde gleichzeitig von außerhalb geändert (${aenderung}) – die App selbst hat nichts geschrieben`;
+    return `${name}: ${meta} · ${schritte} Schritte`;
   });
 
   await pruefe('Produktion: Empfehlungen (speichert nichts)', async () => {

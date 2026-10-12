@@ -149,7 +149,7 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, onMeldung,
 
   const k = liste.kosten;
   const summe = k.status === 'leer' ? '' : k.bekannt_cent === null ? 'Preis unbekannt'
-    : k.unbekannt > 0 ? `ab ${euroText(k.bekannt_cent)} · Preis teilweise bekannt` : `≈ ${euroText(k.bekannt_cent)}`;
+    : k.unbekannt > 0 ? `ab ${euroText(k.bekannt_cent)} · ${k.unbekannt} ohne Preis` : `≈ ${euroText(k.bekannt_cent)}`;
 
   return (
     <div className="einkauf">
@@ -169,17 +169,17 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, onMeldung,
       {offenZ.length === 0 && wagen.length === 0 && (
         <div className="leer-zustand">
           <Icon name="wagen" groesse={40} />
-          <p>Nichts einzukaufen. Was für geplante Gerichte fehlt, landet hier automatisch – verrechnet mit dem Vorrat.</p>
+          <p>Nichts einzukaufen. Was für geplante Gerichte fehlt, landet hier automatisch – schon mit dem Vorrat verrechnet. Oben kannst du selbst etwas eintragen.</p>
         </div>
       )}
 
       {gruppe('Zum Einkaufen', heute)}
       {gruppe('Für geplante Gerichte', geplant)}
-      {gruppe('Im Wagen', wagen, '„Einbuchen“ übernimmt die tatsächlich gekaufte Menge und den Preis in den Vorrat.')}
+      {gruppe('Im Wagen', wagen, '„Einbuchen“ heißt: in den Vorrat aufnehmen – mit der tatsächlich gekauften Menge und dem Preis. Abhaken allein ändert den Vorrat nicht.')}
 
       {mangel.length > 0 && (
-        <section className="abschnitt" aria-label="Wird knapp">
-          <div className="abschnitt-kopf"><h2>Wird knapp</h2></div>
+        <section className="abschnitt" aria-label="Fast leer oder aufgebraucht">
+          <div className="abschnitt-kopf"><h2>Fast leer oder aufgebraucht</h2></div>
           <ul className="liste">
             {mangel.map((m) => (
               <li key={m.sorte.id} className={`f-${m.sorte.farbe}`}>
@@ -187,7 +187,10 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, onMeldung,
                   <span className="punkt" aria-hidden="true" />
                   <span className="zeile-haupt">
                     <span className="zeile-titel">{m.sorte.name}</span>
-                    <span className="zeile-meta">{mengeText(m.menge, m.sorte.einheit)} bis zum Mindestbestand</span>
+                    <span className="zeile-meta">
+                      <strong className={m.sorte.anzahl <= 0 ? 'status-leer' : ''}>{m.sorte.anzahl <= 0 ? 'Aufgebraucht' : `Wird knapp: nur noch ${mengeText(m.sorte.anzahl, m.sorte.einheit)}`}</strong>
+                      {' · '}{mengeText(m.menge, m.sorte.einheit)} bis zum Mindestbestand
+                    </span>
                   </span>
                   <button
                     type="button"

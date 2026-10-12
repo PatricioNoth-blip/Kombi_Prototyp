@@ -1,11 +1,8 @@
 import type { Gericht } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { Naehrwerte } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
-import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { Icon } from './Icon';
-import { mengeText } from './format';
-import { Bild } from './Bild';
-import { bildKaputt, useBild } from './bildApi';
-import { MetaIcons } from './Karten';
+import { euroKurz, kcalKurz, mengeText } from './format';
+import { GerichtBild } from './GerichtBild';
 
 /** Zutaten in Kurzform: „Tomaten-Basis, Spaghetti“ */
 const namen = (zs: Gericht['zutaten']) => zs.map((z) => z.name).join(', ');
@@ -19,62 +16,57 @@ export function Verfuegbarkeit({ g }: { g: Gericht }) {
   return <p className="verfuegbar status-achtung"><Icon name="wagen" groesse={16} /> Fehlt: {text}</p>;
 }
 
+type Aktionen = {
+  /** öffnet die Rezeptseite */
+  onKochen: () => void;
+  onMerken?: () => void;
+  onEinplanen?: () => void;
+  gemerkt?: boolean;
+};
+
 /**
- * Ein Gericht: Name, ein Satz, Zeit/Kosten/kcal, woraus es besteht, was fehlt.
- * Alles Weitere (warum jetzt, Zubereitung, Kosten und Nährwerte im Detail) erst beim Aufklappen.
+ * Ein Vorschlag: Bild, Name, ein Satz, Zeit · Portionen · Preis · kcal, woraus es besteht, was fehlt –
+ * und die Hauptaktion „Jetzt kochen“ (öffnet die Rezeptseite). Das ganze Rezept mit Schritten steht
+ * auf der Rezeptseite, nicht klein in der Karte.
  */
-export function GerichtKarte({ g, naehrwerte: n, kompakt = false }: { g: Gericht; naehrwerte: Naehrwerte; kompakt?: boolean }) {
+export function GerichtKarte({ g, naehrwerte: n, kompakt = false, aktionen }: { g: Gericht; naehrwerte: Naehrwerte; kompakt?: boolean; aktionen?: Aktionen }) {
   const echte = g.zutaten.filter((z) => z.quelle !== 'grundausstattung');
   const komponenten = echte.filter((z) => z.art === 'komponente' || z.art === 'komplettgericht');
   const andere = echte.filter((z) => !komponenten.includes(z));
-  const farbe = echte.find((z) => z.farbe)?.farbe ?? 'neutral';
-  // Hauptkarte: einmalig nach einem echten/generierten Bild fragen; sonst lokal
-  const foto = useBild(g.bild, !kompakt);
 
   return (
-    <article className={`gericht f-${farbe}`}>
-      <div className="gericht-kopf" aria-hidden="true">
-        <Bild name={g.name} emoji={g.emoji} farbe={farbe === 'neutral' ? null : farbe} art="flaeche" bild={foto} onKaputt={() => bildKaputt(g.bild?.schluessel)} />
-      </div>
+    <article className={`gericht${kompakt ? ' kompakt' : ''}`}>
+      <div className="gericht-kopf"><GerichtBild g={g} groesse="karte" suchen={!kompakt} /></div>
       <div className="gericht-inhalt">
         <h3 className="gericht-name">{g.name}</h3>
         {g.beschreibung && <p className="gericht-text">{g.beschreibung}</p>}
-        <MetaIcons g={g} n={n} portionen />
+        <p className="fakten">
+          <span><Icon name="uhr" groesse={16} /> {g.zeit_min} Min</span>
+          <span><Icon name="personen" groesse={16} /> {g.portionen} {g.portionen === 1 ? 'Portion' : 'Portionen'}</span>
+          <span><Icon name="preis" groesse={16} /> {euroKurz(g.kosten)}{g.kosten.pro_portion_cent !== null ? ' / Portion' : ''}</span>
+          <span><Icon name="flamme" groesse={16} /> {kcalKurz(n)}</span>
+        </p>
         {komponenten.length > 0 && (
           <p className="gericht-zutaten"><span className="leise">Aus deinen Komponenten: </span><strong>{namen(komponenten)}</strong></p>
         )}
         {andere.length > 0 && <p className="gericht-zutaten"><span className="leise">Aus dem Vorrat: </span>{namen(andere)}</p>}
         <Verfuegbarkeit g={g} />
+        {g.rettet.length > 0 && <p className="held-grund"><Icon name="blatt" groesse={16} /> Verbraucht zuerst: {g.rettet.slice(0, 3).join(', ')}</p>}
 
-        {!kompakt && (
-          <details className="mehr-infos">
-            <summary>Details</summary>
-            {g.warum_jetzt.length > 0 && <p className="klein">{g.warum_jetzt.join(' ')}</p>}
-            {g.schritte.length > 0 && <ol className="schritte-kurz">{g.schritte.map((s, i) => <li key={i}>{s}</li>)}</ol>}
-            <div className="info-zeilen">
-              {echte.map((z) => (
-                <div key={z.id} className="info-zeile">
-                  <span>{z.name}{z.menge !== null ? ` · ${mengeText(z.menge, z.einheit)}` : ''}</span>
-                  <span>{z.kosten_cent === null ? '–' : euroText(z.kosten_cent)}</span>
-                </div>
-              ))}
-              <div className="info-zeile">
-                <span>Aus dem Vorrat gesamt</span>
-                <span>{g.kosten.gesamt_cent === null ? 'unbekannt' : `${g.kosten.status === 'teilweise' ? 'ab ' : ''}${euroText(g.kosten.gesamt_cent)}`}</span>
-              </div>
-              <div className="info-zeile">
-                <span>Kalorien gesamt</span>
-                <span>{n.kcal_gesamt === null ? 'unbekannt' : `${n.status === 'teilweise' ? 'ab ' : ''}${n.kcal_gesamt.toLocaleString('de-DE')} kcal`}</span>
-              </div>
+        {aktionen && (
+          <div className="gericht-aktionen">
+            <button type="button" className="knopf haupt" onClick={aktionen.onKochen}><Icon name="pfanne" /> Jetzt kochen</button>
+            <div className="knopf-reihe">
+              {aktionen.onMerken && (
+                <button type="button" className="knopf zweit" onClick={aktionen.onMerken} disabled={aktionen.gemerkt}>
+                  <Icon name={aktionen.gemerkt ? 'haken' : 'stern'} groesse={18} /> {aktionen.gemerkt ? 'Gemerkt' : 'Merken'}
+                </button>
+              )}
+              {aktionen.onEinplanen && (
+                <button type="button" className="knopf zweit" onClick={aktionen.onEinplanen}><Icon name="kalender" groesse={18} /> Einplanen</button>
+              )}
             </div>
-            {(g.kosten.unbekannt.length > 0 || n.unbekannt.length > 0 || g.hinweise.length > 0) && (
-              <p className="meta-text">
-                {g.kosten.unbekannt.length > 0 && `Ohne Preis: ${g.kosten.unbekannt.join(', ')}. `}
-                {n.unbekannt.length > 0 && `Ohne Nährwerte: ${n.unbekannt.join(', ')}. `}
-                {g.hinweise.join(' ')}
-              </p>
-            )}
-          </details>
+          </div>
         )}
       </div>
     </article>

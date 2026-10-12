@@ -1,32 +1,35 @@
 /* Kombi – warm, einladend, das Essen im Mittelpunkt.
-   Gestaltet nach den Entwürfen: cremefarbener Grund, weiße Karten mit weichem Schatten, echte Fotos
-   vom Essen, getönte Kacheln für den Zustand (rot = läuft ab, gelb = geöffnet, blau = aufgetaut,
-   grün = gut), Pillen-Knöpfe in Orange. Dunkel eigens abgestimmt.
+   Ein klarer Gedanke pro Bildschirm: erst der Nutzen („Was möchtest du heute kochen?“), dann die passende
+   Aktion, Details erst bei Bedarf. Warmes Papier als Grund, weiße Karten, Paprika als Akzent für die
+   Hauptaktion, Espresso für Text, Überschriften in einer Buch-Serifen (wie in einem Kochbuch).
+   Alle Textfarben erfüllen WCAG AA (≥ 4,5:1) – hell und dunkel; der Live-Check prüft das.
 
-   Aufbau: Tokens → Grundlagen → Rahmen → Bausteine → Start → Vorrat → Produktion → Essen/Kochen →
-   Einkauf → Blätter & Formulare → Bewegung */
+   Aufbau: Tokens → Grundlagen → Rahmen → Bausteine → Start → Gerichtsbild → Vorrat → Produktion →
+   Essen → Rezeptseite & Kochmodus → Einkauf → Blätter & Formulare → Bewegung */
 
 /* ───────── Tokens ───────── */
 :root {
   color-scheme: light dark;
-  --bg: #f6f1ea;
-  --flaeche: #fffcf8;
-  --flaeche-2: #f5efe7;
-  --flaeche-3: #ece5db;
-  --rand: rgb(120 90 60 / 0.07);
-  --titel: #17271e;
-  --text: #1f2620;
-  --text-2: #6b675f;
-  --text-3: #a79f94;
-  --trenn: rgb(60 45 30 / 0.09);
+  --bg: #f8f1e7;
+  --flaeche: #ffffff;
+  --flaeche-2: #f3e9dc;
+  --flaeche-3: #eadfcf;
+  --rand: rgb(90 55 30 / 0.09);
+  --titel: #2b1810;
+  --text: #2b1f18;
+  --text-2: #6b5a4f;
+  --text-3: #a8968a;
+  --trenn: rgb(70 40 20 / 0.1);
 
-  /* Hellmodus: alle Textfarben ≥ 4,5:1 (WCAG AA) auf Fläche, Grund und getönten Kacheln */
-  --akzent: #a8420f;
-  --akzent-2: #bd5424;
-  --akzent-weich: #fbe6da;
+  /* Hauptaktion: Paprika. Weiß darauf 5,8:1 */
+  --akzent: #b53d17;
+  --akzent-2: #b53d17;
+  --akzent-dunkel: #8f2f12;
+  --akzent-weich: #fbe3d3;
   --akzent-text: #ffffff;
-  --gruen: #2b6a44;
-  --gruen-weich: #e4eee1;
+  --safran: #eea52c;
+  --gruen: #2f6b3f;
+  --gruen-weich: #e2eedf;
 
   --ok: #1f7244;
   --ok-weich: #e3f1e5;
@@ -37,10 +40,9 @@
   --info: #2a5f9f;
   --info-weich: #e3ebf9;
 
-  --karte-schatten: 0 1px 2px rgb(70 45 20 / 0.04), 0 8px 28px rgb(70 45 20 / 0.07);
-  --schatten-schwebend: 0 2px 6px rgb(70 45 20 / 0.06), 0 14px 36px rgb(70 45 20 / 0.14);
-  --knopf-schatten: 0 6px 16px rgb(168 66 15 / 0.28);
-  --geld-grund: linear-gradient(100deg, #e6eddf 0%, #edf0e4 42%, rgb(237 240 228 / 0) 70%);
+  --karte-schatten: 0 1px 2px rgb(70 40 20 / 0.05), 0 10px 30px rgb(70 40 20 / 0.08);
+  --schatten-schwebend: 0 2px 6px rgb(70 40 20 / 0.08), 0 16px 40px rgb(70 40 20 / 0.16);
+  --knopf-schatten: 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 8px 20px rgb(181 61 23 / 0.3);
   --vorrat-grund: linear-gradient(100deg, #e9eee3 0%, #eef0e6 44%, rgb(238 240 230 / 0) 72%);
 
   --r-karte: 24px;
@@ -51,7 +53,11 @@
   /* seitlicher Rand – überall gleich, auch für Elemente, die bis an den Rand wischen */
   --gutter: 20px;
 
-  --t-seite: 28px;
+  /* Schrift: Überschriften in einer Buch-Serifen (iOS: New York), Text in der Systemschrift */
+  --schrift: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --schrift-titel: ui-serif, 'New York', 'Iowan Old Style', 'Charter', 'Palatino Linotype', Georgia, 'Noto Serif', serif;
+
+  --t-seite: 30px;
   --t-abschnitt: 21px;
   --t-titel: 17px;
   --t-sekundaer: 15px;
@@ -67,46 +73,47 @@
   --blau: #3d6fd8;
 
   /* warme Töne hinter Symbolen */
-  --ton-rot: #f9e1d9;
-  --ton-braun: #f1e4d6;
-  --ton-gruen: #e1eedf;
-  --ton-gelb: #f8ecce;
-  --ton-weiss: #f0ebe3;
-  --ton-schwarz: #e9e5df;
-  --ton-blau: #e0e8f7;
-  --ton-neutral: #f3ebe0;
+  --ton-rot: #f9ded4;
+  --ton-braun: #f1e2d2;
+  --ton-gruen: #dfedda;
+  --ton-gelb: #f8eac6;
+  --ton-weiss: #f1ebe2;
+  --ton-schwarz: #e9e4dd;
+  --ton-blau: #dfe7f6;
+  --ton-neutral: #f3e8da;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #13110f;
-    --flaeche: #1e1b18;
-    --flaeche-2: #27231f;
-    --flaeche-3: #322d28;
-    --rand: rgb(255 240 220 / 0.06);
-    --titel: #f3eee6;
-    --text: #efe9e0;
-    --text-2: #aba396;
-    --text-3: #71695f;
-    --trenn: rgb(255 240 220 / 0.08);
-    --akzent: #ec7b4b;
-    --akzent-2: #f39463;
-    --akzent-weich: rgb(236 123 75 / 0.16);
-    --akzent-text: #1b110b;
+    --bg: #16110e;
+    --flaeche: #211a16;
+    --flaeche-2: #2b231e;
+    --flaeche-3: #362c26;
+    --rand: rgb(255 235 215 / 0.07);
+    --titel: #f7efe6;
+    --text: #f0e6db;
+    --text-2: #bba999;
+    --text-3: #7e6e61;
+    --trenn: rgb(255 235 215 / 0.09);
+    --akzent: #f08a5d;
+    --akzent-2: #f08a5d;
+    --akzent-dunkel: #e0764a;
+    --akzent-weich: rgb(240 138 93 / 0.16);
+    --akzent-text: #1f0d05;
+    --safran: #f0b24c;
     --gruen: #86cf9f;
     --gruen-weich: rgb(134 207 159 / 0.13);
-    --ok: #62c78b;
-    --ok-weich: rgb(98 199 139 / 0.14);
+    --ok: #6fcf97;
+    --ok-weich: rgb(111 207 151 / 0.14);
     --achtung: #f0b24c;
     --achtung-weich: rgb(240 178 76 / 0.15);
-    --kritisch: #ff7e6a;
-    --kritisch-weich: rgb(255 126 106 / 0.15);
-    --info: #86b3ee;
-    --info-weich: rgb(134 179 238 / 0.15);
-    --karte-schatten: 0 1px 0 rgb(255 240 220 / 0.03) inset, 0 10px 30px rgb(0 0 0 / 0.35);
+    --kritisch: #ff8a73;
+    --kritisch-weich: rgb(255 138 115 / 0.15);
+    --info: #8db8ef;
+    --info-weich: rgb(141 184 239 / 0.15);
+    --karte-schatten: 0 1px 0 rgb(255 235 215 / 0.03) inset, 0 10px 30px rgb(0 0 0 / 0.35);
     --schatten-schwebend: 0 14px 40px rgb(0 0 0 / 0.6);
-    --knopf-schatten: 0 6px 18px rgb(0 0 0 / 0.35);
-    --geld-grund: linear-gradient(100deg, #1f2820 0%, #212920 40%, rgb(33 41 32 / 0) 72%);
+    --knopf-schatten: 0 8px 20px rgb(0 0 0 / 0.35);
     --vorrat-grund: linear-gradient(100deg, #202820 0%, #222a21 42%, rgb(34 42 33 / 0) 74%);
     --schwarz: #8a8a8a;
     --ton-rot: #3a2420;
@@ -135,6 +142,9 @@
 .ton-blau { --t-grund: var(--info-weich); --t-text: var(--info); }
 .ton-gruen { --t-grund: var(--ok-weich); --t-text: var(--ok); }
 .ton-grau { --t-grund: var(--flaeche-2); --t-text: var(--text-2); }
+/* aufgebraucht: nichts mehr da ist etwas anderes als „wird knapp“ – als Pille kräftig dunkel */
+.ton-leer { --t-grund: var(--flaeche-3); --t-text: var(--titel); }
+.pille.ton-leer { --t-grund: var(--titel); --t-text: var(--bg); }
 
 /* ───────── Grundlagen ───────── */
 * { box-sizing: border-box; }
@@ -143,7 +153,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 17px/1.45 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font: 17px/1.45 var(--schrift);
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
@@ -154,6 +164,8 @@ button { cursor: pointer; touch-action: manipulation; }
 button:disabled { cursor: default; }
 :focus-visible { outline: 3px solid color-mix(in srgb, var(--akzent) 60%, transparent); outline-offset: 2px; }
 h1, h2, h3, h4 { margin: 0; line-height: 1.2; font-weight: 700; color: var(--titel); }
+/* Überschriften wie im Kochbuch; kleine Bedien-Überschriften bleiben in der Systemschrift */
+h1, h2, .serif { font-family: var(--schrift-titel); letter-spacing: -0.012em; }
 p { margin: 0; }
 ul, ol { margin: 0; padding: 0; }
 .icon { flex: none; display: block; }
@@ -192,14 +204,15 @@ ul, ol { margin: 0; padding: 0; }
   transition: box-shadow 0.2s;
 }
 .kopf.gescrollt { box-shadow: 0 0.5px 0 var(--trenn); }
-.kopf-zeile { display: flex; align-items: center; gap: 14px; min-height: 48px; }
-.kopf-text { flex: 1; min-width: 0; }
-.kopf h1 { display: flex; align-items: center; gap: 10px; font-size: var(--t-seite); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
-.kopf h1 .icon { color: #e6a42b; }
-.kopf-unter { color: var(--text-2); font-size: var(--t-sekundaer); margin-top: 3px; }
-.kopf-icon { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--gruen-weich); color: var(--titel); }
-.kopf-aktion { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--gruen-weich); color: var(--gruen); }
+.kopf-zeile { display: flex; align-items: flex-start; gap: 12px; min-height: 48px; }
+.kopf-text { flex: 1; min-width: 0; padding-top: 2px; }
+.kopf h1 { font-size: var(--t-seite); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.kopf-ueber { margin-bottom: 4px; font-size: var(--t-meta); font-weight: 600; color: var(--text-2); }
+.kopf-unter { color: var(--text-2); font-size: var(--t-sekundaer); margin-top: 4px; }
+.kopf-aktion { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--akzent); color: var(--akzent-text); box-shadow: var(--knopf-schatten); }
 .kopf-aktion:active { transform: scale(0.95); }
+.kopf-hilfe { flex: none; display: grid; place-items: center; width: 36px; height: 36px; margin-top: 4px; border: 1px solid var(--trenn); border-radius: 50%; background: var(--flaeche); color: var(--text-2); font-family: var(--schrift-titel); font-size: 18px; font-weight: 700; }
+.kopf-hilfe:active { transform: scale(0.95); }
 
 .inhalt { padding: 4px var(--gutter) calc(var(--tabbar-h) + var(--sicher-unten) + 48px); }
 
@@ -381,10 +394,13 @@ button.zeile:active { background: var(--flaeche-2); }
 .knopf:active { transform: scale(0.98); }
 .knopf.breit { display: flex; width: 100%; }
 .knopf.haupt, .knopf.pillen-knopf {
-  background: linear-gradient(180deg, var(--akzent-2), var(--akzent));
+  background: var(--akzent);
   color: var(--akzent-text);
+  font-weight: 700;
   box-shadow: var(--knopf-schatten);
 }
+.knopf.haupt:active, .knopf.pillen-knopf:active { background: var(--akzent-dunkel); }
+.knopf.zweit { background: var(--flaeche); color: var(--text); border: 1px solid var(--trenn); box-shadow: none; }
 .knopf.haupt { display: flex; width: 100%; min-height: 54px; font-size: var(--t-titel); }
 .knopf.pillen-knopf { min-height: 50px; padding: 0 22px; font-size: var(--t-titel); }
 .knopf.gross-schrift { text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--t-sekundaer); font-weight: 700; }
@@ -459,79 +475,114 @@ span.chip { cursor: default; }
 .kachel .bild-rund.bild-symbol { font-size: 26px; }
 
 /* ───────── Start ───────── */
-/* kompakt: viele Informationen auf wenig Raum – Heute, Hinweis, Was essen wir?, Monat, zwei Kacheln */
-.ansicht-start .kopf { padding-bottom: 8px; }
-.ansicht-start .kopf-zeile { min-height: 40px; }
-.ansicht-start .kopf h1 { font-size: 22px; font-weight: 750; gap: 8px; }
-.ansicht-start .kopf h1 .icon { width: 22px; height: 22px; }
-.ansicht-start .kopf-unter { font-size: var(--t-meta); margin-top: 1px; }
-.start { display: grid; gap: 12px; margin-top: 4px; }
-.start .box { margin-top: 0; }
+/* Eine Frage (Überschrift), ein großer Vorschlag, zwei Alternativen, darunter ruhig der Überblick. */
+.ansicht-start .kopf h1 { font-size: clamp(28px, 8vw, 34px); line-height: 1.08; max-width: 15ch; }
+.start { display: grid; gap: 28px; margin-top: 6px; }
+.start-block { display: grid; gap: 12px; min-width: 0; }
+.start-kopf { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 2px; margin-top: 6px; }
+.start-kopf h2 { font-size: 20px; }
+.start-ueber { font-size: 20px; padding: 0 2px; }
 .ueber { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
 
-.heute-karte, .monat-karte, .mini-kachel, .rezept-kompakt {
-  border: 1px solid var(--rand); border-radius: var(--r); background: var(--flaeche); box-shadow: var(--karte-schatten);
+.held-karte { overflow: hidden; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
+.held-bild { position: relative; height: clamp(150px, 44vw, 210px); }
+.held-text { display: grid; gap: 10px; padding: 18px 18px 20px; }
+.held-ueber { font-size: var(--t-meta); font-weight: 700; color: var(--akzent); letter-spacing: 0.01em; }
+.held-name { font-size: 27px; line-height: 1.12; overflow-wrap: break-word; hyphens: auto; }
+.held-satz { color: var(--text-2); font-size: var(--t-sekundaer); line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
+.held-grund { display: flex; align-items: flex-start; gap: 6px; font-size: var(--t-meta); color: var(--gruen); font-weight: 600; }
+.held-grund .icon { margin-top: 1px; }
+.held-kochen { margin-top: 4px; }
+.held-karte.laedt .teller-platte { animation: pulsieren 1.6s ease-in-out infinite; }
+
+/* Zeit · Portionen · Verfügbarkeit */
+.fakten { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--t-sekundaer); font-weight: 600; color: var(--text); }
+.fakten > span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.fakten .icon { color: var(--text-2); }
+.fakten .status-ok, .fakten .status-ok .icon { color: var(--ok); }
+.fakten .status-achtung, .fakten .status-achtung .icon { color: var(--achtung); }
+
+.ideen-liste { list-style: none; display: grid; gap: 10px; }
+.idee-zeile { display: flex; align-items: center; gap: 14px; width: 100%; padding: 10px 14px 10px 10px; border: 1px solid var(--rand); border-radius: var(--r); background: var(--flaeche); box-shadow: var(--karte-schatten); text-align: left; }
+.idee-zeile:active { transform: scale(0.99); }
+.idee-bild { flex: none; width: 64px; height: 64px; border-radius: 16px; overflow: hidden; }
+.idee-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.idee-text strong { font-family: var(--schrift-titel); font-size: 18px; font-weight: 700; line-height: 1.2; color: var(--titel); overflow-wrap: break-word; hyphens: auto; }
+.idee-text small { font-size: var(--t-meta); color: var(--text-2); }
+.idee-aktion { flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: var(--t-meta); font-weight: 700; color: var(--akzent); }
+
+.leer-karte { display: grid; gap: 12px; padding: 22px 20px; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
+.leer-karte h2 { font-size: 23px; line-height: 1.15; }
+.leer-karte > p { color: var(--text-2); font-size: var(--t-sekundaer); }
+.leer-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: var(--akzent-weich); color: var(--akzent); }
+
+.willkommen { display: grid; gap: 14px; padding: 20px; border-radius: var(--r-karte); background: var(--gruen-weich); }
+.willkommen h2 { font-size: 21px; }
+.willkommen .knopf-reihe { margin-top: 0; flex-wrap: nowrap; }
+.willkommen .knopf-reihe .knopf { flex: 1 1 0; padding: 0 12px; }
+.willkommen .knopf.weich { background: var(--gruen); color: var(--bg); }
+.so-gehts { list-style: none; display: grid; gap: 12px; }
+.so-gehts li { display: flex; gap: 12px; align-items: flex-start; }
+.so-gehts li > span:last-child { display: grid; gap: 1px; }
+.so-gehts strong { font-size: var(--t-sekundaer); color: var(--titel); }
+.so-gehts small { font-size: var(--t-meta); color: var(--text-2); line-height: 1.4; }
+.so-nr { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: var(--flaeche); color: var(--gruen); }
+.blatt .so-gehts { padding: 16px; border-radius: var(--r); background: var(--flaeche); }
+.blatt .so-nr, .leer-karte .so-nr { background: var(--gruen-weich); }
+
+.ueberblick .liste .zeile { min-height: 64px; }
+.zeile-zusatz { font-weight: 400; color: var(--text-2); font-size: var(--t-meta); }
+.icon-kachel.ton-gruen, .icon-kachel.ton-blau, .icon-kachel.ton-gelb, .icon-kachel.ton-rot, .icon-kachel.ton-grau { background: var(--t-grund); color: var(--t-text); }
+
+.begriffe { display: grid; gap: 0; margin: 0; border-radius: var(--r); background: var(--flaeche); overflow: hidden; }
+.begriffe > div { padding: 12px 16px; }
+.begriffe > div + div { border-top: 0.5px solid var(--trenn); }
+.begriffe dt { font-weight: 700; font-size: var(--t-sekundaer); color: var(--titel); }
+.begriffe dd { margin: 2px 0 0; font-size: var(--t-sekundaer); color: var(--text-2); line-height: 1.45; }
+
+/* ───────── Gerichtsbild: Teller von oben ───────── */
+/* Gezeichnet statt erfunden: das Gericht auf dem Teller, drumherum seine echten Zutaten. */
+.teller {
+  --ta: #f6e3cf; --tb: #ecd0b2;
+  position: relative; display: block; width: 100%; height: 100%; overflow: hidden; border-radius: inherit;
+  container-type: size;
+  background:
+    radial-gradient(circle at 50% 50%, rgb(255 255 255 / 0.45) 0, rgb(255 255 255 / 0) 62%),
+    linear-gradient(135deg, var(--ta), var(--tb));
 }
-.heute-karte { display: grid; gap: 8px; width: 100%; padding: 12px 16px; text-align: left; }
-.heute-zahlen { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; min-width: 0; }
-.heute-zahl { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; align-items: center; min-width: 0; }
-.heute-zahl.rechts { flex: none; grid-template-columns: minmax(0, 1fr); text-align: right; }
-.heute-emoji { grid-row: span 2; font-size: 26px; line-height: 1; }
-.heute-zahl strong { font-size: clamp(18px, 5.4vw, 22px); font-weight: 800; letter-spacing: -0.02em; color: var(--titel); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.heute-zahl small { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.heute-leer { font-size: var(--t-meta); color: var(--text-2); }
-.ziel-balken { display: block; height: 6px; border-radius: 3px; background: var(--flaeche-3); overflow: hidden; }
-.ziel-balken > span { display: block; height: 100%; border-radius: 3px; background: var(--ok); transition: width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.ziel-balken > span.drueber { background: var(--achtung); }
-.mahlzeit-arten { display: flex; gap: 6px; flex-wrap: wrap; }
-.mahlzeit-arten span { padding: 2px 9px; border-radius: 10px; background: var(--flaeche-2); color: var(--text-2); font-size: 12px; font-weight: 600; }
-.mahlzeit-arten span.an { background: var(--ok-weich); color: var(--ok); }
-
-.start-hinweis { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--kritisch-weich); color: var(--kritisch); font-size: var(--t-meta); font-weight: 600; text-align: left; }
-.start-hinweis .icon { margin-left: auto; }
-.hinweis-punkt { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--kritisch); }
-
-.start-block { display: grid; gap: 6px; min-width: 0; }
-.start-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px; }
-.start-kopf h2 { font-size: 13px; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-2); }
-.start .punkte { margin-top: 2px; }
-
-.rezept-kompakt { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; padding: 10px; }
-.rezept-kompakt.leer { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px 16px; }
-.rezept-kompakt.leer .knopf { justify-self: start; }
-.rk-bild .bild { width: 84px; height: 84px; border-radius: 14px; }
-.rk-bild .bild-symbol { font-size: 40px; }
-.rk-text { min-width: 0; display: grid; gap: 3px; align-content: start; }
-.rk-ueber { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--akzent); }
-.rk-text h3 { font-size: 17px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-.rk-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12.5px; color: var(--text-2); }
-.rk-meta > span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
-.rk-meta .flamme { color: var(--akzent); }
-.rk-unten { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; min-width: 0; }
-.rk-da { min-width: 0; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.knopf.rk-kochen { flex: none; min-height: 36px; padding: 0 16px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-
-.monat-karte { display: grid; gap: 8px; width: 100%; padding: 12px 16px; text-align: left; }
-.monat-kopf { display: flex; align-items: center; gap: 8px; }
-.monat-kopf .zeile-pfeil { margin-left: auto; }
-.trend-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 9px; background: var(--flaeche-2); font-size: 12px; font-weight: 700; }
-.trend-chip.runter { color: var(--ok); }
-.trend-chip.hoch { color: var(--kritisch); }
-.monat-zahlen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.monat-zahlen > span { display: grid; gap: 1px; min-width: 0; padding: 0 10px; }
-.monat-zahlen > span:first-child { padding-left: 0; }
-.monat-zahlen > span + span { border-left: 1px solid var(--trenn); }
-.monat-zahlen strong { font-size: 17px; font-weight: 750; color: var(--titel); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.monat-zahlen small { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.monat-fuss { font-size: 12px; color: var(--text-2); }
-
-.kachel-paar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.mini-kachel { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 60px; padding: 10px 12px; text-align: left; }
-.mini-icon { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--t-grund); color: var(--t-text); }
-.mini-text { min-width: 0; display: grid; gap: 1px; }
-.mini-text strong { font-size: 15px; font-weight: 700; color: var(--titel); }
-.mini-text small { font-size: 12px; line-height: 1.25; color: var(--text-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-.heute-karte:active, .monat-karte:active, .mini-kachel:active, .start-hinweis:active { transform: scale(0.99); }
+.teller::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgb(255 255 255 / 0.28) 1px, transparent 1.6px); background-size: 13px 13px; }
+.teller-rot { --ta: #f8d9c9; --tb: #eeb398; }
+.teller-braun { --ta: #f1e0cb; --tb: #e2c19c; }
+.teller-gruen { --ta: #e2eed6; --tb: #c3dbb0; }
+.teller-gelb { --ta: #faeac0; --tb: #f1cf82; }
+.teller-blau { --ta: #e3e9f4; --tb: #c9d5ea; }
+.teller-platte {
+  position: absolute; left: 50%; top: 50%; width: min(76cqh, 76cqw); aspect-ratio: 1; transform: translate(-50%, -50%);
+  display: grid; place-items: center; border-radius: 50%;
+  background: radial-gradient(circle, #fffdf9 0 55%, #efe6da 56% 59%, #fffaf3 60% 69%, #e6dacb 70% 71%, #fffcf7 72%);
+  box-shadow: 0 1.6cqh 4.5cqh rgb(80 40 10 / 0.26), 0 0.4cqh 1cqh rgb(80 40 10 / 0.12);
+}
+.teller-gericht { font-size: min(36cqh, 36cqw); line-height: 1; filter: drop-shadow(0 1.2cqh 1.4cqh rgb(60 30 10 / 0.28)); }
+.teller-deko { position: absolute; font-size: min(22cqh, 19cqw); line-height: 1; filter: drop-shadow(0 1cqh 1.2cqh rgb(60 30 10 / 0.22)); }
+.teller-deko.d1 { left: 5%; top: 7%; transform: rotate(-16deg); }
+.teller-deko.d2 { right: 6%; top: 9%; transform: rotate(14deg); }
+.teller-deko.d3 { left: 9%; bottom: 6%; transform: rotate(9deg); }
+.teller-deko.d4 { right: 9%; bottom: 7%; transform: rotate(-11deg); }
+.teller-klein .teller-platte { width: 84cqh; }
+.teller-klein .teller-gericht { font-size: 44cqh; }
+.teller-klein::before { background-size: 8px 8px; }
+.gericht-foto { position: relative; display: block; width: 100%; height: 100%; border-radius: inherit; overflow: hidden; }
+.gericht-foto > .bild { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; }
+@media (prefers-color-scheme: dark) {
+  .teller { --ta: #3a2a1f; --tb: #2a1e16; }
+  .teller-rot { --ta: #4a2a20; --tb: #331b14; }
+  .teller-braun { --ta: #3f2e20; --tb: #2b1f15; }
+  .teller-gruen { --ta: #26382a; --tb: #1a281d; }
+  .teller-gelb { --ta: #45371a; --tb: #2f2511; }
+  .teller-blau { --ta: #263247; --tb: #1a2232; }
+  .teller::before { background-image: radial-gradient(rgb(255 255 255 / 0.06) 1px, transparent 1.6px); }
+  .teller-platte { background: radial-gradient(circle, #ede4d8 0 55%, #d6cabb 56% 59%, #e8dfd3 60% 69%, #c9bba9 70% 71%, #e6ddd1 72%); box-shadow: 0 1.6cqh 4.5cqh rgb(0 0 0 / 0.5); }
+}
 
 /* KI-Status (Essen → Ändern) */
 .option-zeile.ki-status { align-items: flex-start; padding: 12px 0; }
@@ -542,8 +593,6 @@ span.chip { cursor: default; }
 /* Nachweis eines gefundenen oder generierten Fotos */
 .bild-nachweis { position: absolute; right: 8px; bottom: 8px; max-width: calc(100% - 16px); padding: 2px 8px; border-radius: 8px; background: rgb(0 0 0 / 0.5); color: #fff; font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bild-nachweis a { color: inherit; text-decoration: none; }
-.geld-titel { font-size: var(--t-titel); font-weight: 650; color: var(--titel); }
-.geld-zahl { font-size: 36px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; color: var(--titel); font-variant-numeric: tabular-nums; }
 
 /* Gericht mit Foto links (Start, Produktion) */
 .foto-karte { display: grid; grid-template-columns: minmax(112px, 40%) minmax(0, 1fr); overflow: hidden; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
@@ -579,21 +628,13 @@ span.chip { cursor: default; }
 .vorrat-held::before { content: ''; position: absolute; inset: 0; background: var(--vorrat-grund); }
 .vorrat-held > * { position: relative; }
 .vorrat-held > img { position: absolute; }
-.vorrat-held-kopf { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 22px; max-width: 70%; }
-.vorrat-held-kopf .geld-zahl { font-size: 28px; }
-.fuellung strong.status-achtung { color: var(--achtung); }
-.fuellung { display: flex; gap: 8px; align-items: flex-start; }
-.fuellung .icon { color: var(--gruen); margin-top: 2px; }
-.fuellung strong { display: block; font-size: var(--t-sekundaer); font-weight: 650; color: var(--gruen); }
-.fuellung small { font-size: 12px; color: var(--text-2); }
-.vorrat-held .teilbalken { width: 62%; margin: 10px 0 12px; }
-.vorrat-zahlen { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
-.vorrat-zahl { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 6px; row-gap: 2px; min-width: 0; padding: 0 5px; border: 0; background: none; text-align: left; }
-.vorrat-zahl:first-child { padding-left: 0; }
-.vorrat-zahl + .vorrat-zahl { border-left: 1px solid var(--trenn); padding-left: 8px; }
-.vorrat-zahl .icon-rund { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: color-mix(in srgb, var(--flaeche) 80%, transparent); }
-.vorrat-zahl strong { font-size: 19px; font-weight: 750; color: var(--titel); line-height: 1.1; }
-.vorrat-zahl small { grid-column: 1 / -1; font-size: 11px; color: var(--text-2); white-space: nowrap; }
+.vorrat-held-kopf { display: grid; gap: 4px; max-width: 62%; }
+.vorrat-held-kopf .geld-zahl { font-size: 30px; }
+.geld-titel { font-size: var(--t-sekundaer); font-weight: 650; color: var(--text-2); }
+.geld-zahl { font-family: var(--schrift-titel); font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; color: var(--titel); font-variant-numeric: tabular-nums; }
+.vorrat-lage { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: var(--t-sekundaer); font-weight: 650; }
+.vorrat-lage .icon { margin-top: 2px; }
+.status-leer { color: var(--titel); font-weight: 650; }
 .farbe-frisch { color: var(--ok); }
 .farbe-tk { color: var(--info); }
 .farbe-vorrat { color: var(--achtung); }
@@ -613,7 +654,6 @@ span.chip { cursor: default; }
 
 .bild-zeile .zeile { gap: 12px; padding: 9px 12px; }
 .bild-zeile .bild-rund { width: 44px; height: 44px; }
-.vorrat-zahl { cursor: pointer; }
 .ort-meta > span { white-space: nowrap; }
 .ort-meta .icon { display: inline-block; vertical-align: -2px; margin: 0 1px 0 2px; }
 
@@ -686,18 +726,26 @@ span.chip { cursor: default; }
 .segment button.gewaehlt { background: var(--flaeche); font-weight: 650; box-shadow: 0 1px 4px rgb(60 40 20 / 0.12); }
 .segment.klein button { min-height: 32px; font-size: var(--t-meta); }
 
+.essen-start { display: grid; gap: 14px; padding: 20px; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
+.essen-start h2 { font-size: 24px; }
+.essen-start textarea { background: var(--bg); }
 .einstellungen { display: flex; align-items: center; gap: 8px; }
 .einstellungen .meta { flex: 1; }
+.mini-teller { flex: none; width: 56px; height: 56px; border-radius: 15px; overflow: hidden; }
 
 .gericht { overflow: hidden; border-radius: var(--r-karte); background: var(--flaeche); border: 1px solid var(--rand); box-shadow: var(--karte-schatten); }
-.gericht-kopf { position: relative; display: grid; place-items: center; height: 168px; background: var(--ton, var(--ton-neutral)); font-size: 64px; line-height: 1; }
-.gericht-kopf > .bild { position: absolute; inset: 0; border-radius: 0; }
-.gericht-inhalt { display: grid; gap: 12px; padding: 18px 18px 16px; }
-.gericht-name { font-size: 23px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.15; color: var(--titel); }
+.gericht-kopf { position: relative; height: clamp(170px, 48vw, 210px); }
+.gericht.kompakt .gericht-kopf { height: 130px; }
+.gericht-inhalt { display: grid; gap: 12px; padding: 18px 18px 18px; }
+.gericht-name { font-family: var(--schrift-titel); font-size: 26px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.12; color: var(--titel); }
 .gericht-text { color: var(--text-2); font-size: var(--t-sekundaer); line-height: 1.45; }
 .gericht-zutaten, .gericht-fehlt { font-size: var(--t-sekundaer); }
 .gericht-zutaten strong { font-weight: 650; }
 .gericht-fehlt { color: var(--text-2); }
+.gericht .fakten { font-size: 14px; gap: 6px 14px; }
+.gericht-aktionen { display: grid; gap: 10px; margin-top: 4px; }
+.gericht-aktionen .knopf-reihe { margin-top: 0; flex-wrap: nowrap; }
+.gericht-aktionen .knopf-reihe .knopf { flex: 1 1 0; }
 details.mehr-infos { border-top: 0.5px solid var(--trenn); padding-top: 4px; }
 details.mehr-infos > summary { display: flex; align-items: center; justify-content: space-between; min-height: 42px; list-style: none; color: var(--akzent); font-weight: 600; font-size: var(--t-sekundaer); cursor: pointer; }
 details.mehr-infos > summary::-webkit-details-marker { display: none; }
@@ -710,39 +758,24 @@ details.mehr-infos[open] { display: grid; gap: 12px; padding-bottom: 6px; }
 .info-zeile span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .schritte-kurz { padding-left: 20px; display: grid; gap: 6px; font-size: var(--t-sekundaer); }
 
-.entscheidung {
-  position: fixed;
-  z-index: 26;
-  left: 50%;
-  bottom: calc(var(--tabbar-h) + var(--sicher-unten) + 20px);
-  transform: translateX(-50%);
-  display: flex;
-  gap: 4px;
-  width: min(380px, calc(100% - 24px));
-  padding: 8px 8px 6px;
-  border-radius: 28px;
-  background: color-mix(in srgb, var(--flaeche) 94%, transparent);
-  -webkit-backdrop-filter: saturate(160%) blur(20px);
-  backdrop-filter: saturate(160%) blur(20px);
-  box-shadow: var(--schatten-schwebend);
-  animation: hochgleiten 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
-  --tx: -50%;
-}
-.entscheidung button { flex: 1; display: grid; justify-items: center; gap: 4px; border: 0; background: none; font-size: 11px; font-weight: 600; color: var(--text-2); }
-.kreis { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--flaeche-2); color: var(--text); transition: transform 0.15s; }
-.entscheidung button:active .kreis { transform: scale(0.92); }
-.e-dislike .kreis { color: var(--kritisch); }
-.e-like .kreis, .entscheidung .haupt .kreis { background: linear-gradient(180deg, var(--akzent-2), var(--akzent)); color: var(--akzent-text); }
-.e-like, .entscheidung .haupt { color: var(--akzent) !important; }
-.ansicht-essen .inhalt { padding-bottom: calc(var(--tabbar-h) + var(--sicher-unten) + 140px); }
-.ansicht-essen .meldung-bereich { bottom: calc(var(--tabbar-h) + var(--sicher-unten) + 112px); }
+/* „Passt nicht?“ – ruhig unter der Karte statt schwebend über dem Inhalt */
+.entscheidung { display: grid; gap: 8px; }
+.entscheidung-titel { font-size: var(--t-meta); font-weight: 650; color: var(--text-2); padding: 0 2px; }
+.entscheidung-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+.entscheidung-knoepfe button { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--trenn); border-radius: 999px; background: var(--flaeche); color: var(--text); font-size: var(--t-sekundaer); font-weight: 600; }
+.entscheidung-knoepfe button .icon { color: var(--text-2); }
+.entscheidung-knoepfe .e-dislike, .entscheidung-knoepfe .e-dislike .icon { color: var(--kritisch); }
+.entscheidung-knoepfe button:active { transform: scale(0.97); }
 
 .karten-buehne { animation: auftauchen 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .karten-buehne.abgang-links { transform: translateX(-110%) rotate(-5deg); opacity: 0; transition: transform 0.22s ease-in, opacity 0.22s ease-in; }
 .karten-buehne.abgang-rechts { transform: translateX(110%) rotate(5deg); opacity: 0; transition: transform 0.22s ease-in, opacity 0.22s ease-in; }
 .karten-buehne.abgang-oben { transform: translateY(-24px); opacity: 0; transition: transform 0.22s ease-in, opacity 0.22s ease-in; }
 .karten-buehne.abgang-klein { transform: scale(0.95); opacity: 0; transition: transform 0.22s ease-in, opacity 0.22s ease-in; }
-.gericht.laedt .gericht-kopf { animation: pulsieren 1.6s ease-in-out infinite; }
+.gericht.laedt .teller-platte { animation: pulsieren 1.6s ease-in-out infinite; }
+.kreis { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--flaeche-2); color: var(--text); }
+.vorschlag { display: grid; gap: 10px; }
+.vorschlag-titel h3 { font-family: var(--schrift-titel); font-size: 22px; }
 
 .optionen { display: grid; }
 .option-zeile { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; }
@@ -769,59 +802,70 @@ details.mehr-infos[open] { display: grid; gap: 12px; padding-bottom: 6px; }
 .schalter input[role='switch']:checked { background: var(--ok); }
 .schalter input[role='switch']:checked::after { transform: translateX(20px); }
 
-/* ───────── Heute kochen ───────── */
-.kochen { position: fixed; inset: 0; z-index: 45; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); animation: hochfahren 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.kochen-leiste {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  max-width: 560px;
-  margin: 0 auto;
-  padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 8px;
-  background: var(--bg);
-  font-size: var(--t-sekundaer);
-  font-weight: 600;
-  color: var(--text-2);
+/* ───────── Rezeptseite & Kochmodus ───────── */
+/* Eine eigene Seite: groß, ruhig, gut lesbar – auch mit Mehl an den Fingern. */
+.rezept { position: fixed; inset: 0; z-index: 45; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); animation: hochfahren 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.rezept-leiste {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; max-width: 560px; margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 6px; background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
 }
-.kochen-leiste .platz { width: 42px; }
-.kochen-inhalt { max-width: 560px; margin: 0 auto; padding: 8px 20px calc(120px + var(--sicher-unten)); }
-.kochen-foto { position: relative; height: 220px; margin: 0 0 18px; border-radius: var(--r-karte); overflow: hidden; box-shadow: var(--karte-schatten); }
-.kochen-foto .bild { width: 100%; height: 100%; border-radius: 0; }
-.kochen-kopf { display: grid; gap: 12px; }
-.kochen-kopf h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.12; }
-.kochen-kopf .meta { font-size: var(--t-titel); }
-.kochen-hinweis { display: flex; gap: 8px; align-items: flex-start; font-size: var(--t-sekundaer); color: var(--text-2); }
-.kochen-hinweis .icon { margin-top: 3px; }
-.kochen .abschnitt { margin-top: 28px; }
+.rezept-leiste .zurueck-knopf { margin: 0; font-weight: 600; }
+.rezept-inhalt { max-width: 560px; margin: 0 auto; padding: 4px var(--gutter) calc(150px + var(--sicher-unten)); }
+.rezept-bild { position: relative; height: clamp(180px, 52vw, 250px); border-radius: var(--r-karte); overflow: hidden; box-shadow: var(--karte-schatten); }
+.rezept-kopf { display: grid; gap: 12px; margin-top: 20px; }
+.rezept-kopf h1 { font-size: clamp(30px, 8.4vw, 36px); line-height: 1.08; letter-spacing: -0.02em; overflow-wrap: break-word; hyphens: auto; }
+.rezept-satz { font-size: var(--t-titel); line-height: 1.5; color: var(--text-2); }
+.rezept-fakten { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 0; }
+.rezept-fakten > div { display: grid; gap: 3px; padding: 12px 12px 11px; border-radius: var(--r); background: var(--flaeche); border: 1px solid var(--rand); }
+.rezept-fakten dt { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.rezept-fakten dd { margin: 0; display: flex; align-items: center; gap: 5px; font-size: 16px; font-weight: 700; color: var(--titel); white-space: nowrap; }
+.rezept-fakten dd .icon { color: var(--text-2); }
+.rezept-fakten .status-ok dd, .rezept-fakten .status-ok dd .icon { color: var(--ok); }
+.rezept-fakten .status-achtung dd, .rezept-fakten .status-achtung dd .icon { color: var(--achtung); }
+.rezept-hinweis { display: flex; gap: 8px; align-items: flex-start; font-size: var(--t-sekundaer); color: var(--text-2); }
+.rezept-hinweis .icon { margin-top: 3px; color: var(--gruen); }
+.rezept-abschnitt { margin-top: 32px; }
+.rezept-abschnitt .abschnitt-kopf h2 { font-size: 24px; }
+.abschnitt-zusatz { font-size: var(--t-sekundaer); color: var(--text-2); }
+.zutaten-liste .zeile { min-height: 56px; }
+.zutaten-liste .zeile-titel { font-weight: 600; }
+.zutaten-liste .fehlt .punkt { background: transparent; box-shadow: inset 0 0 0 1.5px var(--achtung); }
 .menge-rechts { flex: none; font-size: var(--t-titel); font-weight: 650; font-variant-numeric: tabular-nums; }
 .posten-menge { min-width: 88px; text-align: center; font-size: var(--t-sekundaer); }
-.schritte { list-style: none; display: grid; gap: 8px; }
-.schritte button { display: flex; gap: 14px; align-items: flex-start; width: 100%; padding: 16px; border: 1px solid var(--rand); border-radius: var(--r); background: var(--flaeche); box-shadow: var(--karte-schatten); text-align: left; font-size: var(--t-titel); line-height: 1.5; }
-.kochmodus .schritte button { font-size: 19px; padding: 18px; }
-.schritt-nr { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--akzent-weich); color: var(--akzent); font-weight: 700; font-size: var(--t-meta); }
-.schritte .erledigt button { color: var(--text-2); }
-.schritte .erledigt button > span:last-child { text-decoration: line-through; text-decoration-color: var(--text-3); }
-.schritte .erledigt .schritt-nr { background: var(--ok); color: #fff; }
+.schritt-liste { list-style: none; display: grid; gap: 10px; }
+.schritt-liste li { display: flex; gap: 14px; align-items: flex-start; padding: 16px; border-radius: var(--r); background: var(--flaeche); border: 1px solid var(--rand); }
+.schritt-liste p { font-size: 18px; line-height: 1.5; }
+.schritt-nr { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--akzent-weich); color: var(--akzent); font-weight: 800; font-size: var(--t-sekundaer); }
+.rezept-unten {
+  position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 3; width: min(560px, 100%);
+  display: grid; gap: 6px; padding: 16px var(--gutter) calc(14px + var(--sicher-unten));
+  background: linear-gradient(to top, var(--bg) 72%, color-mix(in srgb, var(--bg) 0%, transparent));
+}
+.rezept-unten .knopf.haupt { min-height: 58px; font-size: 18px; }
+.rezept-unten-text { text-align: center; font-size: var(--t-meta); color: var(--text-2); }
 .erfolg { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--r); background: var(--ok-weich); }
 .erfolg > .icon { color: var(--ok); }
 .erfolg > span { flex: 1; display: grid; gap: 1px; font-size: var(--t-sekundaer); }
 .erfolg small { color: var(--text-2); }
-.kochen-unten {
-  position: fixed;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
-  z-index: 3;
-  width: min(560px, 100%);
-  display: grid;
-  gap: 6px;
-  padding: 14px 20px calc(14px + var(--sicher-unten));
-  background: linear-gradient(to top, var(--bg) 70%, transparent);
-}
-.kochen-unten .knopf.haupt { min-height: 58px; font-size: 18px; }
+
+/* Kochmodus: ein Schritt pro Bildschirm */
+.kochmodus { position: fixed; inset: 0; z-index: 48; display: flex; flex-direction: column; background: var(--bg); animation: einblenden 0.2s ease-out; }
+.km-leiste { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 560px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 10px) var(--gutter) 10px; }
+.km-titel { flex: 1; min-width: 0; font-family: var(--schrift-titel); font-weight: 700; font-size: var(--t-titel); color: var(--titel); overflow-wrap: anywhere; line-height: 1.2; }
+.km-fortschritt { display: flex; gap: 4px; width: 100%; max-width: 560px; margin: 0 auto; padding: 0 var(--gutter); }
+.km-fortschritt span { flex: 1; height: 5px; border-radius: 3px; background: var(--flaeche-3); transition: background 0.2s; }
+.km-fortschritt span.an { background: var(--akzent); }
+.km-inhalt { flex: 1; overflow-y: auto; width: 100%; max-width: 560px; margin: 0 auto; padding: 24px var(--gutter); display: flex; flex-direction: column; gap: 16px; }
+.km-nummer { font-size: var(--t-sekundaer); font-weight: 700; color: var(--akzent); }
+.km-text { font-size: clamp(24px, 6.6vw, 30px); line-height: 1.4; font-weight: 500; color: var(--titel); overflow-wrap: break-word; hyphens: auto; }
+.km-unten { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; width: 100%; max-width: 560px; margin: 0 auto; padding: 12px var(--gutter) calc(16px + var(--sicher-unten)); }
+.km-unten .knopf { min-height: 60px; font-size: 18px; }
+.km-fertig { flex: 1; overflow-y: auto; width: 100%; max-width: 560px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 48px) var(--gutter) 16px; display: grid; align-content: start; justify-items: center; gap: 12px; text-align: center; }
+.km-fertig h2 { font-size: 34px; }
+.km-fertig .abschnitt { width: 100%; text-align: left; margin-top: 8px; }
+.km-fertig-icon { display: grid; place-items: center; width: 76px; height: 76px; border-radius: 50%; background: var(--ok); color: #fff; }
+.km-rueck { margin: -8px auto calc(8px + var(--sicher-unten)); max-width: 560px; }
 
 /* ───────── Einkauf ───────── */
 .einkauf-kopf { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 4px 2px 14px; }
@@ -829,7 +873,7 @@ details.mehr-infos[open] { display: grid; gap: 12px; padding-bottom: 6px; }
 .einkauf-kopf span { font-size: var(--t-sekundaer); color: var(--text-2); text-align: right; }
 .einkauf-eingabe { display: flex; gap: 8px; }
 .einkauf-eingabe input { flex: 1; min-width: 0; border-radius: 25px; padding-left: 18px; }
-.einkauf-eingabe .icon-knopf { width: 50px; height: 50px; background: linear-gradient(180deg, var(--akzent-2), var(--akzent)); color: var(--akzent-text); box-shadow: var(--knopf-schatten); }
+.einkauf-eingabe .icon-knopf { width: 50px; height: 50px; background: var(--akzent); color: var(--akzent-text); box-shadow: var(--knopf-schatten); }
 .plan-aktionen { gap: 20px; padding: 0 16px 12px 68px; margin-top: -4px; }
 .plan-aktionen .link { font-size: var(--t-meta); padding: 0; }
 .haken { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 1.8px solid var(--text-3); background: none; color: #fff; transition: background 0.15s, border-color 0.15s; }
@@ -929,7 +973,7 @@ details.mehr input, details.mehr textarea, details.mehr select { background: var
 @keyframes einblenden { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pulsieren { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 @keyframes abhaken { 0% { transform: scale(0.8); } 60% { transform: scale(1.1); } 100% { transform: scale(1); } }
-.box, .heute-karte, .rezept-kompakt, .monat-karte, .kachel-paar, .vorrat-held, .foto-karte, .ort-karte { animation: auftauchen 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.box, .held-karte, .idee-zeile, .leer-karte, .willkommen, .vorrat-held, .foto-karte, .ort-karte { animation: auftauchen 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
@@ -938,11 +982,6 @@ details.mehr input, details.mehr textarea, details.mehr select { background: var
 @media (max-width: 380px) {
   :root { --gutter: 16px; }
   .kopf { padding-left: 16px; padding-right: 16px; }
-  .monat-zahlen > span { padding: 0 6px; }
-  .monat-zahlen strong { font-size: 15px; }
-  .rezept-kompakt { grid-template-columns: 72px minmax(0, 1fr); }
-  .rk-bild .bild { width: 72px; height: 72px; }
-  .vorrat-zahl small { font-size: 10.5px; }
 }
 @media (max-width: 360px) {
   .farbwahl, .sorten-raster, .naehrwert-raster { grid-template-columns: 1fr; }

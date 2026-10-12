@@ -104,3 +104,16 @@ for skript in scripts/schema-stand.sql scripts/daten-export.sql; do
   done
 done
 echo "ok  schema-stand.sql und daten-export.sql: unter 100 Zeilen, auch als eine Zeile und mit angehängtem limit"
+
+# Doppelte gespeicherte Rezepte bereinigen: je Name (Groß/klein, Leer- und Satzzeichen egal) bleibt das neueste.
+sql -c "insert into rezept (name, daten, erstellt_am) values
+  ('Linsen-Bolognese', '{}', '2026-09-25 19:00'), ('linsen bolognese ', '{}', '2026-09-27 19:00'),
+  ('LINSEN-BOLOGNESE', '{}', '2026-09-20 19:00'), ('Sommer-Crunch', '{}', '2026-09-26 19:00');"
+entfernt="$(psql -X -q -t -A -v ON_ERROR_STOP=1 "$URL" -f scripts/rezepte-bereinigen.sql | wc -l)"
+uebrig="$(psql -X -q -t -A -v ON_ERROR_STOP=1 "$URL" -c "select string_agg(name, '|' order by lower(name)) from rezept")"
+[[ "$entfernt" == "2" && "$uebrig" == "linsen bolognese |Sommer-Crunch" ]] \
+  || { echo "rezepte-bereinigen.sql: $entfernt entfernt, übrig: $uebrig" >&2; exit 1; }
+[[ "$(psql -X -q -t -A -v ON_ERROR_STOP=1 "$URL" -f scripts/rezepte-bereinigen.sql | wc -l)" == "0" ]] \
+  || { echo "rezepte-bereinigen.sql entfernt beim zweiten Lauf noch etwas" >&2; exit 1; }
+LC_ALL=C grep -q '[^ -~]' scripts/rezepte-bereinigen.sql && { echo "rezepte-bereinigen.sql ist nicht reines ASCII" >&2; exit 1; }
+echo "ok  rezepte-bereinigen.sql: Doppelte entfernt, das neueste bleibt, zweiter Lauf ändert nichts"

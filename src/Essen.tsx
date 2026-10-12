@@ -16,16 +16,16 @@ import {
   speichereRezept, starteSession, type Quelle, type Rezept,
 } from './essenApi';
 import { GerichtKarte } from './GerichtKarte';
+import { GerichtBild } from './GerichtBild';
+import { ohneDoppelte, schonGespeichert } from './rezepte';
 import { Woche, TagWahl } from './Woche';
 import { eintragHinzufuegen, naehrwerteGericht, planeGericht, type Plan } from './haushalt';
-import { Blatt } from './Blatt';
 import { SorteFormular } from './Sorten';
 import { Icon, type IconName } from './Icon';
 import { ARTEN_INFO, farbe as farbInfo } from './farben';
 import { kcalKurz } from './format';
 import { tagName } from './dashboard';
 import type { NavZustand } from './navigation';
-import { Bild } from './Bild';
 import { KiStatus } from './KiStatus';
 
 type Props = {
@@ -42,8 +42,8 @@ type Props = {
   auftauen: ReactNode;
   nav: NavZustand['essen'];
   onNav: (teil: Partial<NavZustand['essen']>) => void;
-  /** öffnet die Kochansicht (entnommen wird erst nach Bestätigung) */
-  onKochen: (g: Gericht, planId: string | null) => void;
+  /** öffnet die Rezeptseite (entnommen wird erst nach Bestätigung); herkunft z. B. „Gespeichertes Rezept“ */
+  onKochen: (g: Gericht, planId: string | null, herkunft?: string) => void;
   onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void;
   onGeaendert: () => void;
 };
@@ -65,18 +65,18 @@ type Session = {
   grundmodus: Modus;
 };
 
-type Entscheidung = 'like' | 'dislike' | 'similar' | 'skip';
+type Entscheidung = 'dislike' | 'similar' | 'skip';
 
 const SPEICHER = 'kombi-essen';
 const MINUTEN: (number | null)[] = [10, 15, 20, 30, null];
 const START_OPTIONEN: Optionen = { personen: 2, max_minuten: 15, guenstig: true };
 /** Wohin die Karte bei welcher Entscheidung verschwindet */
-const ABGANG: Record<Entscheidung, string> = { like: 'rechts', dislike: 'links', skip: 'oben', similar: 'klein' };
+const ABGANG: Record<Entscheidung, string> = { dislike: 'links', skip: 'oben', similar: 'klein' };
+/** Passt nicht? Drei klare Wege zum nächsten Vorschlag – „Anderer Vorschlag“ lernt nichts, „Nicht meins“ schon. */
 const ENTSCHEIDUNGEN: { aktion: Entscheidung; icon: IconName; text: string; label: string }[] = [
-  { aktion: 'dislike', icon: 'nein', text: 'Nicht meins', label: 'Nicht meins' },
-  { aktion: 'similar', icon: 'aehnlich', text: 'Ähnlich', label: 'Ähnliches zeigen' },
-  { aktion: 'skip', icon: 'weiter', text: 'Anderes', label: 'Gerade etwas anderes' },
-  { aktion: 'like', icon: 'herz', text: 'Gefällt mir', label: 'Gefällt mir' },
+  { aktion: 'skip', icon: 'weiter', text: 'Anderer Vorschlag', label: 'Anderer Vorschlag' },
+  { aktion: 'similar', icon: 'aehnlich', text: 'Ähnliches', label: 'Etwas Ähnliches zeigen' },
+  { aktion: 'dislike', icon: 'nein', text: 'Nicht meins', label: 'Nicht meins – so etwas seltener vorschlagen' },
 ];
 
 function ladeVorlieben(): { optionen: Optionen; kuehlschrank: string } {
@@ -106,12 +106,11 @@ export function Essen({
   const [quelle, setQuelle] = useState<{ art: Quelle; anbieter: string; hinweis: string | null } | null>(null);
   const [laedt, setLaedt] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
-  const [gemocht, setGemocht] = useState(false);
+  const [gemerkt, setGemerkt] = useState(false);
   const [einplanen, setEinplanen] = useState<Gericht | null>(null);
   const [ergebnisHinweis, setErgebnisHinweis] = useState<string | null>(null);
   const [bausteinFormular, setBausteinFormular] = useState<BausteinIdee | null>(null);
   const [rezepte, setRezepte] = useState<Rezept[]>([]);
-  const [rezeptOffen, setRezeptOffen] = useState<Rezept | null>(null);
   const [optionenOffen, setOptionenOffen] = useState(false);
 
   useEffect(() => {
@@ -123,7 +122,7 @@ export function Essen({
   }, [optionen, kuehlschrank]);
 
   useEffect(() => {
-    void ladeRezepte().then(setRezepte);
+    void ladeRezepte().then((r) => setRezepte(ohneDoppelte(r)));
   }, []);
 
   const gestartet = session.current !== null;
@@ -131,7 +130,7 @@ export function Essen({
   function zeigeNaechstes(s: Session): boolean {
     const g = s.puffer.shift() ?? null;
     setAktuell(g);
-    setGemocht(false);
+    setGemerkt(false);
     if (g) s.gesehen.push(kurz(g));
     return g !== null;
   }
@@ -202,7 +201,7 @@ export function Essen({
     setBaustein(null);
     setMuster([]);
     setQuelle(null);
-    setGemocht(false);
+    setGemerkt(false);
     setOptionenOffen(false);
     setErgebnisHinweis(null);
   }
@@ -221,11 +220,6 @@ export function Essen({
     const g = aktuell;
     if (!s || !g || abgang) return;
     merkeFeedback(g, aktion);
-
-    if (aktion === 'like') {
-      setGemocht(true);
-      return;
-    }
     const weiterMachen = () => {
       setAbgang(null);
       if (aktion === 'similar') {
@@ -252,30 +246,32 @@ export function Essen({
     }
   }
 
-  function weiter() {
-    const s = session.current;
-    if (!s) return;
-    if (!zeigeNaechstes(s)) void anfordern(s, s.grundmodus);
-  }
-
+  /** „Merken“ = gefällt mir + speichern. Gibt es das Rezept schon, wird es nicht noch einmal gespeichert. */
   async function rezeptSpeichern(g: Gericht) {
+    const s = session.current;
+    if (s && aktuell?.id === g.id) merkeFeedback(g, 'like');
+    if (schonGespeichert(rezepte, g.name)) {
+      setGemerkt(true);
+      onMeldung(`${g.name} ist schon unter „Gemerkt“.`);
+      return;
+    }
     try {
-      const s = session.current;
       await s?.warteschlange;
       const aktionen = s?.feedback.filter((f) => f.vorschlag_id === g.id).map((f) => f.aktion) ?? [];
       await speichereRezept(g, s?.protokolliert.has(g.id) ?? false, [...aktionen, 'save']);
       merkeFeedback(g, 'save');
-      onMeldung(`${g.name} gespeichert.`);
-      setRezepte(await ladeRezepte());
+      setGemerkt(true);
+      onMeldung(`${g.name} gemerkt – du findest es unten unter „Gemerkt“.`);
+      setRezepte(ohneDoppelte(await ladeRezepte()));
     } catch (err) {
       onMeldung(fehlerText(err));
     }
   }
 
-  /** „Kochen“ ist ein starkes Signal – gezählt wird es beim Öffnen der Kochansicht. */
-  function kochen(g: Gericht, planId: string | null) {
+  /** „Kochen“ ist ein starkes Signal – gezählt wird es beim Öffnen der Rezeptseite. */
+  function kochen(g: Gericht, planId: string | null, herkunft?: string) {
     if (session.current && aktuell?.id === g.id) merkeFeedback(g, 'cook');
-    onKochen(g, planId);
+    onKochen(g, planId, herkunft);
   }
 
   async function einkaufMerken(e: Einkaufsvorschlag) {
@@ -363,31 +359,26 @@ export function Essen({
           <ul className="liste mit-icon">
             {heuteGeplant.map((p) => (
               <li key={p.id}>
-                <div className="zeile">
-                  <Bild name={p.titel} emoji={p.daten.gericht!.emoji} art="kachel" />
+                <button type="button" className="zeile" onClick={() => kochen(p.daten.gericht!, p.id)}>
+                  <span className="mini-teller"><GerichtBild g={p.daten.gericht!} groesse="klein" /></span>
                   <span className="zeile-haupt">
-                    <span className="zeile-meta">{p.datum === heute ? 'Heute geplant' : `Geplant: ${tagName(heute, p.datum!)}`}</span>
+                    <span className="zeile-meta">{p.datum === heute ? 'Für heute geplant' : `Geplant: ${tagName(heute, p.datum!)}`}</span>
                     <span className="zeile-titel">{p.titel}</span>
                   </span>
-                  <button type="button" className="knopf klein akzent" onClick={() => kochen(p.daten.gericht!, p.id)}>Kochen</button>
-                </div>
+                  <span className="idee-aktion">Kochen <Icon name="pfeil" groesse={15} /></span>
+                </button>
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      <div className="einstellungen">
-        <p className="meta">{einstellungenText.map((t) => <span key={t}>{t}</span>)}</p>
-        <button type="button" className="link" onClick={() => setOptionenOffen((o) => !o)}>{optionenOffen ? 'Fertig' : 'Ändern'}</button>
-        {gestartet && <button type="button" className="link" onClick={neuStarten}>Neu</button>}
-      </div>
-      {optionenOffen && optionenFelder}
-
       {!gestartet && (
-        <>
+        <section className="essen-start" aria-label="Ideen aus deinem Vorrat">
+          <h2>Ideen aus deinem Vorrat</h2>
+          <p className="leise klein">Kombi schlägt Gerichte vor, die du mit dem kochen kannst, was zu Hause ist – Lebensmittel, die bald weg müssen, zuerst.</p>
           <label className="feld">
-            <span>Reste im Kühlschrank <small>(optional)</small></span>
+            <span>Liegt noch etwas Offenes im Kühlschrank? <small>(optional)</small></span>
             <textarea
               rows={2}
               maxLength={1000}
@@ -397,25 +388,34 @@ export function Essen({
             />
           </label>
           <button type="button" className="knopf haupt" onClick={() => void starten()} disabled={laedt}>
-            {laedt ? 'Kombi überlegt …' : 'Vorschläge zeigen'}
+            {laedt ? 'Kombi überlegt …' : 'Ideen zeigen'}
           </button>
-          <button type="button" className="knopf breit" onClick={() => void starten({ art: 'reste' })} disabled={laedt}>
-            Reste zuerst verwerten
+          <button type="button" className="knopf breit zweit" onClick={() => void starten({ art: 'reste' })} disabled={laedt}>
+            Nur Reste verwerten
           </button>
-          <p className="meta-text">
-            Immer da: {GRUNDAUSSTATTUNG.join(', ')}.
-            {reserviertSorten > 0 && ` Für geplante Gerichte Reserviertes wird nicht noch einmal vorgeschlagen.`}
-          </p>
-        </>
+        </section>
+      )}
+
+      <div className="einstellungen">
+        <p className="meta">{einstellungenText.map((t) => <span key={t}>{t}</span>)}</p>
+        <button type="button" className="link" onClick={() => setOptionenOffen((o) => !o)}>{optionenOffen ? 'Fertig' : 'Ändern'}</button>
+        {gestartet && <button type="button" className="link" onClick={neuStarten}>Von vorn</button>}
+      </div>
+      {optionenOffen && optionenFelder}
+      {!gestartet && (
+        <p className="meta-text">
+          Immer da: {GRUNDAUSSTATTUNG.join(', ')}.
+          {reserviertSorten > 0 && ' Was für geplante Gerichte reserviert ist, schlägt Kombi nicht noch einmal vor.'}
+        </p>
       )}
 
       {fehler && <p className="fehlerbox">{fehler}</p>}
 
       {laedt && gestartet && (
         <article className="gericht laedt" aria-live="polite">
-          <div className="gericht-kopf" aria-hidden="true">🍳</div>
+          <div className="gericht-kopf"><span className="teller teller-karte teller-neutral" aria-hidden="true"><span className="teller-platte" /></span></div>
           <div className="gericht-inhalt">
-            <p className="gericht-name">Kombi schaut in den Vorrat …</p>
+            <p className="gericht-name serif">Kombi schaut in deinen Vorrat …</p>
             <p className="gericht-text">Gleich gibt’s Ideen aus dem, was da ist.</p>
           </div>
         </article>
@@ -423,37 +423,29 @@ export function Essen({
 
       {!laedt && aktuell && (
         <div key={aktuell.id} className={`karten-buehne${abgang ? ` abgang-${abgang}` : ''}`}>
-          <GerichtKarte g={aktuell} naehrwerte={naehrwerteGericht(aktuell, bestand)} />
+          <GerichtKarte
+            g={aktuell}
+            naehrwerte={naehrwerteGericht(aktuell, bestand)}
+            aktionen={{
+              onKochen: () => kochen(aktuell, null),
+              onMerken: () => void rezeptSpeichern(aktuell),
+              onEinplanen: planung ? () => setEinplanen(aktuell) : undefined,
+              gemerkt,
+            }}
+          />
         </div>
       )}
 
-      {!laedt && aktuell && gemocht && (
-        <div className="entscheidung danach" role="group" aria-label="Gefällt dir – und jetzt?">
-          <button type="button" onClick={() => void rezeptSpeichern(aktuell)} aria-label="Rezept speichern">
-            <span className="kreis"><Icon name="stern" /></span>Speichern
-          </button>
-          <button type="button" className="haupt" onClick={() => kochen(aktuell, null)} aria-label="Jetzt kochen">
-            <span className="kreis"><Icon name="pfanne" /></span>Kochen
-          </button>
-          {planung && (
-            <button type="button" onClick={() => setEinplanen(aktuell)} aria-label="Für einen Tag einplanen">
-              <span className="kreis"><Icon name="kalender" /></span>Einplanen
-            </button>
-          )}
-          <button type="button" onClick={weiter} aria-label="Weitere Vorschläge">
-            <span className="kreis"><Icon name="weiter" /></span>Weiter
-          </button>
-        </div>
-      )}
-
-      {!laedt && aktuell && !gemocht && (
-        <div className="entscheidung" role="group" aria-label="Entscheidung">
-          {ENTSCHEIDUNGEN.map((e) => (
-            <button key={e.aktion} type="button" className={`e-${e.aktion}`} onClick={() => entscheiden(e.aktion)} aria-label={e.label}>
-              <span className="kreis"><Icon name={e.icon} /></span>
-              {e.text}
-            </button>
-          ))}
+      {!laedt && aktuell && (
+        <div className="entscheidung" role="group" aria-label="Passt nicht?">
+          <p className="entscheidung-titel">Passt nicht?</p>
+          <div className="entscheidung-knoepfe">
+            {ENTSCHEIDUNGEN.map((e) => (
+              <button key={e.aktion} type="button" className={`e-${e.aktion}`} onClick={() => entscheiden(e.aktion)} aria-label={e.label}>
+                <Icon name={e.icon} groesse={18} /> {e.text}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -461,7 +453,7 @@ export function Essen({
         <p className="meta-text">
           {ergebnisHinweis && `${ergebnisHinweis} `}
           {muster.length > 0 && `${muster.join(' ')} `}
-          {quelle && (quelle.art === 'ki' ? `Idee von der KI (${quelle.anbieter}) – Mengen, Preise und Kalorien rechnet Kombi selbst.` : 'Ohne KI nach Kombi-Regeln.')}
+          {quelle && (quelle.art === 'ki' ? `Idee von der KI (${quelle.anbieter}) – Mengen, Preise und Kalorien rechnet Kombi selbst.` : 'Vorschläge nach Kombi-Regeln (ohne KI).')}
           {quelle?.hinweis && ` ${quelle.hinweis}`}
         </p>
       )}
@@ -469,7 +461,7 @@ export function Essen({
       {!laedt && gestartet && !aktuell && einkauf && (
         <div className="flaeche vorschlag">
           <div className="vorschlag-titel">
-            <span className="zeile-meta">Eine Sache fehlt</span>
+            <span className="zeile-meta">Mit einer Zutat mehr geht viel mehr</span>
             <h3>{einkauf.name}</h3>
           </div>
           <p className="vorschlag-text">{einkauf.begruendung}</p>
@@ -483,12 +475,28 @@ export function Essen({
       )}
 
       {!laedt && gestartet && !aktuell && !einkauf && (
-        <div className="leer-zustand">
-          <Icon name="essen" groesse={40} />
-          <p>Gerade keine weiteren passenden Ideen.</p>
-          <button type="button" className="knopf" onClick={() => session.current && void anfordern(session.current, { art: 'normal' })}>
-            Nochmal suchen
-          </button>
+        <div className="leer-karte">
+          <span className="leer-icon" aria-hidden="true"><Icon name="essen" groesse={28} /></span>
+          <h2>Gerade keine weiteren Ideen</h2>
+          <p>
+            {session.current?.grundmodus.art === 'reste'
+              ? 'Es gibt gerade nichts, das dringend weg muss – oder es passt nicht sinnvoll zusammen.'
+              : 'Kombi hat alles gezeigt, was zu deinen Einstellungen und deinem Vorrat passt.'}
+            {optionen.max_minuten ? ` Mit mehr Zeit als ${optionen.max_minuten} Minuten findet Kombi oft mehr.` : ''}
+          </p>
+          {optionen.max_minuten ? (
+            <button type="button" className="knopf haupt" onClick={() => {
+              optionenAendern({ max_minuten: null });
+              if (session.current) void anfordern(session.current, { art: 'normal' });
+            }}>
+              Ohne Zeitlimit suchen
+            </button>
+          ) : (
+            <button type="button" className="knopf haupt" onClick={() => session.current && void anfordern(session.current, { art: 'normal' })}>
+              Nochmal suchen
+            </button>
+          )}
+          {planung && <button type="button" className="knopf breit zweit" onClick={() => onNav({ ansicht: 'woche' })}>Zum Wochenplan</button>}
         </div>
       )}
 
@@ -503,7 +511,7 @@ export function Essen({
               <div className="zeile">
                 <span className="punkt" aria-hidden="true" />
                 <span className="zeile-haupt">
-                  <span className="zeile-meta">Idee für deine Komponenten</span>
+                  <span className="zeile-meta">Idee zum Vorkochen</span>
                   <span className="zeile-titel">{baustein.name}</span>
                   <span className="zeile-meta">
                     {ARTEN_INFO.find((a) => a.id === baustein.bestandsart)!.name} · {farbInfo(baustein.farbe).bedeutung} · {baustein.portionen} Portionen · {kostenText(baustein.kosten)}
@@ -520,13 +528,13 @@ export function Essen({
       )}
 
       {rezepte.length > 0 && (!gestartet || !aktuell) && (
-        <section className="abschnitt" aria-label="Gespeichert">
-          <div className="abschnitt-kopf"><h2>Gespeichert</h2></div>
+        <section className="abschnitt" aria-label="Gemerkt">
+          <div className="abschnitt-kopf"><h2>Gemerkt</h2><span className="abschnitt-zusatz">{rezepte.length} {rezepte.length === 1 ? 'Rezept' : 'Rezepte'}</span></div>
           <ul className="liste mit-icon">
             {rezepte.map((r) => (
               <li key={r.id}>
-                <button type="button" className="zeile" onClick={() => setRezeptOffen(r)}>
-                  <Bild name={r.name} emoji={r.daten.emoji} art="kachel" />
+                <button type="button" className="zeile" onClick={() => kochen(r.daten, null, 'Gemerktes Rezept')}>
+                  <span className="mini-teller"><GerichtBild g={r.daten} groesse="klein" /></span>
                   <span className="zeile-haupt">
                     <span className="zeile-titel">{r.name}</span>
                     <span className="zeile-meta">{r.daten.zeit_min} Min · {kcalKurz(naehrwerteGericht(r.daten, bestand))} / Portion</span>
@@ -574,23 +582,6 @@ export function Essen({
 
       {einplanen && (
         <TagWahl heute={heute} titel={`${einplanen.name} einplanen`} untertitel="Für welchen Tag?" onWahl={(d) => void planen(einplanen, d)} onSchliessen={() => setEinplanen(null)} />
-      )}
-
-      {rezeptOffen && (
-        <Blatt titel={rezeptOffen.name} untertitel={`Gespeichert am ${new Date(rezeptOffen.erstellt_am).toLocaleDateString('de-DE')}`} onSchliessen={() => setRezeptOffen(null)}>
-          <GerichtKarte g={rezeptOffen.daten} naehrwerte={naehrwerteGericht(rezeptOffen.daten, bestand)} />
-          <p className="meta-text abstand-oben">Kosten von damals. Beim Kochen prüft Kombi den aktuellen Vorrat, Kalorien kommen aus den heutigen Nährwerten.</p>
-          <button
-            type="button"
-            className="knopf haupt abstand-oben"
-            onClick={() => {
-              kochen(rezeptOffen.daten, null);
-              setRezeptOffen(null);
-            }}
-          >
-            <Icon name="pfanne" /> Kochen
-          </button>
-        </Blatt>
       )}
 
       {bausteinFormular && (

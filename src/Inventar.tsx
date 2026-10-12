@@ -17,7 +17,8 @@ import { Einkauf } from './Einkauf';
 import { Auftauen } from './Auftauen';
 import { KochAnsicht } from './KochAnsicht';
 import { Blatt } from './Blatt';
-import { Icon, type IconName } from './Icon';
+import { Hilfe } from './Hilfe';
+import { Icon } from './Icon';
 import { buchungsVerb } from './farben';
 import { heuteIso, mengeText } from './format';
 import { alsVorratSorte, einkaufen, einkaufRueckgaengig, eintragHinzufuegen, ladeHaushalt, LEER, naehrwerteGericht, planBedarf, type Haushaltsdaten } from './haushalt';
@@ -41,8 +42,15 @@ function anfangsNavigation() {
   return ladeNav(gemerkt, typeof location === 'undefined' ? '' : location.hash);
 }
 
-const TITEL: Record<Bereich, string> = { start: '', essen: 'Essen', vorrat: 'Vorrat', produktion: 'Produktion', einkauf: 'Einkauf' };
-const KOPF_ICON: Record<Bereich, IconName | null> = { start: null, essen: 'essen', vorrat: 'blatt', produktion: 'topf', einkauf: 'wagen' };
+const TITEL: Record<Bereich, string> = { start: 'Was möchtest du heute kochen?', essen: 'Essen', vorrat: 'Vorrat', produktion: 'Produktion', einkauf: 'Einkauf' };
+
+/** Ein Satz je Bereich, der für Außenstehende erklärt, worum es geht. */
+const ERKLAERUNG: Record<Exclude<Bereich, 'start'>, string> = {
+  essen: 'Ideen aus dem, was du zu Hause hast – und dein Wochenplan.',
+  vorrat: 'Alles, was bei dir zu Hause ist: Kühlschrank, Gefrierfach, Schrank.',
+  produktion: 'Vorkochen auf Vorrat: einmal kochen, mehrmals essen.',
+  einkauf: 'Was du kaufen musst – schon mit dem Vorrat verrechnet.',
+};
 
 export function Inventar() {
   const [bestand, setBestand] = useState<Sorte[] | null>(null);
@@ -53,9 +61,10 @@ export function Inventar() {
   const [bearbeiteSorteId, setBearbeiteSorteId] = useState<number | null>(null);
   const [neueSorte, setNeueSorte] = useState(false);
   const [plusMenue, setPlusMenue] = useState(false);
+  const [hilfe, setHilfe] = useState(false);
   // null = Dialog zu; sorteId null = Sorte muss noch gewählt werden
   const [einfrierenDialog, setEinfrierenDialog] = useState<{ sorteId: number | null } | null>(null);
-  const [kochen, setKochen] = useState<{ g: Gericht; planId: string | null } | null>(null);
+  const [kochen, setKochen] = useState<{ g: Gericht; planId: string | null; herkunft?: string } | null>(null);
   const [laeuft, setLaeuft] = useState<Set<number>>(new Set());
   const [meldung, setMeldung] = useState<Meldung | null>(null);
   const [gescrollt, setGescrollt] = useState(false);
@@ -257,30 +266,25 @@ export function Inventar() {
   ].filter((x): x is string => !!x);
 
   const datumText = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-  const titel = nav.bereich === 'start' ? gruss(new Date().getHours()) : TITEL[nav.bereich];
-  const untertitel = !bestand
-    ? ''
-    : nav.bereich === 'start'
-      ? `Dein Haushalt · ${datumText}`
-      : nav.bereich === 'vorrat'
-        ? 'Alles im Blick · Weniger verschwenden'
-        : nav.bereich === 'essen'
-          ? nav.essen.ansicht === 'woche' ? 'Flexibel planen – entnommen wird erst beim Kochen' : 'Was möchtest du jetzt essen?'
-          : nav.bereich === 'produktion'
-            ? 'Aus vorhandenen Zutaten etwas Neues herstellen.'
-            : 'Was fehlt – verrechnet mit dem Vorrat';
-  const kopfIcon = KOPF_ICON[nav.bereich];
-  const abends = new Date().getHours() >= 18 || new Date().getHours() < 5;
+  const titel = TITEL[nav.bereich];
+  const untertitel = nav.bereich === 'start'
+    ? null
+    : nav.bereich === 'essen' && nav.essen.ansicht === 'woche'
+      ? 'Geplant wird nur – abgezogen wird erst beim Kochen.'
+      : ERKLAERUNG[nav.bereich];
 
   return (
     <div className={`app ansicht-${nav.bereich}`}>
       <header className={`kopf${gescrollt ? ' gescrollt' : ''}`}>
         <div className="kopf-zeile">
-          {kopfIcon && <span className="kopf-icon" aria-hidden="true"><Icon name={kopfIcon} groesse={26} /></span>}
           <div className="kopf-text">
-            <h1>{titel}{nav.bereich === 'start' && <Icon name={abends ? 'mond' : 'sonne'} groesse={30} />}</h1>
+            {nav.bereich === 'start' && <p className="kopf-ueber">{gruss(new Date().getHours())} · {datumText}</p>}
+            <h1>{titel}</h1>
             {untertitel && <p className="kopf-unter">{untertitel}</p>}
           </div>
+          <button type="button" className="kopf-hilfe" onClick={() => setHilfe(true)} aria-label="So funktioniert Kombi" title="So funktioniert Kombi">
+            <span aria-hidden="true">?</span>
+          </button>
           {nav.bereich === 'vorrat' && bestand && (
             <button
               type="button"
@@ -306,7 +310,7 @@ export function Inventar() {
         )}
         {nav.bereich === 'start' && fehlend.length > 0 && (
           <details className="hinweisbox">
-            <summary>Noch nicht alles eingerichtet</summary>
+            <summary>Ein paar Funktionen sind noch nicht eingerichtet</summary>
             <p className="klein abstand-oben">
               In Supabase fehlen noch Migrationen: {fehlend.join(', ')}. Bis dahin läuft der Rest wie gewohnt – siehe README.
             </p>
@@ -328,6 +332,8 @@ export function Inventar() {
                 ideen={ideen}
                 onKochen={(g, planId) => setKochen({ g, planId })}
                 onBereich={wechsle}
+                onEinbuchen={() => (bestand.length ? setEinfrierenDialog({ sorteId: null }) : setNeueSorte(true))}
+                onHilfe={() => setHilfe(true)}
                 onMeldung={melde}
                 onGeaendert={() => void laden()}
               />
@@ -345,6 +351,7 @@ export function Inventar() {
                 nutzung={h.nutzung}
                 onOeffnen={oeffneSorte}
                 onEntnehmen={entnehmen}
+                onHinzufuegen={() => (bestand.length ? setPlusMenue(true) : setNeueSorte(true))}
               />
             </div>
             <div hidden={nav.bereich !== 'produktion'}>
@@ -393,7 +400,7 @@ export function Inventar() {
             auftauen={nav.bereich === 'essen' ? auftauenBereich : null}
             nav={nav.essen}
             onNav={(teil) => dispatch({ typ: 'essen', teil })}
-            onKochen={(g, planId) => setKochen({ g, planId })}
+            onKochen={(g, planId, herkunft) => setKochen({ g, planId, herkunft })}
             onMeldung={melde}
             onGeaendert={() => void laden()}
           />
@@ -420,6 +427,8 @@ export function Inventar() {
         </nav>
       </div>
 
+      {hilfe && <Hilfe onSchliessen={() => setHilfe(false)} />}
+
       {plusMenue && (
         <Blatt titel="Hinzufügen" onSchliessen={() => setPlusMenue(false)}>
           <ul className="liste mit-icon">
@@ -431,7 +440,7 @@ export function Inventar() {
                 <span className="icon-kachel"><Icon name="plus" groesse={18} /></span>
                 <span className="zeile-haupt">
                   <span className="zeile-titel">Einbuchen</span>
-                  <span className="zeile-meta">Gekauftes oder Vorgekochtes in den Vorrat</span>
+                  <span className="zeile-meta">In den Vorrat aufnehmen – nach dem Einkauf oder Vorkochen</span>
                 </span>
               </button>
             </li>
@@ -443,7 +452,7 @@ export function Inventar() {
                 <span className="icon-kachel"><Icon name="sorten" groesse={18} /></span>
                 <span className="zeile-haupt">
                   <span className="zeile-titel">Neue Sorte</span>
-                  <span className="zeile-meta">Zutat, Komponente oder Komplettgericht anlegen</span>
+                  <span className="zeile-meta">Etwas, das es im Vorrat noch nicht gibt – z. B. „Haferflocken“</span>
                 </span>
               </button>
             </li>
@@ -532,6 +541,7 @@ export function Inventar() {
           gericht={kochen.g}
           naehrwerte={naehrwerteGericht(kochen.g, bestand)}
           planId={kochen.planId}
+          herkunft={kochen.herkunft ?? null}
           bestand={bestand}
           reserviert={reserviertAusser(liste.verteilung.pro_plan, h.plaene, kochen.planId)}
           planung={h.planung}

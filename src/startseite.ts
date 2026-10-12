@@ -8,9 +8,9 @@
 //   • Gekocht     = Wert der entnommenen Mengen (aus den Kosten der entnommenen Chargen).
 //   • Sonstiges   = von Hand eingetragene Ausgaben ohne Bezug zum Vorrat (Kaffee, bestellt …).
 // Nur Einkäufe und Sonstiges sind Geld, das den Haushalt verlassen hat; Produktion und Gekocht sind Warenwert.
-import type { KomponentenVorschlag } from '../supabase/functions/_shared/kombi/typen.ts';
+import type { Gericht, KomponentenVorschlag } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { Sorte } from './api';
-import { tageBis, zustand } from './dashboard.ts';
+import { istDringend, tageBis, zustand, type Wichtig } from './dashboard.ts';
 
 export type EinkaufsBuchung = { erstellt_am: string; preis_cent: number | null; rueckgaengig: boolean };
 export type HerstellungsZeile = {
@@ -123,16 +123,45 @@ export function dringendHeute(bestand: Sorte[], heute: string, auftauenFaellig: 
   });
 }
 
-export type StartAbschnitt = 'heute' | 'hinweis' | 'auftauen' | 'essen' | 'monat' | 'kacheln';
+export type StartAbschnitt = 'essen' | 'auftauen' | 'willkommen' | 'ueberblick';
 
 /**
- * Reihenfolge der kompakten Startseite: Heute (kcal, Kosten) → höchstens ein dezenter Hinweis →
- * Auftauen, wenn heute fällig → Was essen wir? → Monat → Produktion | Einkauf.
- * Leere Teile entfallen; „Was essen wir?“ und die beiden Kacheln bleiben immer.
+ * Reihenfolge der Startseite: erst der Nutzen („Was möchtest du heute kochen?“ mit einem großen
+ * Vorschlag und „Jetzt kochen“), dann – nur wenn heute fällig – Auftauen, für neue Nutzer eine kurze
+ * Erklärung, und ganz unten der Überblick (Vorrat, Einkauf, Produktion, Heute, Geld) als ruhige Liste.
+ * Kennzahlen stehen nie über dem Vorschlag.
  */
-export function startAbschnitte(k: { hinweis: boolean; auftauen: boolean; monat: boolean }): StartAbschnitt[] {
-  const folge: StartAbschnitt[] = ['heute', 'hinweis', 'auftauen', 'essen', 'monat', 'kacheln'];
-  return folge.filter((a) => (a !== 'hinweis' || k.hinweis) && (a !== 'auftauen' || k.auftauen) && (a !== 'monat' || k.monat));
+export function startAbschnitte(k: { auftauen: boolean; willkommen: boolean }): StartAbschnitt[] {
+  const folge: StartAbschnitt[] = ['essen', 'auftauen', 'willkommen', 'ueberblick'];
+  return folge.filter((a) => (a !== 'auftauen' || k.auftauen) && (a !== 'willkommen' || k.willkommen));
+}
+
+export type StartVorschlag = { g: Gericht; planId: string | null };
+
+/**
+ * Vorschläge für den Start: für heute (oder früher) Geplantes zuerst, dann Ideen aus dem freien Vorrat –
+ * ohne was heute schon gekocht wurde und ohne doppelte Namen. Der erste ist der große Vorschlag.
+ */
+export function startVorschlaege(
+  plaene: { id: string; art: string; datum: string | null; daten: { gericht?: Gericht } }[],
+  ideen: Gericht[],
+  heuteGekochtTitel: string[],
+  heute: string,
+  anzahl = 3,
+): StartVorschlag[] {
+  const geplant = plaene
+    .filter((p) => p.art === 'mahlzeit' && p.daten.gericht && p.datum !== null && p.datum <= heute)
+    .sort((a, b) => (a.datum ?? '').localeCompare(b.datum ?? ''))
+    .map((p) => ({ g: p.daten.gericht!, planId: p.id as string | null }));
+  const gekocht = new Set(heuteGekochtTitel.map((t) => t.trim().toLocaleLowerCase('de-DE')));
+  const alle = [...geplant, ...ideen.filter((g) => !gekocht.has(g.name.trim().toLocaleLowerCase('de-DE'))).map((g) => ({ g, planId: null }))];
+  const gesehen = new Set<string>();
+  return alle.filter((v) => {
+    const k = v.g.name.trim().toLocaleLowerCase('de-DE');
+    if (gesehen.has(k)) return false;
+    gesehen.add(k);
+    return true;
+  }).slice(0, anzahl);
 }
 
 export type Status = 'berechnet' | 'teilweise' | 'unbekannt' | 'leer';
@@ -204,7 +233,7 @@ export function startHinweis(bestand: Sorte[], heute: string): string | null {
     const z = zustand(s, heute);
     if (!z) continue;
     if (z.art === 'abgelaufen') abgelaufen++;
-    else if (z.art !== 'niedrig') bald++;
+    else if (istDringend(z)) bald++;
   }
   const teile = [
     abgelaufen ? `${abgelaufen} abgelaufen` : null,
@@ -224,6 +253,22 @@ export function gruss(stunde: number): string {
 export type ProduktionsTipp =
   | { art: 'vorgemerkt'; plan_id: string; titel: string; portionen: number; grund: string }
   | { art: 'idee'; komponente: KomponentenVorschlag; grund: string };
+
+/**
+ * Eine Zeile „Produktion“ für den Überblick auf dem Start – aus denselben Daten wie der Bereich
+ * Produktion: Selbstgemachtes, das aufgebraucht ist oder knapp wird, zuerst; dann was vorgemerkt und
+ * startklar ist oder Dringendes verwertet; sonst ehrlich „gerade nichts nötig“.
+ */
+export function produktionsZeile(knapp: Wichtig[], tipp: ProduktionsTipp | null, vorgemerkt: number): { text: string; achtung: boolean } {
+  // knapp ist sortiert: aufgebraucht vor „wird knapp“; „(+2)“ = weitere Sorten, die nachgekocht werden sollten
+  const mehr = knapp.length > 1 ? ` (+${knapp.length - 1})` : '';
+  if (knapp[0]?.art === 'leer') return { text: `${knapp[0].sorte.name} aufgebraucht – nachkochen${mehr}`, achtung: true };
+  if (knapp.length) return { text: `${knapp[0].sorte.name} wird knapp${mehr}`, achtung: true };
+  if (tipp?.art === 'vorgemerkt') return { text: `${tipp.titel}: alles da zum Vorkochen`, achtung: false };
+  if (tipp?.art === 'idee') return { text: `Idee: ${tipp.komponente.name}`, achtung: false };
+  if (vorgemerkt > 0) return { text: `${vorgemerkt} vorgemerkt`, achtung: false };
+  return { text: 'Gerade nichts nötig', achtung: false };
+}
 
 /**
  * Ist heute eine Produktion sinnvoll? Nur wenn ja – sonst null (kein Füllmaterial):

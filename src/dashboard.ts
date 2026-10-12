@@ -6,10 +6,20 @@ import type { Sorte } from './api';
 import { artVon, einheitVon, mengeText, portionenVon } from './format.ts';
 import type { VorratOrt } from './navigation.ts';
 
-export type WichtigArt = 'abgelaufen' | 'aufgetaut' | 'geoeffnet' | 'bald' | 'niedrig';
+/**
+ * Zustände einer Sorte, vom dringendsten an:
+ *   abgelaufen, aufgetaut, geöffnet, läuft bald ab → jetzt verbrauchen (sonst wird es weggeworfen)
+ *   leer („aufgebraucht“)  → nichts mehr da, obwohl ein Mindestbestand gewünscht ist
+ *   niedrig („wird knapp“) → noch etwas da, aber weniger als der Mindestbestand
+ */
+export type WichtigArt = 'abgelaufen' | 'aufgetaut' | 'geoeffnet' | 'bald' | 'leer' | 'niedrig';
 export type Wichtig = { sorte: Sorte; art: WichtigArt; titel: string; text: string };
 
-const REIHENFOLGE: WichtigArt[] = ['abgelaufen', 'aufgetaut', 'geoeffnet', 'bald', 'niedrig'];
+const REIHENFOLGE: WichtigArt[] = ['abgelaufen', 'aufgetaut', 'geoeffnet', 'bald', 'leer', 'niedrig'];
+
+/** Muss bald gegessen werden (sonst Verschwendung)? „Aufgebraucht“ und „wird knapp“ gehören zum Einkauf. */
+export const istDringend = (w: Pick<Wichtig, 'art'> | null | undefined): boolean =>
+  !!w && (w.art === 'abgelaufen' || w.art === 'aufgetaut' || w.art === 'geoeffnet' || w.art === 'bald');
 
 /** Tage von heute bis zum Datum (negativ = vorbei). Beide als YYYY-MM-DD. */
 export function tageBis(heute: string, iso: string): number {
@@ -42,9 +52,50 @@ export function zustand(s: Sorte, heute: string): Wichtig | null {
   }
   if (s.nachkochen) {
     const was = artVon(s) === 'zutat' ? 'nachkaufen' : 'nachkochen';
-    return { sorte: s, art: 'niedrig', titel: 'Wird knapp', text: `${s.anzahl === 0 ? 'leer' : `nur ${mengeText(s.anzahl, e)}`} · ${was}` };
+    if (s.anzahl <= 0) return { sorte: s, art: 'leer', titel: 'Aufgebraucht', text: was };
+    return { sorte: s, art: 'niedrig', titel: 'Wird knapp', text: `nur noch ${mengeText(s.anzahl, e)} · ${was}` };
   }
   return null;
+}
+
+export type VorratsLage = { artikel: number; abgelaufen: number; bald: number; knapp: number; aufgebraucht: number };
+
+/** Zahlen für „Dein Vorrat“ – dieselben auf dem Start, im Vorrat, in Produktion und Einkauf. */
+export function vorratsLage(bestand: Sorte[], heute: string): VorratsLage {
+  const l: VorratsLage = { artikel: 0, abgelaufen: 0, bald: 0, knapp: 0, aufgebraucht: 0 };
+  for (const s of bestand) {
+    if (s.anzahl > 0) l.artikel++;
+    const z = zustand(s, heute);
+    if (!z) continue;
+    if (z.art === 'abgelaufen') l.abgelaufen++;
+    else if (istDringend(z)) l.bald++;
+    else if (z.art === 'leer') l.aufgebraucht++;
+    else l.knapp++;
+  }
+  return l;
+}
+
+/** „2 bald verbrauchen · 1 wird knapp · 1 aufgebraucht“ – oder null, wenn alles gut ist. */
+export function vorratsLageText(l: VorratsLage): string | null {
+  const teile = [
+    l.abgelaufen ? `${l.abgelaufen} abgelaufen` : null,
+    l.bald ? `${l.bald} bald verbrauchen` : null,
+    l.knapp ? `${l.knapp} ${l.knapp === 1 ? 'wird' : 'werden'} knapp` : null,
+    l.aufgebraucht ? `${l.aufgebraucht} aufgebraucht` : null,
+  ].filter(Boolean);
+  return teile.length ? teile.join(' · ') : null;
+}
+
+/**
+ * Selbstgemachtes (Komponenten, Komplettgerichte) unter dem Mindestbestand: gehört in die Produktion
+ * („nachkochen“). Zutaten unter dem Mindestbestand stehen im Einkauf (mangelVorschlaege).
+ */
+export function nachzukochen(bestand: Sorte[], heute: string): Wichtig[] {
+  return bestand
+    .filter((s) => artVon(s) !== 'zutat')
+    .map((s) => zustand(s, heute))
+    .filter((w): w is Wichtig => !!w && (w.art === 'leer' || w.art === 'niedrig'))
+    .sort((a, b) => REIHENFOLGE.indexOf(a.art) - REIHENFOLGE.indexOf(b.art) || a.sorte.name.localeCompare(b.sorte.name, 'de'));
 }
 
 /** „Heute wichtig“: jede Sorte höchstens einmal, mit ihrem dringendsten Zustand. */
@@ -86,7 +137,7 @@ export function ortKacheln(bestand: Sorte[], heute: string): OrtKachel[] {
       sorten: alle.length,
       leer: alle.length - da.length,
       farben: FARB_REIHE.filter((f) => gewicht.has(f)).map((f) => ({ farbe: f, anteil: gewicht.get(f)! / summe })),
-      achtung: alle.filter((s) => { const z = zustand(s, heute); return z !== null && z.art !== 'niedrig'; }).length,
+      achtung: alle.filter((s) => istDringend(zustand(s, heute))).length,
     };
   });
 }
@@ -136,7 +187,7 @@ export function sortenFuer(bestand: Sorte[], f: { ort: VorratOrt; art: Art | nul
     .sort((a, b) => {
       const za = zustand(a, heute);
       const zb = zustand(b, heute);
-      const dringend = (z: Wichtig | null) => (z && z.art !== 'niedrig' ? 0 : 1);
+      const dringend = (z: Wichtig | null) => (istDringend(z) ? 0 : 1);
       return Number(b.anzahl > 0) - Number(a.anzahl > 0) || dringend(za) - dringend(zb) || a.name.localeCompare(b.name, 'de');
     });
 }

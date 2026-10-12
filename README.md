@@ -8,33 +8,50 @@ Adresse und sehen denselben Bestand – einen Login gibt es in v0.1 bewusst nich
 
 ## Was die App kann
 
-Fünf Bereiche: **Start · Essen · Vorrat · Produktion · Einkauf** – gestaltet nach den Entwürfen: warmer, cremefarbener
-Grund, weiße Karten, Fotos vom Essen, getönte Kacheln für den Zustand (rot = läuft ab, gelb = geöffnet, blau = aufgetaut,
-grün = gut) und orangefarbene Pillen-Knöpfe; hell und dunkel. Wichtiges steht oben, Möglichkeiten darunter, Details erst beim Öffnen. Was man in einem Bereich geöffnet
-oder gefiltert hat, bleibt beim Wechsel erhalten; jede Ansicht hat eine Adresse (z. B. `#/vorrat/gefrierfach`),
-„Zurück“ funktioniert wie gewohnt.
+Fünf Bereiche: **Start · Essen · Vorrat · Produktion · Einkauf**. Leitidee: **erst den Nutzen zeigen, dann die passende
+Aktion anbieten, Details nur bei Bedarf.** Gestaltung: warmes Papier als Grund, weiße Karten, **Paprika** als Farbe der
+Hauptaktion, Espresso für Text, Überschriften in einer Buch-Serifen (iOS: New York) – wie in einem Kochbuch; hell und dunkel,
+alle Texte mit WCAG-AA-Kontrast. Jeder Bereich erklärt sich oben in einem Satz, das **?** oben rechts öffnet „So funktioniert
+Kombi“ mit allen Begriffen in einfacher Sprache (Vorrat, Einbuchen, Entnehmen, Produktion, Komponente, Einplanen, „wird knapp“,
+„aufgebraucht“, „Preis unbekannt“ …). Was man in einem Bereich geöffnet oder gefiltert hat, bleibt beim Wechsel erhalten; jede
+Ansicht hat eine Adresse (z. B. `#/vorrat/gefrierfach`), „Zurück“ funktioniert wie gewohnt.
 
-- **🏠 Start (kompakt, iPhone-first):** kleiner Gruß, **Heute** („🍽️ 1.840 kcal · 2 Mahlzeiten · pro Person“, heutige
-  Essenskosten, Frühstück/Mittag/Abendessen, optional „1.840 / 2.200 kcal“ mit eigenem Tagesziel), höchstens **eine** dezente
-  Zeile wie „2 Lebensmittel bald verbrauchen“, **Was essen wir?** als kleine wischbare Karte (Bild, Name, Zeit · Kosten · kcal,
-  verfügbar, **KOCHEN**), **der Monat in einer Zeile** (Einkäufe · Sonstiges · Ø / Mahlzeit; Produktion nur als Warenwert, nie
-  addiert) und zwei Kacheln **Produktion** („2 geplant“) und **Einkauf** („5 offen“). „Heute wichtig“ steht nicht mehr als
-  Kachel-Liste auf dem Start – Ablauf und Reste steuern im Hintergrund die Vorschläge und stehen im Vorrat.
-- **🍽️ Essen:** „Heute“ – Vorschläge (KI oder Kombi-Regeln), „Reste zuerst verwerten“, Gefällt mir / Nicht meins /
-  Ähnlich / Anderes, gespeicherte Rezepte; „Woche“ – flexibel planen, tauschen, verschieben, entfernen.
-- **🍳 Kochen:** großer Name, Zeit, kcal und Kosten je Portion, deine Zutaten mit Mengen, was fehlt, Zubereitung.
-  **Anzeigen ändert nichts** – entnommen wird erst nach „Kochen starten“ und Bestätigung.
-- **📦 Vorrat:** Suche, Übersicht „Dein Vorrat · 26 Artikel“ (Frischware, Tiefkühl, Vorrat, Komponenten), Heute wichtig,
-  Lagerorte als Fotokarten, „Wichtigste Vorräte“ mit Zustand (noch 2 Tage, geöffnet, aufgetaut, gut), alle Sorten. Ein Lagerort zeigt die Sorten gruppiert nach Art mit Menge, Status und **−**.
-  Eine Sorte im Detail: Menge und Zustand, Entnehmen (Komplettgerichte als ganze Portionen), Damit möglich,
-  Passt dazu, Auftauen – und unter „Details“ Preis, Haltbarkeit, Nährwerte, Zusammensetzung, Nutzung, Chargen.
-- **Einbuchen:** **＋** oben im Vorrat → Sorte → Menge, optional MHD und bezahlter Betrag (zählt dann als Einkauf).
+- **🏠 Start:** Die Überschrift ist die Frage **„Was möchtest du heute kochen?“**. Darunter **ein** großer Vorschlag aus dem
+  Vorrat (für heute Geplantes zuerst) mit Bild, Name, einem Satz, Zeit · Portionen · „Alles da“, „Verbraucht zuerst: …“ und der
+  Hauptaktion **Jetzt kochen** – ohne Scrollen sichtbar, auch auf dem iPhone SE. Darunter „Oder lieber …“ mit zwei weiteren
+  Ideen. Kennzahlen stehen nachrangig ganz unten in **„Dein Haushalt“** als ruhige Liste: Vorrat (bald verbrauchen),
+  Einkaufsliste (offen, aufgebraucht/knapp), Produktion (nachkochen, vorgemerkt), Heute gegessen (kcal, Kosten) und Ausgaben im
+  Monat – ein Tipp öffnet jeweils Details. Neue Nutzer sehen einmal „Neu hier? So funktioniert Kombi“ (3 Schritte). Passt
+  gerade kein ganzes Gericht, sagt der Start das offen und bietet zwei nächste Schritte an („Ideen mit kleinem Einkauf“,
+  „Eingekauftes in den Vorrat“).
+- **🍽️ Essen:** „Heute“ – Ideen aus dem Vorrat (KI oder Kombi-Regeln), „Nur Reste verwerten“. Jede Karte hat direkt
+  **Jetzt kochen**, **Merken** (= gefällt mir + speichern) und **Einplanen**; darunter „Passt nicht?“ mit *Anderer Vorschlag*
+  (lernt nichts), *Ähnliches* und *Nicht meins*. **Gemerkte Rezepte** erscheinen ohne Doppelte und öffnen direkt die Rezeptseite.
+  „Woche“ – flexibel planen, tauschen, verschieben, entfernen.
+- **🍳 Rezeptseite:** Jedes „Kochen“ (Start, Essen, Woche, Gemerkt) öffnet eine **eigene Seite**: großes Bild, Name, Dauer,
+  Portionen, „Alles da“/„2 fehlen“, Zutaten mit Mengen (was fehlt oder nicht reicht, ist markiert), Zubereitung mit
+  nummerierten Schritten, unter „Preis und Nährwerte“ die Details. **Anschauen ändert nichts.** „Kochen starten“ fragt, was aus
+  dem Vorrat abgezogen wird; danach führt der **Kochmodus** Schritt für Schritt (große Schrift, unten **Zurück · Weiter ·
+  Fertig**, Zutaten jederzeit einblendbar, Display bleibt an) bis zu „Guten Appetit!“ mit dem, was im Vorrat bleibt – und
+  Rückgängig.
+- **📦 Vorrat:** Suche, „Dein Vorrat · 16 Artikel“ mit **einer** Zeile zur Lage („2 bald verbrauchen · 1 wird knapp ·
+  1 aufgebraucht“) und dem Wert nur aus bekannten Preisen, „Jetzt wichtig“, Lagerorte als Fotokarten, „Wichtigste Vorräte“ mit
+  Zustand, alle Sorten. **„Wird knapp“** (noch etwas da, aber unter dem Mindestbestand) und **„aufgebraucht“** (nichts mehr da)
+  sind getrennte Zustände mit eigener Farbe. Eine Sorte im Detail: Menge und Zustand, Entnehmen, Damit möglich, Passt dazu,
+  Auftauen – und unter „Details“ Preis, Haltbarkeit, Nährwerte, Zusammensetzung, Nutzung, Chargen. Findet die Suche nichts,
+  gibt es „Suche leeren“ und „Etwas Neues eintragen“.
+- **Einbuchen** (= in den Vorrat aufnehmen): **＋** oben im Vorrat → Sorte → Menge, optional MHD und bezahlter Betrag (zählt dann als Einkauf).
 - **Entnehmen:** zuerst aus geöffneten Chargen, dann aus der mit dem frühesten Ablauf, sonst aus der ältesten (FIFO).
 - **Rückgängig:** Nach jeder Buchung erscheint einige Sekunden lang „Rückgängig“. Das bucht eine Korrektur, ohne etwas zu löschen.
-- **🍲 Produktion:** „Jetzt sinnvoll“ mit Foto und Grund („Läuft bald ab: Gehackte Tomaten“), „Geplant“ als Wochenstreifen,
-  Vorgemerkt, Empfohlen (Kombi-Regeln, „Neue Ideen“ fragt die KI), deine Komponenten, größer vorkochen, **Verlauf**
-  (die letzten Herstellungen mit Menge und Warenwert).
-- **🛒 Einkauf:** „Zum Einkaufen“, „Für geplante Gerichte“, „Im Wagen“ – verrechnet mit dem Vorrat, Kosten nur aus bekannten Preisen.
+- **🍲 Produktion** (= Vorkochen auf Vorrat): „Jetzt sinnvoll“ mit Foto und Grund („Läuft bald ab: Gehackte Tomaten“),
+  **Nachkochen** (Selbstgemachtes, das im Vorrat „wird knapp“ oder „aufgebraucht“ ist – dieselben Sorten wie dort, mit
+  „Vorkochen“, wenn es eine passende Idee gibt), Empfohlen (Kombi-Regeln, „Neue Ideen“ fragt die KI), „Essen diese Woche“ (nur
+  Mahlzeiten – dieselbe Zählung wie Essen → Woche), Vorgemerkt, deine Komponenten, größer vorkochen, **Verlauf**.
+- **🛒 Einkauf:** „Zum Einkaufen“, „Für geplante Gerichte“, „Im Wagen“, „Fast leer oder aufgebraucht“ (Zutaten unter dem
+  Mindestbestand) – verrechnet mit dem Vorrat, Kosten nur aus bekannten Preisen. Abhaken bucht nichts; „Einbuchen“ übernimmt
+  die tatsächlich gekaufte Menge in den Vorrat.
+- **Ehrlich bei fehlenden Daten, überall gleich:** „Preis unbekannt“ und „kcal unbekannt“, wenn nichts hinterlegt ist,
+  „ab …“ (mit „N ohne Preis“), wenn nur ein Teil bekannt ist – nie geschätzt, nie als 0.
 - Hell- und Dunkelmodus (eigene, warme Farben für beide) folgen der Systemeinstellung.
 
 > **Ohne Login:** Wer die App-Adresse kennt, kann den Bestand ansehen und ändern. Die Adresse also
@@ -64,6 +81,7 @@ oder gefiltert hat, bleibt beim Wechsel erhalten; jede Ansicht hat eine Adresse 
 
    **Nicht `supabase db push` verwenden:** Die Dateien werden im SQL-Editor eingespielt, deshalb kennt die Migrations-Historie der CLI sie nicht – `db push` würde Datei 1 erneut ausführen und mit `relation "block_typ" already exists` abbrechen.
    **Vor dem Einspielen sichern:** [`scripts/daten-export.sql`](scripts/daten-export.sql) im SQL-Editor ausführen (nur lesend) und das JSON-Ergebnis als Datei speichern – Sorten, Chargen, Bewegungen und „Was essen wir?“-Daten.
+   **Doppelt gespeicherte Rezepte?** Die App zeigt sie ohnehin nur einmal und speichert keine neuen Doppelten mehr. Wer die alten Zeilen auch in der Datenbank loswerden will: erst sichern (siehe oben), dann [`scripts/rezepte-bereinigen.sql`](scripts/rezepte-bereinigen.sql) im SQL-Editor ausführen – es zeigt, was entfernt wurde; je Name bleibt das neueste Rezept. Ein zweiter Lauf ändert nichts.
    **Welche Dateien fehlen?** [`scripts/schema-stand.sql`](scripts/schema-stand.sql) im SQL-Editor ausführen (nur lesend): je Migrationsdatei „komplett / teilweise / fehlt“ mit Liste des Fehlenden – Tabellen, Spalten, Funktionen, Trigger, Fremdschlüssel, RLS, Policies, Rechte, Bucket. Der Live-Check zeigt einen Teil davon bei jedem Lauf.
 
 ### 2. App lokal starten
@@ -105,10 +123,10 @@ Zum Testen auf dem Handy im selben WLAN: `npm run dev -- --host` starten und die
 
 Kombi fragt nicht „Welches Rezept möchtest du kochen?“, sondern „Was machen wir aus dem, was da ist?“.
 
-- **Eine Karte nach der anderen.** Oben: Name, ein appetitlicher Satz, Bild, Zeit, Portionen, echte Kosten, verwendeter Vorrat, was fehlt und höchstens zwei Hinweise („Rettet Lebensmittel“, „Komplettgericht“, „Alles da“). Unter „Details & Zubereitung“: Schritte, warum jetzt, Kosten je Zutat, Unbekanntes.
+- **Eine Karte nach der anderen.** Name, ein appetitlicher Satz, Bild, Zeit, Portionen, echte Kosten, kcal, verwendeter Vorrat, was fehlt, „Verbraucht zuerst: …“ – und die Aktionen **Jetzt kochen**, **Merken**, **Einplanen**. Das ganze Rezept steht auf der Rezeptseite, nicht klein in der Karte.
 - **Komplettgerichte** haben eine eigene Rolle: „heute einfach die Pizza“, Pizza mit Beilage oder ein Rezept aus Komponenten.
-- **Gefällt mir** → Rezept speichern, **Einplanen** (für einen Tag) oder **Heute kochen**.
-- **Heute kochen** ist eine eigene, große Ansicht: Name, Bild, Zeit, Portionen, echte Kosten, „Du brauchst“ mit Farbpunkt und den echten Vorratsobjekten („2× Tomaten-Basis“, „da: 4 · danach 2“), was fehlt, Hinweise („läuft in 2 Tagen ab“, „2 davon sind für „Lasagne“ eingeplant“) und die Schritte. **Kochen starten** zeigt genau, was entnommen wird – beim Komplettgericht „2 Portionen TK-Pizza entnehmen“, beim Rezept „2× Tomaten-Basis + 2× Linsen + 250 g Pasta“ – änderbar. Erst „Entnehmen & loslegen“ bucht, und zwar alles in **einer** Transaktion (klappt ein Posten nicht, wird nichts gebucht). Danach: Kochmodus mit abhakbaren Schritten (Display bleibt an, wo der Browser es kann), „Im Vorrat bleibt“ und Rückgängig.
+- **Merken** → gefällt mir + Rezept speichern (gibt es den Namen schon, wird nicht doppelt gespeichert), **Einplanen** (für einen Tag) oder **Jetzt kochen**.
+- **Die Rezeptseite** ist eine eigene, ganze Seite: Bild, Name, Dauer, Portionen, „Alles da“, Zutaten mit Mengen und Farbpunkt (was fehlt oder nicht reicht, steht dabei), Hinweise („läuft in 2 Tagen ab“, „2 davon sind für „Lasagne“ eingeplant“) und die nummerierten Schritte. **Kochen starten** zeigt genau, was abgezogen wird – beim Komplettgericht „2 Portionen TK-Pizza“, beim Rezept „2× Tomaten-Basis + 2× Linsen + 250 g Pasta“ – änderbar. Erst „Abziehen & loslegen“ bucht, und zwar alles in **einer** Transaktion (klappt ein Posten nicht, wird nichts gebucht). Danach: **Kochmodus** – ein Schritt pro Bildschirm mit Zurück / Weiter / Fertig (Display bleibt an, wo der Browser es kann), am Ende „Guten Appetit!“, „Im Vorrat bleibt“ und Rückgängig.
 - **Reste zuerst verwerten:** nur Gerichte, die wirklich etwas Dringendes aufbrauchen (geöffnet, aufgetaut, läuft bald ab, Kühlschrank-Rest) – kulinarisch sinnvoll, nichts wird zwanghaft kombiniert. Muss nichts weg oder passt nichts zusammen, sagt Kombi das offen.
 - **Woche:** Kombi verteilt den **freien** Vorrat auf 3, 5 oder 7 Mahlzeiten – abwechslungsreich, ohne eine Portion doppelt zu verplanen. Jede geplante Mahlzeit lässt sich kochen, auf einen anderen Tag legen, tauschen oder entfernen. Geplantes **reserviert** nur (vorhanden / reserviert / einzukaufen / verbraucht); entnommen wird erst beim Kochen. Entfernen berechnet Reservierungen und Einkaufsliste neu.
 - **Nicht meins** → vorsichtiges Lernen. Eine einzelne Ablehnung zählt kaum. Bei Ablehnungen in Folge wird die Suche stufenweise geöffnet: anderes Gericht → anderer Gerichtstyp → andere Gewürzrichtung → komplett andere Richtung.
@@ -172,7 +190,7 @@ Rezepte, Komponenten, Zutaten und Lagerorte bekommen Bilder – aber **nie eine 
 - **Bildanforderung:** Für jedes Gericht und jede Komponente baut die Software aus den strukturierten Daten (verwendete Sorten, bekannte Zusammensetzung, Gerichtstyp, semantische Zutaten) einen Suchbegriff und eine Bildbeschreibung. Den Vorschlag der KI („tomato cucumber yogurt bowl“) übernimmt sie nur, wenn er keine Zutat nennt, die nicht im Gericht steckt („steak with fries“ bei einer Gurken-Bowl wird verworfen) und keine URL enthält.
 - **Bildsuche (Wikimedia Commons, ohne Key):** nur Fotos (jpeg/png/webp) mit **freier Lizenz** (CC0, CC BY, CC BY-SA, gemeinfrei), deren Titel/Beschreibung das Gesuchte nennt (bei zusammengesetzten Gerichten mindestens zwei Begriffe), **keine fremden Zutaten** zeigt (kein „Falafel mit Hähnchen“) und kein Logo/keine Pflanze/Grafik ist. Die URL wird vor dem Speichern abgerufen (erreichbar, wirklich ein Bild). Gespeichert werden URL, Quelle, Suchbegriff, Zeitpunkt, Lizenz und Urheber; die Kochansicht zeigt den Nachweis („Foto: … · CC BY-SA 4.0 · Wikimedia Commons“). Live-Check 28.09.2026: Falafel (CC BY-SA 3.0) und Tomaten (CC0) gefunden und erreichbar.
 - **Bildgenerierung (optional):** Nur wenn kein passendes Foto gefunden wurde **und** eingerichtet: `BILD_API_KEY` (Standard-Anbieter `openai`, Modell `gpt-image-1`; `BILD_ANBIETER=together` oder `eigen` mit `BILD_BASIS_URL`, `BILD_MODELL`). Die Beschreibung entsteht nur aus dem geprüften Motiv (Katalog-Zutaten, Gerichtstyp; unbekannter Inhalt wird als „nicht angegeben“ beschrieben – aus einer Pizza ohne bekannten Belag wird keine Salami-Pizza). Das Bild wird im öffentlichen Supabase-Bucket „bilder“ dauerhaft abgelegt (kein Hotlink auf temporäre Anbieter-URLs). Die Edge Function baut die Beschreibung selbst neu – ein mitgeschickter Freitext wird nie verwendet. Einrichten: `npx.cmd supabase secrets set BILD_API_KEY=… --project-ref …`; Kosten beim Bild-Anbieter mit einem Budget-Limit begrenzen, da die Function öffentlich erreichbar ist.
-- **Nie Pflicht:** Ist nichts eingerichtet, nicht erreichbar oder unpassend, zeigt die App ein lokales Foto (`src/bilder/`) oder eine warme Kachel mit passendem Symbol (nach Name, sonst nach Zutat-Kategorie oder Rolle). Lädt ein Bild nicht, springt die Anzeige sofort auf das Fallback – kein kaputtes Bild-Symbol; der Cache-Eintrag wird als „fehler“ markiert (nichts wird gelöscht).
+- **Nie Pflicht:** Ist nichts eingerichtet, nicht erreichbar oder unpassend, zeigt die App für **Gerichte** einen gezeichneten **„Teller von oben“** (`src/GerichtBild.tsx`): das Gericht auf dem Teller, drumherum die Zutaten, die wirklich darin stecken, Grundfarbe nach der Hauptzutat – so sieht jedes Gericht anders aus, ohne etwas zu erfinden. Sorten und Lagerorte bekommen ein lokales Foto (`src/bilder/`, nur in kleinen Größen, weil die Fotos klein sind) oder eine warme Kachel mit passendem Symbol (nach Name, sonst nach Zutat-Kategorie oder Rolle). Lädt ein Bild nicht, springt die Anzeige sofort auf das Fallback – kein kaputtes Bild-Symbol; der Cache-Eintrag wird als „fehler“ markiert (nichts wird gelöscht).
 - **Cache & Performance:** Tabelle `bild` (Migration 9) – gleicher Inhalt (z. B. `gericht:bowl:gurke+joghurt+tomate`, unabhängig vom kreativen Namen) wird nie erneut gesucht oder generiert. Gesucht wird nur für sichtbare Hauptkarten (Start, Essen, Kochansicht, Produktion „Jetzt sinnvoll“, Sorten-Details), höchstens zwei Anfragen gleichzeitig, einmal je Sitzung. Listen bekommen kleinere Varianten (Commons 160–320 px), Bilder laden lazy.
 - **Eigene Bilder:** Sorte bearbeiten → Mehr Details → „Eigenes Bild“ (https-Adresse). Lagerorte haben lokale Fotos.
 - Gefundene und generierte Bilder dürfen nur von `upload.wikimedia.org` bzw. dem eigenen Supabase-Speicher kommen (App **und** Datenbank prüfen das).
@@ -304,6 +322,7 @@ Die Tests prüfen die Akzeptanzkriterien direkt in der Datenbank:
 - Sonstige Ausgaben: eintragen, als entfernt markieren und zurückholen, nicht löschbar, Betrag nachträglich nicht änderbar, unplausible Beträge und Daten abgelehnt.
 - Kosten & Nährwerte: Einkauf 1000 g für 3,00 € → Produktion → 6 Portionen für 1,44 € → 2 Portionen gegessen = 0,48 € (nicht doppelt gezählt, spätere Preisänderung ohne Wirkung), tatsächliche Menge (7 statt 8), unvollständige Preise lernen keinen Preis, Rückgängig nur für unberührte Chargen, kcal aus Nährwerten, Protokolle ohne direkten Schreibzugriff.
 - Bilder & Zutaten: eigenes Bild nur https, keine zufälligen Hotlinks im Cache, gefundenes Bild nur mit Lizenz und Quelle, generiert = `image_generated`, Status beim Anlegen nicht setzbar, kaputt markieren statt löschen (Zeitstempel aktualisiert), URL nachträglich nicht änderbar, Zutat nur als Katalog-id.
+- Rezepte bereinigen (`scripts/rezepte-bereinigen.sql`): Doppelte (Groß/klein, Leer- und Satzzeichen egal) werden entfernt, je Name bleibt das neueste, ein zweiter Lauf ändert nichts.
 
 ```bash
 npm test            # alles
@@ -311,7 +330,7 @@ npm run test:ki     # nur „Was essen wir?“ – läuft überall, auch unter W
 npm run test:db     # nur Datenbank
 ```
 
-Die 276 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+Die 281 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
 - Bilder: nur sichere https-URLs, keine Hotlinks, Priorität eigen → gefunden → generiert → lokal → keins, kaputte Quelle (Status „fehler“) und fehlendes Bild → Fallback, Bildanforderung der KI (übernommen / „steak“ verworfen / URL verworfen / fehlt), Beschreibung nur aus Rezeptdaten, unbekannte Pizza bleibt Pizza, Commons-Auswertung (Lizenz, Motiv, fremde Zutaten, Pflanze statt Lebensmittel), Pipeline gefunden/generiert/nichts/offline, Keys nie im Ergebnis, jede App-Anfrage besteht die Prüfung der Function
 - Semantische Zutaten: „REWE Strauchtomaten 500 g“ → Tomate, Spezielles vor Allgemeinem, Unbekanntes bleibt unbekannt
 - KI-Verbindung: Health-Check ohne Keys, Probelauf (JSON gültig/ungültig, nur Halluzinationen → nicht ok), Edge Function GET/POST/Bild
@@ -330,7 +349,7 @@ Die 276 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasi
 - Einkaufsliste: Zusammenführen, Verrechnen mit dem Vorrat, reservierte Mengen, tatsächlich gekaufte Menge, unbekannte Preise, Packungsgrößen, Mangel
 - Woche ohne Doppelreservierung, geplante Mahlzeit entfernen, Resteverwertung (auch „nichts Sinnvolles möglich“), Auftau-Regeln, Batch-Cooking nur aus echten Daten
 - Kalorien: Summe aus echten Mengen, je Portion, unbekannt ≠ 0, teilweise („ab …“), Makros nur wenn vollständig, KI-Angaben ignoriert; Produktion skalieren (vorhanden / benötigt / fehlt)
-- Oberfläche ohne Browser: fünf Bereiche, Zustand beim Wechsel, Adressen und Zurück, Start immer zuerst; Startseite: Ausgaben ohne Doppelzählung, Monatskosten, Ø pro Mahlzeit, heute gekocht, Reihenfolge, Dringendes; „Heute wichtig“, Lagerorte, Füllstand, Vorratswert, Suche
+- Oberfläche ohne Browser: fünf Bereiche, Zustand beim Wechsel, Adressen und Zurück, Start immer zuerst; Startseite: Vorschlag vor allen Kennzahlen, Geplantes zuerst, nichts doppelt, Produktionszeile aus denselben Daten wie die Produktion; Ausgaben ohne Doppelzählung, Monatskosten, Ø pro Mahlzeit, heute gekocht; „wird knapp“ ≠ „aufgebraucht“ ≠ „bald verbrauchen“ mit denselben Zahlen in Start, Vorrat, Produktion; gemerkte Rezepte ohne Doppelte; Lagerorte, Füllstand, Vorratswert, Suche
 
 Für `test:db` müssen die Postgres-Programme installiert sein (macOS: `brew install postgresql`, Ubuntu/WSL: `sudo apt install postgresql`). Das Skript startet eine Wegwerf-Datenbank und löscht sie danach wieder. Die echte Supabase-Datenbank wird nie angefasst. Zum Schluss prüft es, dass `scripts/schema-stand.sql` nach allen Migrationen „komplett“ meldet – so bleibt die Diagnose für die echte Datenbank aktuell. Die beiden Skripte für den SQL-Editor (`schema-stand.sql`, `daten-export.sql`) bleiben **unter 100 Zeilen**, in reinem ASCII und ohne Kommentare: Der Supabase-SQL-Editor hängt an SELECT-Abfragen automatisch `limit 1000` an – bei längeren Texten mitten hinein (beobachtet: in Zeile 100), was als „syntax error“ endet. Tritt so ein Fehler auf, neben „Run“ die Begrenzung auf **„No limit“** stellen.
 Bei jedem Push laufen alle Tests, der App-Build und eine Deno-Prüfung der Edge Function automatisch in GitHub Actions (Workflow „CI“).
@@ -338,7 +357,8 @@ Bei jedem Push laufen alle Tests, der App-Build und eine Deno-Prüfung der Edge 
 **Live-Check:** Der Workflow „Live-Check (echte Supabase)“ prüft bei jedem Push die echte Datenbank
 aus der `.env` (Migrationen, Seed, Rechte, Buchungsfunktionen), die KI-Verbindung (Health-Check, Probelauf), die Bildsuche
 (Wikimedia Commons) und klickt die gebaute App im Browser durch – auf 390 px und 375 px Breite (kein horizontaler Überlauf,
-Reiter vollständig, keine kaputten Bilder), im Dunkelmodus und mit Höhenangaben der kompakten Startseite. Außerdem prüft er die Lesbarkeit hell und dunkel (Kontrast nach WCAG AA, keine per „…“ abgeschnittenen Texte).
+Reiter vollständig, keine kaputten Bilder), im Dunkelmodus und auf dem Start: Überschrift „Was möchtest du heute kochen?“, Vorschlag ganz oben,
+„Jetzt kochen“ ohne Scrollen sichtbar. Er öffnet die Rezeptseite, tippt „Kochen starten“ und bricht ab – dabei darf die App nichts schreiben. Außerdem prüft er die Lesbarkeit hell und dunkel (Kontrast nach WCAG AA, keine per „…“ abgeschnittenen Texte).
 Er zeigt den **Schema-Stand je Migrationsdatei** (Tabellen, Spalten, Funktionen – nur lesend), **welcher Function-Code deployt ist**
 (GET-Status, `x-kombi-version`) und prüft in der App **Essen → Ändern → KI**: Ist die Function aktuell, muss „Testen“ einen echten
 Probelauf mit „Live getestet …“ liefern; bei einer alten Function darf es kein „Testen“ geben.
@@ -401,17 +421,21 @@ tests/schema-stand.mjs               Schema-Stand je Migration über die App-Rol
 scripts/test.sh                      startet Wegwerf-Postgres und führt die Tests aus
 scripts/schema-stand.sql             Schema-Stand je Migration für den SQL-Editor (nur lesend)
 scripts/daten-export.sql             Datensicherung als JSON für den SQL-Editor (nur lesend)
+scripts/rezepte-bereinigen.sql       entfernt doppelt gespeicherte Rezepte (je Name bleibt das neueste) – einmalig, von Hand
 src/api.ts                           alle Supabase-Aufrufe
 src/haushalt.ts                      Pläne, Einkauf, Auftauen, kochen/essen/produzieren – Supabase-Aufrufe
 src/Inventar.tsx                     Rahmen: fünf Bereiche, Adressen/Zurück, gemeinsame Berechnung, Kochansicht
 src/navigation.ts, src/dashboard.ts  Bereiche, Adressen, Zustand; Heute wichtig, Lagerorte, Füllstand (getestet)
-src/Start.tsx, src/startseite.ts     Startseite; Geld im Monat, Reihenfolge, Dringendes (getestet)
+src/Start.tsx, src/startseite.ts     Startseite („Was möchtest du heute kochen?“); Vorschläge, Überblick, Geld im Monat (getestet)
+src/Hilfe.tsx                        „So funktioniert Kombi“: drei Schritte und alle Begriffe in einfacher Sprache
+src/rezepte.ts                       gemerkte Rezepte ohne Doppelte (getestet)
+src/GerichtBild.tsx                  Gerichtsbild: echtes Foto oder gezeichneter „Teller von oben“ aus den echten Zutaten
 src/Vorrat.tsx                       Vorrat: Übersicht und Lagerort-Ansicht
 src/SorteBlatt.tsx                   Details einer Sorte in drei Ebenen
 src/Produktion.tsx                   Jetzt sinnvoll, Vorgemerkt, Empfohlen, Produktion in zwei Schritten, Batch
 src/Einkauf.tsx                      Einkaufsliste und „Einbuchen“
 src/Woche.tsx, src/Auftauen.tsx      Wochenplan und „Für heute auftauen“
-src/KochAnsicht.tsx, PostenListe.tsx „Heute kochen“ mit Bestätigung und Kochmodus
+src/KochAnsicht.tsx, PostenListe.tsx Rezeptseite, Bestätigung „Abziehen & loslegen“ und Kochmodus Schritt für Schritt
 src/Einfrieren.tsx                   Einbuchen-Dialog (Menge in der Einheit, optional MHD und bezahlter Betrag)
 src/Sorten.tsx                       Sorten anlegen und bearbeiten (Schnellweg + Mehr Details, Nährwerte)
 src/Essen.tsx, src/essenApi.ts       „Heute essen“: Session, Karte, Entscheidungen, Demo-Modus
