@@ -153,6 +153,10 @@ Kartoffel-Gemüse-Pfanne, Kartoffel-Möhren-Suppe, Soja-Bolognese, Kichererbsen-
   nennt eine Zutat, die nicht drin ist.
 - **Kochen:** Rezeptseite → „Kochen starten“ zeigt, was abgezogen wird (änderbar) → Bestätigen bucht genau diese Mengen ab.
   Zusätzlich genannte Zutaten und die Grundausstattung werden nie abgebucht.
+- **Grundvorrat in die Datenbank:** Actions → **„Grundvorrat anlegen“** → Run workflow legt alle Sorten aus dem Grundvorrat an
+  (`scripts/grundvorrat.ts`: Farbe, Art, Einheit, Lagerort, Portionsgröße) – mit **Menge 0**, die echten Mengen bucht man in der
+  App ein. Was es schon gibt (gleicher Name oder derselbe Baustein, z. B. „Linsen gekocht“ = „Gekochte Linsen“), wird
+  übersprungen; mehrfach starten schadet nicht. Lokal: `node scripts/grundvorrat-anlegen.ts` (Vorschau) bzw. `… --ausfuehren`.
 - **Produktion:** Die vorbereiteten Basen und gekochten Hülsenfrüchte des Grundvorrats stehen unter „Empfohlen“
   (Tomaten-Gemüse-Basis, Linsen-Bolognese-Basis, neutrale Gemüse-Basis, gekochte Kichererbsen/Kidneybohnen/Linsen – mit
   Einweichen und vollständigem Kochen).
@@ -162,9 +166,11 @@ Kartoffel-Gemüse-Pfanne, Kartoffel-Möhren-Suppe, Soja-Bolognese, Kichererbsen-
 Kombi fragt nicht „Welches Rezept möchtest du kochen?“, sondern „Was machen wir aus dem, was da ist?“.
 
 - **Erst feste Rezepte, dann improvisieren.** „Ideen zeigen“ bringt zuerst die Grundrezepte, die mit dem Vorrat direkt kochbar
-  sind – was bald weg muss zuerst, abwechslungsreich. Gefällt keins („Anderer Vorschlag“, „Nicht meins“) oder fehlt für die
-  übrigen etwas, sagt Kombi das und **improvisiert** mit dem, was da ist: über die KI, ohne KI nach Kombi-Regeln.
-  „Ähnliches“ sucht zuerst unter den Grundrezepten. Auch Start, Wochenplan und „Tauschen“ nehmen zuerst Grundrezepte.
+  sind – was bald weg muss zuerst, abwechslungsreich, eins nach dem anderen. **Anderer Vorschlag** zeigt das nächste; Ähnliches
+  rückt dabei nur nach hinten, jedes mögliche Grundrezept kommt dran. **Nicht meins** nimmt sehr Ähnliches heraus.
+  **Ähnliches** sucht zuerst unter den Grundrezepten. Erst wenn kein mögliches Grundrezept mehr übrig ist, sagt Kombi das
+  („Alle passenden Grundrezepte gezeigt …“) und **improvisiert** mit dem, was da ist: über die KI, ohne KI nach Kombi-Regeln.
+  Auch Start, Wochenplan und „Tauschen“ nehmen zuerst Grundrezepte. Der Live-Check klickt das in der echten App durch.
 - **Was hast du sonst noch da?** Zutaten, die (noch) nicht im Vorrat stehen – z. B. „Reis, eine halbe Paprika“. Kombi kocht
   damit, bucht sie aber nie ab. Als „bald verbrauchen“ zählt nur, was nach Rest klingt („halbe …“, „Rest …“, „angebrochen“) –
   im Modus „Nur Reste verwerten“ alles.
@@ -372,7 +378,7 @@ npm run test:ki     # nur „Was essen wir?“ – läuft überall, auch unter W
 npm run test:db     # nur Datenbank
 ```
 
-Die 279 Tests in `tests/ki/` laufen ohne KI und ohne Gebühren, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+Die 283 Tests in `tests/ki/` laufen ohne KI und ohne Gebühren, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
 - Grundbausteine und Grundrezepte: Erkennen des Grundvorrats (trocken ≠ gekocht, nie Fleisch), 25 Rezepte mit vollem Grundvorrat alle kochbar und geprüft, Mengen je Personenzahl in der Einheit der Sorte, „fehlt“ mit Menge und „zu wenig“, Zwiebeln/Möhren/Knoblauch immer da, zusätzlich genannte Zutaten nie abgebucht, Basis ersetzt Linsen und Tomaten, Gemüse ab der Hälfte, Extras optional, Pizza nur wenn da, Reihenfolge (Dringendes zuerst, Gesehenes raus, Reste), Woche ohne Doppelreservierung
 - Bilder: nur sichere https-URLs, keine Hotlinks, Priorität eigen → gefunden → generiert → lokal → keins, kaputte Quelle (Status „fehler“) und fehlendes Bild → Fallback, Bildanforderung der KI (übernommen / „steak“ verworfen / URL verworfen / fehlt), Beschreibung nur aus Rezeptdaten, unbekannte Pizza bleibt Pizza, Commons-Auswertung (Lizenz, Motiv, fremde Zutaten, Pflanze statt Lebensmittel), Pipeline gefunden/generiert/nichts/offline, Keys nie im Ergebnis, jede App-Anfrage besteht die Prüfung der Function
 - Semantische Zutaten: „REWE Strauchtomaten 500 g“ → Tomate, Spezielles vor Allgemeinem, Unbekanntes bleibt unbekannt

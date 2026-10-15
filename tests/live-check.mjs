@@ -669,6 +669,49 @@ if (!APP_URL) {
     return ergebnis;
   });
 
+  await pruefe('Essen: erst alle möglichen Grundrezepte, improvisiert wird erst danach', async () => {
+    const bereich = 'main > div:not([hidden])';
+    await page.click('.tabbar button:has-text("Essen")');
+    // Nichts schreiben, keine KI verbrauchen: Protokoll-Tabellen und KI-Aufruf fängt der Browser ab –
+    // die App macht dann ohne Protokoll weiter und improvisiert nach Kombi-Regeln.
+    const sperre = (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"Live-Check: gesperrt"}' });
+    const protokoll = (route) => (route.request().method() === 'GET' ? route.continue() : sperre(route));
+    const ki = (route) => (route.request().method() === 'POST' ? sperre(route) : route.continue());
+    await page.route(/\/rest\/v1\/(koch_session|vorschlag|vorschlag_feedback)/, protokoll);
+    await page.route(/\/functions\/v1\/was-essen/, ki);
+    const feld = page.locator(`${bereich} .essen textarea`);
+    try {
+      // Zusätzlich genannt (nur im Browser): damit sicher etwas direkt kochbar ist
+      await feld.fill('Nudeln, passierte Tomaten');
+      const liste = page.locator(`${bereich} section[aria-label="Grundrezepte"]`);
+      await liste.waitFor();
+      const zahl = async (i) => Number(((await liste.locator('[role="tab"]').nth(i).innerText()).match(/\d+/) ?? ['0'])[0]);
+      const kochbar = await zahl(0);
+      const fast = await zahl(1);
+      if (kochbar < 1) throw new Error('Mit Nudeln und passierten Tomaten ist kein Grundrezept direkt kochbar');
+      await page.click(`${bereich} .essen button:has-text("Ideen zeigen")`);
+      const karte = page.locator(`${bereich} .karten-buehne`);
+      await karte.waitFor({ timeout: 30000 });
+      const gezeigt = [];
+      for (let i = 0; i < kochbar + 2; i++) {
+        await page.waitForTimeout(350);
+        if (!(await karte.count()) || !(await karte.locator('.held-ueber', { hasText: 'Grundrezept' }).count())) break;
+        gezeigt.push((await karte.locator('.gericht-name').innerText()).trim());
+        await page.click(`${bereich} .entscheidung button:has-text("Anderer Vorschlag")`);
+      }
+      await page.waitForFunction(() => document.querySelector('.essen')?.textContent?.includes('Alle passenden Grundrezepte gezeigt'), null, { timeout: 60000 });
+      if (gezeigt.length !== kochbar) throw new Error(`${kochbar} kochbar, aber ${gezeigt.length} gezeigt: ${gezeigt.join(', ')}`);
+      if (new Set(gezeigt).size !== gezeigt.length) throw new Error(`doppelt gezeigt: ${gezeigt.join(', ')}`);
+      return `${kochbar} direkt kochbar (${gezeigt.join(', ')}) nacheinander, ${fast} mit fehlenden Zutaten in der Liste – danach improvisiert`;
+    } finally {
+      const vonVorn = page.locator(`${bereich} .einstellungen button.link`, { hasText: 'Von vorn' });
+      if (await vonVorn.count()) await vonVorn.click();
+      await feld.fill('');
+      await page.unroute(/\/rest\/v1\/(koch_session|vorschlag|vorschlag_feedback)/, protokoll);
+      await page.unroute(/\/functions\/v1\/was-essen/, ki);
+    }
+  });
+
   await pruefe('Start: Rezeptseite öffnen und „Kochen starten“ abbrechen bucht nichts', async () => {
     await page.click('.tabbar button:has-text("Start")');
     const knopf = page.locator('main > div:not([hidden]) .held-kochen').first();

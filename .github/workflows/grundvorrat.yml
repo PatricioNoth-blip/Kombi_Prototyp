@@ -1,0 +1,24 @@
+name: Grundvorrat anlegen
+
+# Legt den Grundvorrat des Food-Baukastens als Sorten an (scripts/grundvorrat.ts) – Menge 0, die echten
+# Mengen bucht man in der App ein. Schon Vorhandenes wird übersprungen; mehrfach starten schadet nicht.
+# Nutzt dieselben Rechte wie die App (Publishable key aus .env) – löscht und bucht nichts.
+on:
+  workflow_dispatch:
+    inputs:
+      ausfuehren:
+        description: 'Wirklich anlegen (aus = nur Vorschau)'
+        type: boolean
+        default: true
+
+jobs:
+  anlegen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Sorten anlegen
+        run: node scripts/grundvorrat-anlegen.ts ${{ inputs.ausfuehren && '--ausfuehren' || '' }}
