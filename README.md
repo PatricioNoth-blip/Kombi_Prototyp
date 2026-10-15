@@ -23,7 +23,9 @@ Ansicht hat eine Adresse (z. B. `#/vorrat/gefrierfach`), „Zurück“ funktioni
   Einkaufsliste (offen, aufgebraucht/knapp), Produktion (nachkochen, vorgemerkt) und Heute gegessen (kcal) – ein Tipp öffnet jeweils Details. Neue Nutzer sehen einmal „Neu hier? So funktioniert Kombi“ (3 Schritte). Passt
   gerade kein ganzes Gericht, sagt der Start das offen und bietet zwei nächste Schritte an („Ideen mit kleinem Einkauf“,
   „Eingekauftes in den Vorrat“).
-- **🍽️ Essen:** „Heute“ – Ideen aus dem Vorrat (KI oder Kombi-Regeln), „Nur Reste verwerten“. Jede Karte hat direkt
+- **🍽️ Essen:** „Heute“ – erst **Grundrezepte**, die mit dem Vorrat direkt kochbar sind, danach improvisiert die KI (bzw.
+  die Kombi-Regeln); „Was hast du sonst noch da?“ für Zutaten, die nicht im Vorrat stehen; „Nur Reste verwerten“. Darunter
+  alle Grundrezepte in zwei Listen: **Direkt kochbar** und **Es fehlt etwas** (mit Menge). Jede Karte hat direkt
   **Jetzt kochen**, **Merken** (= gefällt mir + speichern) und **Einplanen**; darunter „Passt nicht?“ mit *Anderer Vorschlag*
   (lernt nichts), *Ähnliches* und *Nicht meins*. **Gemerkte Rezepte** erscheinen ohne Doppelte und öffnen direkt die Rezeptseite.
   „Woche“ – flexibel planen, tauschen, verschieben, entfernen.
@@ -119,9 +121,53 @@ Zum Testen auf dem Handy im selben WLAN: `npm run dev -- --host` starten und die
 
 > Hinweis: Kostenlose Supabase-Projekte pausieren nach etwa einer Woche ohne Nutzung. Im Supabase-Dashboard lassen sie sich mit einem Klick wieder starten.
 
-## 🍽️ Heute essen (KI-Vorschläge)
+## 🧱 Grundbausteine & Grundrezepte
+
+Der Grundvorrat des Food-Baukastens steht als **Grundbausteine** in `supabase/functions/_shared/kombi/grundbausteine.ts`,
+in den vier Kombi-Farben:
+
+| Farbe | Kategorie | Grundbausteine |
+|---|---|---|
+| Rot | Basis & Soße | passierte und gehackte Tomaten, Tomatenmark, Kokosmilch, Tomaten-Gemüse-Basis, Linsen-Bolognese-Basis |
+| Braun | Protein | gekochte Kichererbsen, gekochte Kidneybohnen, gekochte Linsen (auch Linsenhack), Sojagranulat |
+| Grün | Gemüse | TK-Gemüse, neutrale Gemüse-Basis, Mais |
+| Gelb | Sattmacher & Trockenvorrat | Nudeln, Reis, Lasagneplatten, Kartoffeln, Haferflocken, Mehl, rote und braune/grüne Linsen (trocken), Kichererbsen und Kidneybohnen (trocken), Brot, Brötchen |
+
+Dazu die selbst gemachte **Margherita-Pizza** (fertiges Gericht) und **Käse** als optionales Extra. **Zwiebeln, Möhren und
+Knoblauch** gelten laut Grundvorrat als immer vorhanden (Grundausstattung neben Wasser, Salz, Pfeffer, Öl): Sie fehlen nie,
+werden nie abgebucht und landen nie auf der Einkaufsliste. Erkannt wird am Sortennamen; wo der Name nicht reicht, entscheidet
+die Farbe: „Kichererbsen“ in Gelb sind trocken, in Braun gekocht. Fleisch und Fisch sind nie ein Grundbaustein.
+
+**25 Grundrezepte** (`grundrezepte.ts`): Nr. 1–15 aus der Rezeptsammlung „Rezepte ohne Tiefkühlzutaten“ – Mengen und
+Zubereitung wie dort –, Nr. 16–25 aus dem übrigen Grundvorrat (TK-Gemüse, vorbereitete Basen, gekochte Hülsenfrüchte, Brot,
+Pizza): Gemüse-Nudel-Pfanne, Linsen-Gemüse-Eintopf, Linsen-Tomaten-Reis, Gemüse-Kokos-Curry, Rote-Linsen-Kokos-Suppe,
+Kartoffel-Gemüse-Pfanne, Kartoffel-Möhren-Suppe, Soja-Bolognese, Kichererbsen-Gemüse-Pfanne, Pizza aus dem Ofen.
+
+- **Belegen:** Jede Zutat eines Rezepts wird mit der passenden Sorte aus dem Vorrat belegt – in deren Einheit (225 g Nudeln,
+  1 Packung passierte Tomaten, 2 Portionen Linsen-Bolognese-Basis) und für die eingestellte Personenzahl umgerechnet.
+  Vorbereitetes zuerst: Eine Linsen-Bolognese-Basis ersetzt Linsen **und** Tomaten. Gemüse darf etwas weniger sein (ab der
+  Hälfte), Extras wie Käse kommen nur dazu, wenn sie da sind.
+- **Direkt kochbar** heißt: Nichts fehlt. Sonst steht genau da, was fehlt („150 g Reis“, „nur 100 g da – 50 g fehlen“);
+  mit mehr als drei fehlenden Zutaten erscheint ein Rezept nicht.
+- **Geprüft wie jeder Vorschlag:** Mengen, „fehlt“, Name und Texte laufen durch dieselbe Prüfung wie Ideen der KI – kein Text
+  nennt eine Zutat, die nicht drin ist.
+- **Kochen:** Rezeptseite → „Kochen starten“ zeigt, was abgezogen wird (änderbar) → Bestätigen bucht genau diese Mengen ab.
+  Zusätzlich genannte Zutaten und die Grundausstattung werden nie abgebucht.
+- **Produktion:** Die vorbereiteten Basen und gekochten Hülsenfrüchte des Grundvorrats stehen unter „Empfohlen“
+  (Tomaten-Gemüse-Basis, Linsen-Bolognese-Basis, neutrale Gemüse-Basis, gekochte Kichererbsen/Kidneybohnen/Linsen – mit
+  Einweichen und vollständigem Kochen).
+
+## 🍽️ Heute essen
 
 Kombi fragt nicht „Welches Rezept möchtest du kochen?“, sondern „Was machen wir aus dem, was da ist?“.
+
+- **Erst feste Rezepte, dann improvisieren.** „Ideen zeigen“ bringt zuerst die Grundrezepte, die mit dem Vorrat direkt kochbar
+  sind – was bald weg muss zuerst, abwechslungsreich. Gefällt keins („Anderer Vorschlag“, „Nicht meins“) oder fehlt für die
+  übrigen etwas, sagt Kombi das und **improvisiert** mit dem, was da ist: über die KI, ohne KI nach Kombi-Regeln.
+  „Ähnliches“ sucht zuerst unter den Grundrezepten. Auch Start, Wochenplan und „Tauschen“ nehmen zuerst Grundrezepte.
+- **Was hast du sonst noch da?** Zutaten, die (noch) nicht im Vorrat stehen – z. B. „Reis, eine halbe Paprika“. Kombi kocht
+  damit, bucht sie aber nie ab. Als „bald verbrauchen“ zählt nur, was nach Rest klingt („halbe …“, „Rest …“, „angebrochen“) –
+  im Modus „Nur Reste verwerten“ alles.
 
 - **Eine Karte nach der anderen.** Name, ein appetitlicher Satz, Bild, Zeit, Portionen, kcal, verwendeter Vorrat, was fehlt, „Verbraucht zuerst: …“ – und die Aktionen **Jetzt kochen**, **Merken**, **Einplanen**. Das ganze Rezept steht auf der Rezeptseite, nicht klein in der Karte.
 - **Komplettgerichte** haben eine eigene Rolle: „heute einfach die Pizza“, Pizza mit Beilage oder ein Rezept aus Komponenten.
@@ -133,8 +179,7 @@ Kombi fragt nicht „Welches Rezept möchtest du kochen?“, sondern „Was mach
 - **Ähnlich** → ein anderes Gericht mit erkennbarer Gemeinsamkeit (z. B. gleiche Hauptzutat, anderer Typ).
 - **Gerade etwas anderes** → ist **keine** Ablehnung: Es wird nichts gelernt, Ähnliches kommt nur für den Moment weiter nach hinten.
 - **Abwechslung:** über Gerichtstyp, Hauptzutat, Sattmacher, Richtung, Zubereitung, warm/kalt und Textur. Nach drei Wraps kommt kein vierter, solange es Alternativen gibt.
-- **Was muss weg?** Spontan genannte Kühlschrank-Reste werden für diese Suche berücksichtigt, aber nicht gespeichert.
-- **Immer vorhanden:** Wasser, Salz, Pfeffer, Öl. Alles andere muss im Bestand stehen.
+- **Immer vorhanden:** Wasser, Salz, Pfeffer, Öl, Zwiebeln, Möhren, Knoblauch. Alles andere muss im Bestand stehen oder unter „Was hast du sonst noch da?“ genannt sein.
 - **Notfall:** Reicht der Vorrat nicht, schlägt Kombi **eine** Zutat vor. Die Software bewertet dafür, wie viele Gerichte sie ermöglicht, wie gut sie zum Vorhandenen passt, Haltbarkeit und Lagerung.
 - **Idee für euren Baukasten:** Gelegentlich schlägt die KI einen neuen vorkochbaren Baustein vor (Art, Lagerort, Portionen). Angelegt wird er erst nach „Baustein übernehmen“ im vorausgefüllten Formular.
 
@@ -319,7 +364,8 @@ npm run test:ki     # nur „Was essen wir?“ – läuft überall, auch unter W
 npm run test:db     # nur Datenbank
 ```
 
-Die 260 Tests in `tests/ki/` laufen ohne KI und ohne Gebühren, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+Die 279 Tests in `tests/ki/` laufen ohne KI und ohne Gebühren, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+- Grundbausteine und Grundrezepte: Erkennen des Grundvorrats (trocken ≠ gekocht, nie Fleisch), 25 Rezepte mit vollem Grundvorrat alle kochbar und geprüft, Mengen je Personenzahl in der Einheit der Sorte, „fehlt“ mit Menge und „zu wenig“, Zwiebeln/Möhren/Knoblauch immer da, zusätzlich genannte Zutaten nie abgebucht, Basis ersetzt Linsen und Tomaten, Gemüse ab der Hälfte, Extras optional, Pizza nur wenn da, Reihenfolge (Dringendes zuerst, Gesehenes raus, Reste), Woche ohne Doppelreservierung
 - Bilder: nur sichere https-URLs, keine Hotlinks, Priorität eigen → gefunden → generiert → lokal → keins, kaputte Quelle (Status „fehler“) und fehlendes Bild → Fallback, Bildanforderung der KI (übernommen / „steak“ verworfen / URL verworfen / fehlt), Beschreibung nur aus Rezeptdaten, unbekannte Pizza bleibt Pizza, Commons-Auswertung (Lizenz, Motiv, fremde Zutaten, Pflanze statt Lebensmittel), Pipeline gefunden/generiert/nichts/offline, Keys nie im Ergebnis, jede App-Anfrage besteht die Prüfung der Function
 - Semantische Zutaten: „REWE Strauchtomaten 500 g“ → Tomate, Spezielles vor Allgemeinem, Unbekanntes bleibt unbekannt
 - KI-Verbindung: Health-Check ohne Keys, Probelauf (JSON gültig/ungültig, nur Halluzinationen → nicht ok), Edge Function GET/POST/Bild
@@ -438,6 +484,8 @@ src/KiStatus.tsx                     KI-Status und „Verbindung testen“ (Esse
 supabase/functions/_shared/kombi/bilder.ts      Bildmodell, sichere URLs, Bildanforderung, Commons-Auswertung
 supabase/functions/_shared/kombi/bild_dienst.ts Bildsuche, optionale Generierung, Ablage im Speicher (Edge Function)
 supabase/functions/_shared/kombi/zutaten.ts     semantische Zutaten: Produkt → Zutat → Verwendung
+supabase/functions/_shared/kombi/grundbausteine.ts  Grundvorrat in vier Farben, Erkennen im Vorrat
+supabase/functions/_shared/kombi/grundrezepte.ts    25 feste Grundrezepte: belegen, prüfen, ordnen
 supabase/functions/_shared/kombi/gesundheit.ts  Health-Check, Probelauf, ENGINE_VERSION
 scripts/benchmark.ts, scripts/benchmark/        KI-Benchmark (30 Szenarien, Messung, Punkte)
 src/farben.ts, src/format.ts         Farbsystem, Begriffe, Mengen- und Datumsanzeige

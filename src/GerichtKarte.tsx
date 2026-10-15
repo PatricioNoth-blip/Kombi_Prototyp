@@ -38,6 +38,7 @@ export function GerichtKarte({ g, naehrwerte: n, kompakt = false, aktionen }: { 
     <article className={`gericht${kompakt ? ' kompakt' : ''}`}>
       <div className="gericht-kopf"><GerichtBild g={g} groesse="karte" suchen={!kompakt} /></div>
       <div className="gericht-inhalt">
+        {g.grundrezept && <p className="held-ueber">Grundrezept</p>}
         <h3 className="gericht-name">{g.name}</h3>
         {g.beschreibung && <p className="gericht-text">{g.beschreibung}</p>}
         <p className="fakten">

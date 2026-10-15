@@ -150,20 +150,29 @@ describe('Kühlschrank-Zusatzangaben', () => {
     assert.deepEqual(kuehlschrankEintraege('   '), []);
   });
 
-  test('Einträge kommen in den Snapshot (ohne Menge, bald verbrauchen) und werden genutzt', async () => {
+  test('Einträge kommen in den Snapshot (ohne Menge) und werden genutzt – „bald verbrauchen“ nur, was nach Rest klingt', async () => {
     const snap = snapshot(SEED, 'halbe Paprika, Frischkäse');
     const k = snap.zutaten.filter((z) => z.quelle === 'kuehlschrank');
     assert.deepEqual(k.map((z) => [z.id, z.name, z.anzahl, z.bald_verbrauchen]), [
       ['k1', 'halbe Paprika', null, true],
-      ['k2', 'Frischkäse', null, true],
+      ['k2', 'Frischkäse', null, false],
     ]);
+    const reste = baueSnapshot(SEED, 'Frischkäse', '2026-09-28', { alleReste: true });
+    assert.equal(reste.zutaten.find((z) => z.id === 'k1')?.bald_verbrauchen, true, '„Nur Reste verwerten“: alles Genannte soll weg');
     const e = await erzeugeVorschlaege(regelbasiert(), anfrage({ snapshot: snap }), { id: ids() });
     assert.ok(e.gerichte.some((g) => g.zutaten.some((z) => z.quelle === 'kuehlschrank')));
     assert.ok(e.gerichte.some((g) => g.warum_jetzt.some((w) => w.startsWith('Verwertet deine Reste'))));
   });
 
-  test('Grundausstattung ist immer da, alles andere nicht', () => {
+  test('zusätzlich Genanntes ohne Rest-Hinweis: genutzt, aber nicht als „Rest“ begründet', () => {
+    const p = pruefeGericht({ name: 'Linsen-Pfanne', zutaten: [{ id: 'b3', portionen: 2 }, { id: 'k1' }] }, snapshot(SEED, 'Mais'), OPTIONEN, 'x');
+    assert.ok(p.ok);
+    assert.deepEqual(p.wert.rettet, []);
+    assert.ok(p.wert.warum_jetzt.includes('Nutzt, was du zusätzlich da hast: Mais.'), p.wert.warum_jetzt.join(' '));
+  });
+
+  test('Grundausstattung ist immer da (laut Grundvorrat auch Zwiebeln, Möhren, Knoblauch), alles andere nicht', () => {
     const snap = snapshot([], '');
-    assert.deepEqual(snap.zutaten.map((z) => z.name), ['Wasser', 'Salz', 'Pfeffer', 'Öl']);
+    assert.deepEqual(snap.zutaten.map((z) => z.name), ['Wasser', 'Salz', 'Pfeffer', 'Öl', 'Zwiebeln', 'Möhren', 'Knoblauch']);
   });
 });

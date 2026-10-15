@@ -34,9 +34,10 @@ export const STANDARD_GEWICHTE: Gewichte = {
 /** Wie dringend sollte diese Zutat verbraucht werden? 0 … 1 */
 export function dringlichkeitVon(z: GerichtZutat, snapshot?: Snapshot): number {
   if (z.quelle === 'grundausstattung') return 0;
-  if (z.quelle === 'kuehlschrank') return 0.7; // spontan genannte Reste
-  if (z.geoeffnet) return 1;
   const s = snapshot?.zutaten.find((x) => x.id === z.id);
+  // vom Nutzer genannt: Reste zählen, anderes nur leicht (ohne Snapshot wie bisher als Rest)
+  if (z.quelle === 'kuehlschrank') return !s || s.rest ? 0.7 : 0.15;
+  if (z.geoeffnet) return 1;
   if (s?.aufgetaut) return 0.95;
   if (z.bald_verbrauchen) return 0.85;
   if (s?.rest) return 0.7;

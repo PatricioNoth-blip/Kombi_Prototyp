@@ -1,6 +1,7 @@
 // Datenzugriffe für „Was essen wir?“.
-// Die KI läuft in der Edge Function „was-essen“ (dort liegt der API-Key). Ist sie nicht eingerichtet
-// oder gerade nicht verfügbar, rechnet die App selbst mit dem regelbasierten Anbieter (Demo-Modus).
+// Zuerst kommen die festen Grundrezepte – lokal, ohne KI, nur was mit dem Vorrat direkt kochbar ist.
+// Erst danach improvisiert die KI in der Edge Function „was-essen“ (dort liegt der API-Key). Ist sie nicht
+// eingerichtet oder gerade nicht verfügbar, rechnet die App selbst mit dem regelbasierten Anbieter (Demo-Modus).
 // Protokollieren ist „best effort“: Klappt es nicht (z. B. Migration fehlt), läuft alles trotzdem.
 import { supabase, SUPABASE_KEY, SUPABASE_URL } from './supabase';
 import { ENGINE_VERSION, type Gesundheit, type KiProbe } from '../supabase/functions/_shared/kombi/gesundheit.ts';
@@ -8,6 +9,10 @@ import { fehltMigration, ladeBestand, type Sorte } from './api';
 import { baueSnapshot, type BestandZeile } from '../supabase/functions/_shared/kombi/snapshot.ts';
 import { erzeugeKomponenten, erzeugeVorschlaege, erzeugeWoche } from '../supabase/functions/_shared/kombi/engine.ts';
 import { regelbasiert } from '../supabase/functions/_shared/kombi/anbieter/regelbasiert.ts';
+import { grundrezeptAnbieter, kochbareGrundrezepte } from '../supabase/functions/_shared/kombi/grundrezepte.ts';
+import { reservierungVon, restSnapshot } from '../supabase/functions/_shared/kombi/planung.ts';
+import { normalisiere } from '../supabase/functions/_shared/kombi/text.ts';
+import { berechneLeitplanken } from '../supabase/functions/_shared/kombi/praeferenz.ts';
 import { rezeptDatensatz } from '../supabase/functions/_shared/kombi/aktionen.ts';
 import { UNBEKANNTE_NAEHRWERTE } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
 import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
@@ -15,7 +20,8 @@ import type {
   Aktion, Ergebnis, Gericht, GerichtKurz, KiAnfrage, KomponentenErgebnis, Optionen, Snapshot, Vorschlag,
 } from '../supabase/functions/_shared/kombi/typen.ts';
 
-export type Quelle = 'ki' | 'demo';
+/** grundrezepte = feste Rezepte aus dem Grundvorrat; ki = Edge Function; demo = Kombi-Regeln ohne KI */
+export type Quelle = 'grundrezepte' | 'ki' | 'demo';
 export type Antwort = { ergebnis: Ergebnis; quelle: Quelle; hinweis: string | null };
 export type Rezept = { id: string; name: string; daten: Gericht; erstellt_am: string };
 
@@ -33,8 +39,11 @@ export function gespeicherteOptionen(roh: unknown): Optionen {
   };
 }
 
-/** Kontrollierter Snapshot: aktueller Bestand + Kühlschrank-Freitext + Grundausstattung. */
-export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string): Snapshot {
+/**
+ * Kontrollierter Snapshot: aktueller Bestand + was der Nutzer zusätzlich da hat (Freitext) + Grundausstattung.
+ * alleReste: alles Genannte soll bald weg („Nur Reste verwerten“).
+ */
+export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string, optionen: { alleReste?: boolean } = {}): Snapshot {
   const zeilen: BestandZeile[] = bestand.map((s) => ({
     id: s.id,
     name: s.name,
@@ -61,12 +70,12 @@ export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string): Snapsho
     fett_g: s.fett_g ?? null,
     naehrwert_menge: s.naehrwert_menge ?? null,
   }));
-  return baueSnapshot(zeilen, kuehlschrank, heute());
+  return baueSnapshot(zeilen, kuehlschrank, heute(), optionen);
 }
 
 /** Frisch aus der Datenbank – damit die KI den aktuellen Stand bekommt. */
-export async function ladeSnapshot(kuehlschrank: string): Promise<Snapshot> {
-  return baueSnapshotAus(await ladeBestand(), kuehlschrank);
+export async function ladeSnapshot(kuehlschrank: string, optionen: { alleReste?: boolean } = {}): Promise<Snapshot> {
+  return baueSnapshotAus(await ladeBestand(), kuehlschrank, optionen);
 }
 
 async function hinweisAus(error: unknown): Promise<string> {
@@ -186,17 +195,62 @@ export async function holeVorschlaege(anfrage: KiAnfrage): Promise<Antwort> {
   return { ergebnis: await erzeugeVorschlaege(regelbasiert(), anfrage), quelle: 'demo', hinweis };
 }
 
+/** Feste Grundrezepte, die mit dem Vorrat direkt kochbar sind – lokal, in Vorschlags-Reihenfolge. */
+export function grundrezeptVorschlaege(anfrage: KiAnfrage): Gericht[] {
+  return kochbareGrundrezepte(anfrage);
+}
+
+/**
+ * Erst Grundrezepte, dann (falls es zu wenige sind) improvisierte Ideen der KI bzw. der Kombi-Regeln –
+ * z. B. als Alternativen beim Tauschen im Wochenplan.
+ */
+export async function holeIdeen(anfrage: KiAnfrage): Promise<Antwort> {
+  const fest = grundrezeptVorschlaege(anfrage).slice(0, anfrage.anzahl);
+  if (fest.length >= anfrage.anzahl) {
+    const leitplanken = berechneLeitplanken(anfrage.feedback, anfrage.modus, anfrage.gesehen);
+    return {
+      ergebnis: { anbieter: 'grundrezepte', gerichte: fest, einkauf: null, baustein_idee: null, notfall: false, leitplanken, verworfen: [], hinweis: null },
+      quelle: 'grundrezepte',
+      hinweis: null,
+    };
+  }
+  const rest = await holeVorschlaege({ ...anfrage, anzahl: anfrage.anzahl - fest.length, gesehen: [...anfrage.gesehen, ...fest.map(kurz)] });
+  return { ...rest, ergebnis: { ...rest.ergebnis, gerichte: [...fest, ...rest.ergebnis.gerichte] }, quelle: fest.length ? 'grundrezepte' : rest.quelle };
+}
+
 /**
  * Mahlzeiten für mehrere Tage – gegen den FREIEN Vorrat, ohne eine Portion doppelt zu verplanen.
- * Kennt die Edge Function die Wochenplanung noch nicht, plant Kombi lokal nach Regeln.
+ * Zuerst Grundrezepte; nur wenn sie nicht reichen, plant die KI (bzw. Kombi lokal nach Regeln) den Rest –
+ * gegen den Vorrat, der danach noch frei ist.
  */
 export async function holeWoche(anfrage: KiAnfrage): Promise<Antwort> {
-  const r = await rufeKi({ ...anfrage, aufgabe: 'woche' });
+  const ziel = Math.max(1, Math.min(7, anfrage.anzahl));
+  const anbieter = grundrezeptAnbieter();
+  const fest = await erzeugeWoche(anbieter, { ...anfrage, anzahl: ziel, aufgabe: 'woche' });
+  for (const g of fest.gerichte) g.grundrezept = anbieter.herkunft.get(normalisiere(g.name));
+  if (fest.gerichte.length >= ziel) return { ergebnis: { ...fest, hinweis: null }, quelle: 'grundrezepte', hinweis: null };
+
+  // Rest improvisieren – gegen den Vorrat, der nach den Grundrezepten noch frei ist
+  let snapshot = anfrage.snapshot;
+  for (const g of fest.gerichte) snapshot = restSnapshot(snapshot, reservierungVon(g));
+  const rest = { ...anfrage, snapshot, anzahl: ziel - fest.gerichte.length, gesehen: [...anfrage.gesehen, ...fest.gerichte.map(kurz)], aufgabe: 'woche' as const };
+  const r = await rufeKi(rest);
+  let weitere: Ergebnis;
+  let quelle: Quelle;
+  let hinweis: string | null = null;
   if ('daten' in r && r.daten.aufgabe === 'woche' && Array.isArray(r.daten.gerichte)) {
-    return { ergebnis: r.daten as unknown as Ergebnis, quelle: 'ki', hinweis: null };
+    weitere = r.daten as unknown as Ergebnis;
+    quelle = 'ki';
+  } else {
+    hinweis = 'daten' in r ? ALTE_VERSION : r.hinweis;
+    weitere = await erzeugeWoche(regelbasiert(), rest);
+    quelle = 'demo';
   }
-  const hinweis = 'daten' in r ? ALTE_VERSION : r.hinweis;
-  return { ergebnis: await erzeugeWoche(regelbasiert(), { ...anfrage, aufgabe: 'woche' }), quelle: 'demo', hinweis };
+  return {
+    ergebnis: { ...weitere, gerichte: [...fest.gerichte, ...weitere.gerichte] },
+    quelle: fest.gerichte.length ? 'grundrezepte' : quelle,
+    hinweis,
+  };
 }
 
 export type KomponentenAntwort = { ergebnis: KomponentenErgebnis; quelle: Quelle; hinweis: string | null };

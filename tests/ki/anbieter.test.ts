@@ -112,7 +112,7 @@ describe('Prompt', () => {
     assert.deepEqual(json.inventar.map((x: { typ: string }) => x.typ).filter((t: string, i: number, l: string[]) => l.indexOf(t) === i),
       ['komplettgericht', 'komponente', 'zutat'], 'nach Art geordnet');
     assert.doesNotMatch(text, /€|günstig/i, 'kein Geld im Prompt');
-    assert.deepEqual(json.kuehlschrank_reste, [{ id: 'k1', name: 'halbe Paprika', menge: null }], 'Menge unbekannt – keine Zahl');
+    assert.deepEqual(json.kuehlschrank_reste, [{ id: 'k1', name: 'halbe Paprika', menge: null, bald_weg: true }], 'Menge unbekannt – keine Zahl');
     assert.ok(json.immer_da.some((x: { id: string }) => x.id === 'g-salz'));
     assert.match(text, /- Curry A/);
     assert.match(text, /vorerst meiden: Gerichtstyp curry/);

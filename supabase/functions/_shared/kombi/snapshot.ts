@@ -54,8 +54,11 @@ export function saubereRichtung(wert: unknown): Gewuerzrichtung | null {
   return GEWUERZRICHTUNGEN.find((r) => r === wert) ?? null;
 }
 
-/** Gilt immer als vorhanden und wird in der App sichtbar angezeigt. */
-export const GRUNDAUSSTATTUNG = ['Wasser', 'Salz', 'Pfeffer', 'Öl'] as const;
+/**
+ * Gilt immer als vorhanden und wird in der App sichtbar angezeigt – nie eingeplant, abgebucht oder eingekauft. Zwiebeln, Möhren und Knoblauch
+ * gehören laut Grundvorrat des Food-Baukastens dazu („nicht extra einplanen“).
+ */
+export const GRUNDAUSSTATTUNG = ['Wasser', 'Salz', 'Pfeffer', 'Öl', 'Zwiebeln', 'Möhren', 'Knoblauch'] as const;
 
 const MAX_KUEHLSCHRANK = 20;
 
@@ -113,7 +116,17 @@ function einheitVon(z: BestandZeile): Einheit {
   return EINHEITEN.find((e) => e === z.einheit) ?? 'portion';
 }
 
-export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, datum: string): Snapshot {
+/** Klingt eine genannte Zutat nach Rest („halbe Paprika“, „Rest Reis“, „angebrochene Packung“)? */
+export function klingtNachRest(text: string): boolean {
+  return /\b(halbe?[nrs]?|viertel|rest\w*|angebrochen\w*|offen\w*|geoeffnet\w*|uebrig\w*|bald|weg|etwas|bisschen|wenig)\b/.test(normalisiere(text));
+}
+
+/**
+ * Snapshot für die Vorschläge. kuehlschrankText = was der Nutzer zusätzlich zu Hause hat (nicht im Vorrat,
+ * Menge unbekannt, wird nie abgebucht). Als „bald verbrauchen“ zählt davon nur, was nach Rest klingt –
+ * oder alles, wenn ausdrücklich Reste verwertet werden sollen.
+ */
+export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, datum: string, optionen: { alleReste?: boolean } = {}): Snapshot {
   const zutaten: SnapshotZutat[] = [];
   const abgelaufen: Snapshot['abgelaufen'] = [];
 
@@ -156,6 +169,7 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
   }
 
   kuehlschrankEintraege(kuehlschrankText).forEach((name, i) => {
+    const rest = optionen.alleReste === true || klingtNachRest(name);
     zutaten.push({
       id: `k${i + 1}`,
       quelle: 'kuehlschrank',
@@ -170,10 +184,9 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       groesse_g: null,
       zusammensetzung: null,
       notiz: null,
-      // Spontan genannte Reste sind meist angebrochen – bevorzugt verbrauchen.
-      bald_verbrauchen: true,
+      bald_verbrauchen: rest,
       geoeffnet: false,
-      rest: true,
+      rest,
       tage_bis_ablauf: null,
       aufgetaut: false,
       gerichtstypen: null,

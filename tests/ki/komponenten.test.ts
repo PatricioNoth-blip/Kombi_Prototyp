@@ -26,7 +26,7 @@ const HAUSHALT = [
 const tomatenBasisRoh = () => ({
   name: 'Tomaten-Sugo', rolle: 'rot', richtung: 'italienisch', gerichtstypen: ['pasta', 'pizza', 'wrap', 'suppe', 'auflauf', 'eintopf'],
   verwendung: ['Pasta', 'Shakshuka'], beschreibung: 'Tomaten mit Zwiebeln und Knoblauch eingekocht.',
-  zutaten: [{ id: 'b20', menge: 800 }, { id: 'b21', menge: 150 }, { name: 'Knoblauch', menge: 10, einheit: 'g' }, { id: 'g-oel' }],
+  zutaten: [{ id: 'b20', menge: 800 }, { id: 'b21', menge: 150 }, { name: 'Oregano', menge: 5, einheit: 'g' }, { id: 'g-oel' }],
   portionen: 6, portion_g: 150, lagerort: 'gefrierfach',
 });
 
@@ -75,7 +75,7 @@ describe('Komponenten-Vorschläge prüfen', () => {
       ['Gehackte Tomaten (Dose)', 'bestand', 800],
       ['Zwiebeln', 'bestand', 100],          // nur 100 g da …
       ['Zwiebeln', 'einkauf', 50],           // … 50 g fehlen
-      ['Knoblauch', 'einkauf', 10],
+      ['Oregano', 'einkauf', 5],
       ['Öl', 'grundausstattung', null],
     ]);
     assert.equal('kosten' in k, false, 'keine Kosten');
@@ -142,7 +142,7 @@ describe('Komponente übernehmen – erst nach Bestätigung', () => {
       ['komponente', 'rot', 'selbstgemacht', 'portion', 'gefrierfach'],
     );
     assert.equal('kosten_cent' in sorte, false, 'kein Preis');
-    assert.deepEqual(sorte.zusammensetzung, ['Gehackte Tomaten (Dose)', 'Zwiebeln', 'Knoblauch']);
+    assert.deepEqual(sorte.zusammensetzung, ['Gehackte Tomaten (Dose)', 'Zwiebeln', 'Oregano']);
     assert.deepEqual(sorte.gerichtstypen, ['pasta', 'pizza', 'wrap', 'suppe', 'auflauf', 'eintopf']);
   });
 });

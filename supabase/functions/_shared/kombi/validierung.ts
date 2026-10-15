@@ -74,6 +74,18 @@ function portionenAus(rz: RohZutat | undefined, z: SnapshotZutat, personen: numb
   return Math.min(MAX_PORTIONEN, Math.max(0.25, Math.round(wert * 4) / 4));
 }
 
+/**
+ * Menge in der Einheit der Sorte: eine genaue Angabe (menge in genau dieser Einheit, ohne Portionen –
+ * so rechnen die Grundrezepte) oder aus Portionen.
+ */
+function mengeFuer(rz: RohZutat | undefined, z: SnapshotZutat, personen: number): number {
+  const genau = Number(rz?.menge);
+  if (rz?.portionen == null && rz?.bloecke == null && rz?.einheit === z.einheit && Number.isFinite(genau) && genau > 0) {
+    return z.einheit === 'g' || z.einheit === 'ml' ? Math.min(100_000, Math.round(genau)) || 1 : Math.min(500, Math.ceil(genau - 1e-9));
+  }
+  return mengeAusPortionen(portionenAus(rz, z, personen), z.einheit, z.portion_menge);
+}
+
 const aufzaehlung = (namen: string[]) =>
   namen.length <= 1 ? namen.join('') : `${namen.slice(0, -1).join(', ')} und ${namen[namen.length - 1]}`;
 
@@ -88,9 +100,9 @@ export function gerichtsartVon(zutaten: GerichtZutat[]): Gerichtsart {
 export function rettetVon(zutaten: GerichtZutat[], snapshot: Snapshot): string[] {
   return zutaten
     .filter((z) => {
-      if (z.quelle === 'kuehlschrank') return true;
-      if (z.quelle !== 'bestand') return false;
       const s = snapshot.zutaten.find((x) => x.id === z.id);
+      if (z.quelle === 'kuehlschrank') return !!s?.rest;
+      if (z.quelle !== 'bestand') return false;
       return z.geoeffnet || z.bald_verbrauchen || !!s?.rest || !!s?.aufgetaut;
     })
     .map((z) => z.name);
@@ -115,8 +127,13 @@ export function warumJetzt(zutaten: GerichtZutat[], fehlt: FehlendeZutat[], snap
     const tage = snapshot?.zutaten.find((s) => s.id === z.id)?.tage_bis_ablauf ?? null;
     gruende.push(`${z.name} ${ablaufText(tage)}.`);
   }
-  const reste = zutaten.filter((z) => z.quelle === 'kuehlschrank').map((z) => z.name);
+  const genannt = zutaten.filter((z) => z.quelle === 'kuehlschrank');
+  // ohne Snapshot (ältere Aufrufe) gelten genannte Zutaten als Reste
+  const istRest = (z: GerichtZutat) => !snapshot || !!snapshot.zutaten.find((s) => s.id === z.id)?.rest;
+  const reste = genannt.filter(istRest).map((z) => z.name);
+  const extra = genannt.filter((z) => !istRest(z)).map((z) => z.name);
   if (reste.length) gruende.push(`Verwertet deine Reste: ${reste.join(', ')}.`);
+  if (extra.length) gruende.push(`Nutzt, was du zusätzlich da hast: ${extra.join(', ')}.`);
   if (fehlt.length === 0) gruende.push('Du hast alles zuhause.');
   else if (fehlt.length === 1) gruende.push('Du hast fast alles zuhause.');
   return gruende;
@@ -172,7 +189,7 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
       fehltName(kuerze(rz?.name ?? rz?.id, 60), 'nicht_im_bestand', null);
       continue;
     }
-    const menge = z.quelle === 'bestand' ? mengeAusPortionen(portionenAus(rz, z, personen), z.einheit, z.portion_menge) : null;
+    const menge = z.quelle === 'bestand' ? mengeFuer(rz, z, personen) : null;
     const schon = zutaten.find((x) => x.id === z.id);
     if (schon) {
       if (schon.menge !== null && menge !== null) schon.menge += menge;

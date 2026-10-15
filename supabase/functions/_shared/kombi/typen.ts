@@ -233,6 +233,8 @@ export type Gericht = {
   bewertung: number;
   /** welches Bild gebraucht wird – aus den Rezeptdaten gebaut (ältere Gerichte: fehlt) */
   bild?: BildAnfrage | null;
+  /** festes Grundrezept (id aus grundrezepte.ts) – fehlt bei Ideen der KI bzw. der Kombi-Regeln */
+  grundrezept?: string;
 };
 
 export type Einkaufsvorschlag = {

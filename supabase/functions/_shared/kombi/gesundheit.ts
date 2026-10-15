@@ -7,7 +7,7 @@ import { erzeugeVorschlaege } from './engine.ts';
 import { kiKonfiguration } from './anbieter/konfiguration.ts';
 
 /** Version der Kombi-Engine – steht in App und Edge Function; weicht sie ab, ist die Function veraltet. */
-export const ENGINE_VERSION = '2026-10-15.1';
+export const ENGINE_VERSION = '2026-10-15.2';
 
 export type KiProbe = {
   ok: boolean;

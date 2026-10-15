@@ -4,8 +4,9 @@ import { mangelVorschlaege, type Einkaufsliste, type PlanStand } from '../supaba
 import { restSnapshot } from '../supabase/functions/_shared/kombi/planung.ts';
 import { erzeugeKomponenten, erzeugeVorschlaege } from '../supabase/functions/_shared/kombi/engine.ts';
 import { regelbasiert } from '../supabase/functions/_shared/kombi/anbieter/regelbasiert.ts';
+import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
 import type { Sorte } from './api';
-import { baueSnapshotAus, gespeicherteOptionen } from './essenApi';
+import { baueSnapshotAus, gespeicherteOptionen, grundrezeptVorschlaege } from './essenApi';
 import { alsVorratSorte, type Haushaltsdaten } from './haushalt';
 import { GerichtBild } from './GerichtBild';
 import { Blatt } from './Blatt';
@@ -50,8 +51,8 @@ function optionenAusEssen(): Optionen {
 }
 
 /**
- * Ein Vorschlag aus dem freien Vorrat – lokal nach Kombi-Regeln, ohne KI-Aufruf: schnell,
- * nachvollziehbar und ohne erfundene Werte. Weitere Ideen (auch von der KI) gibt es unter „Essen“.
+ * Vorschläge aus dem freien Vorrat – lokal, ohne KI-Aufruf: zuerst direkt kochbare Grundrezepte, nur wenn
+ * es zu wenige sind, ergänzen die Kombi-Regeln. Weitere Ideen (auch von der KI) gibt es unter „Essen“.
  */
 export type LokaleIdeen = { gerichte: Gericht[]; komponenten: KomponentenVorschlag[] };
 
@@ -62,11 +63,12 @@ export function useLokaleIdeen(bestand: Sorte[] | null, reserviert: Map<number, 
     let aktiv = true;
     const snapshot = restSnapshot(baueSnapshotAus(bestand, ''), reserviert);
     const basis = { snapshot, optionen: optionenAusEssen(), gesehen: [], favoriten: [], feedback: [], modus: { art: 'normal' as const } };
+    const fest = grundrezeptVorschlaege({ ...basis, anzahl: 3 }).slice(0, 3);
     Promise.all([
-      erzeugeVorschlaege(regelbasiert(), { ...basis, anzahl: 3 }),
+      fest.length >= 3 ? null : erzeugeVorschlaege(regelbasiert(), { ...basis, gesehen: fest.map(kurz), anzahl: 3 - fest.length }),
       erzeugeKomponenten(regelbasiert(), { ...basis, anzahl: 6, aufgabe: 'komponenten' }),
     ]).then(([g, k]) => {
-      if (aktiv) setIdeen({ gerichte: g.gerichte, komponenten: k.komponenten });
+      if (aktiv) setIdeen({ gerichte: [...fest, ...(g?.gerichte ?? [])], komponenten: k.komponenten });
     }).catch(() => {
       if (aktiv) setIdeen({ gerichte: [], komponenten: [] });
     });
@@ -216,7 +218,7 @@ function HeldKarte({ v, onKochen }: { v: StartVorschlag; onKochen: () => void })
     <article className="held-karte">
       <div className="held-bild"><GerichtBild g={g} groesse="held" suchen /></div>
       <div className="held-text">
-        <p className="held-ueber">{geplantHeute ? 'Für heute geplant' : g.fehlt.length === 0 ? 'Aus deinem Vorrat' : 'Fast alles im Vorrat'}</p>
+        <p className="held-ueber">{geplantHeute ? 'Für heute geplant' : g.fehlt.length > 0 ? 'Fast alles im Vorrat' : g.grundrezept ? 'Grundrezept aus deinem Vorrat' : 'Aus deinem Vorrat'}</p>
         <h2 className="held-name">{g.name}</h2>
         {g.beschreibung && <p className="held-satz">{g.beschreibung}</p>}
         <p className="fakten">
