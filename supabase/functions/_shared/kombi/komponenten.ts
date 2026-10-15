@@ -4,7 +4,7 @@
 //   B) neu       – besonders nützlich, aber es fehlt noch etwas („Dafür fehlen noch: …“)
 //
 // Die KI (oder der Katalog im Demo-Modus) liefert Idee, Zutaten, Mengen und Verwendungen.
-// Die Software prüft alles gegen den Vorrat, rechnet Kosten und bewertet die Nutzbarkeit –
+// Die Software prüft alles gegen den Vorrat, rechnet Mengen und bewertet die Nutzbarkeit –
 // die Sterne sind KEINE Zahl der KI. Gespeichert wird erst nach „Komponente übernehmen“.
 import { bildAnfrageFuerKomponente } from './bilder.ts';
 import type {
@@ -12,9 +12,8 @@ import type {
   SnapshotZutat,
 } from './typen.ts';
 import { EINHEITEN, GERICHTSTYPEN, GEWUERZRICHTUNGEN } from './typen.ts';
-import { GRUNDAUSSTATTUNG, bekannterPreisInfo } from './snapshot.ts';
+import { GRUNDAUSSTATTUNG } from './snapshot.ts';
 import { mengeAusPortionen } from './mengen.ts';
-import { type KostenPosten, summiereKosten, verbrauchswert } from './kosten.ts';
 import { bereinigeText, deckungstext, pruefeName } from './wahrheit.ts';
 import { fehlendeRollen, GERICHT_NAME, partnerVon, ROLLEN, TYPISCHE_GERICHTE } from './rollen.ts';
 import { findeSorte, inSorteneinheit, produktSchluessel, verwendbar, type VorratSorte } from './einkaufsliste.ts';
@@ -109,19 +108,16 @@ export function pruefeKomponente(roh: RohKomponente | null | undefined, snapshot
   const pg = Number(roh.portion_g);
 
   const zutaten: KomponentenZutat[] = [];
-  const posten: KostenPosten[] = [];
-  const einkauf: KostenPosten[] = [];
   const bestand = snapshot.zutaten;
 
   for (const rz of (Array.isArray(roh.zutaten) ? roh.zutaten : []).slice(0, 15)) {
     const z = findeImSnapshot(snapshot, rz?.id, rz?.name);
     if (z?.quelle === 'grundausstattung') {
-      zutaten.push({ name: z.name, block_typ_id: null, menge: null, einheit: null, quelle: 'grundausstattung', kosten_cent: null, dringend: false });
+      zutaten.push({ name: z.name, block_typ_id: null, menge: null, einheit: null, quelle: 'grundausstattung', dringend: false });
       continue;
     }
     if (z?.quelle === 'kuehlschrank') {
-      zutaten.push({ name: z.name, block_typ_id: null, menge: null, einheit: null, quelle: 'kuehlschrank', kosten_cent: null, dringend: true });
-      posten.push({ name: z.name, cent: null });
+      zutaten.push({ name: z.name, block_typ_id: null, menge: null, einheit: null, quelle: 'kuehlschrank', dringend: true });
       continue;
     }
     if (z?.quelle === 'bestand' && z.anzahl !== null) {
@@ -132,32 +128,18 @@ export function pruefeKomponente(roh: RohKomponente | null | undefined, snapshot
           ? (zahl(rz?.menge) as number)
           : mengeAusPortionen(1, z.einheit, z.portion_menge);
       const nimm = Math.min(gewuenscht, z.anzahl);
-      const wert = verbrauchswert(nimm, z);
-      zutaten.push({ name: z.name, block_typ_id: z.block_typ_id, menge: nimm, einheit: z.einheit, quelle: 'bestand', kosten_cent: wert, dringend: dringend(z) });
-      posten.push({ name: z.name, cent: wert });
+      zutaten.push({ name: z.name, block_typ_id: z.block_typ_id, menge: nimm, einheit: z.einheit, quelle: 'bestand', dringend: dringend(z) });
       const rest = gewuenscht - nimm;
       if (rest > 0) {
         // Teilweise da: Rest muss eingekauft werden.
-        const w = verbrauchswert(rest, z);
-        zutaten.push({ name: z.name, block_typ_id: z.block_typ_id, menge: rest, einheit: z.einheit, quelle: 'einkauf', kosten_cent: w, dringend: false });
-        posten.push({ name: z.name, cent: w });
-        einkauf.push({ name: z.name, cent: z.kosten_cent === null ? null : Math.ceil(rest / Math.max(1, z.kosten_menge)) * z.kosten_cent });
+        zutaten.push({ name: z.name, block_typ_id: z.block_typ_id, menge: rest, einheit: z.einheit, quelle: 'einkauf', dringend: false });
       }
       continue;
     }
-    // Nicht im Vorrat → Einkauf. Menge und Einheit laut Vorschlag, Preis nur, wenn bekannt.
+    // Nicht im Vorrat → Einkauf. Menge und Einheit laut Vorschlag.
     const name = kuerze(rz?.name, 40);
     if (!name) continue;
-    const menge = zahl(rz?.menge);
-    const einheit = EINHEITEN.find((e) => e === rz?.einheit) ?? null;
-    const preis = bekannterPreisInfo(snapshot, name);
-    const passend = preis && menge !== null && einheit === preis.einheit;
-    zutaten.push({
-      name, block_typ_id: null, menge: menge, einheit, quelle: 'einkauf',
-      kosten_cent: passend ? verbrauchswert(menge as number, preis) : null, dringend: false,
-    });
-    posten.push({ name, cent: passend ? verbrauchswert(menge as number, preis) : null });
-    einkauf.push({ name, cent: passend ? Math.ceil((menge as number) / Math.max(1, preis.kosten_menge)) * preis.kosten_cent : null });
+    zutaten.push({ name, block_typ_id: null, menge: zahl(rz?.menge), einheit: EINHEITEN.find((e) => e === rz?.einheit) ?? null, quelle: 'einkauf', dringend: false });
   }
   if (zutaten.filter((z) => z.quelle !== 'grundausstattung').length === 0) return null;
 
@@ -206,13 +188,11 @@ export function pruefeKomponente(roh: RohKomponente | null | undefined, snapshot
       .filter(Boolean)
       .slice(0, 10),
     nutzbarkeit,
-    kosten: summiereKosten(posten, portionen),
     naehrwerte: summiereNaehrwerte(zutaten.map((z) => ({
       name: z.name,
       menge: z.quelle === 'bestand' || (z.quelle === 'einkauf' && z.block_typ_id !== null) ? z.menge : null,
       naehrwert: z.block_typ_id !== null ? bestand.find((b) => b.block_typ_id === z.block_typ_id)?.naehrwert ?? null : null,
     })), portionen),
-    einkauf: summiereKosten(einkauf, 1),
     verwertet,
     partner,
     typ: fehlend.length ? 'neu' : 'verwerten',
@@ -235,9 +215,6 @@ export function komponenteAlsSorte(k: KomponentenVorschlag) {
     zusammensetzung: [...new Set(k.zutaten.filter((z) => z.quelle !== 'grundausstattung').map((z) => z.name))],
     gerichtstypen: k.gerichtstypen,
     richtung: k.richtung,
-    // Herstellungskosten nur, wenn vollständig berechnet: „X € für N Portionen“
-    kosten_cent: k.kosten.status === 'berechnet' ? k.kosten.gesamt_cent : null,
-    kosten_menge: k.portionen,
   };
 }
 
@@ -365,7 +342,7 @@ export type Produktion = {
   zeilen: ProduktionsZeile[];
   /** wird beim Bestätigen entnommen (höchstens, was da ist) */
   posten: { block_typ_id: number; name: string; menge: number; einheit: Einheit; art: VorratSorte['art'] }[];
-  /** Zutaten, die nicht als Sorte geführt werden – ihre Kosten sind unbekannt */
+  /** Zutaten, die nicht als Sorte geführt werden – sie werden nicht gebucht */
   nicht_erfasst: string[];
   fehlt: { name: string; menge: number | null; einheit: Einheit | null }[];
 };

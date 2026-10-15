@@ -13,15 +13,14 @@ Aktion anbieten, Details nur bei Bedarf.** Gestaltung: warmes Papier als Grund, 
 Hauptaktion, Espresso für Text, Überschriften in einer Buch-Serifen (iOS: New York) – wie in einem Kochbuch; hell und dunkel,
 alle Texte mit WCAG-AA-Kontrast. Jeder Bereich erklärt sich oben in einem Satz, das **?** oben rechts öffnet „So funktioniert
 Kombi“ mit allen Begriffen in einfacher Sprache (Vorrat, Einbuchen, Entnehmen, Produktion, Komponente, Einplanen, „wird knapp“,
-„aufgebraucht“, „Preis unbekannt“ …). Was man in einem Bereich geöffnet oder gefiltert hat, bleibt beim Wechsel erhalten; jede
+„aufgebraucht“, „kcal unbekannt“ …). Was man in einem Bereich geöffnet oder gefiltert hat, bleibt beim Wechsel erhalten; jede
 Ansicht hat eine Adresse (z. B. `#/vorrat/gefrierfach`), „Zurück“ funktioniert wie gewohnt.
 
 - **🏠 Start:** Die Überschrift ist die Frage **„Was möchtest du heute kochen?“**. Darunter **ein** großer Vorschlag aus dem
   Vorrat (für heute Geplantes zuerst) mit Bild, Name, einem Satz, Zeit · Portionen · „Alles da“, „Verbraucht zuerst: …“ und der
   Hauptaktion **Jetzt kochen** – ohne Scrollen sichtbar, auch auf dem iPhone SE. Darunter „Oder lieber …“ mit zwei weiteren
   Ideen. Kennzahlen stehen nachrangig ganz unten in **„Dein Haushalt“** als ruhige Liste: Vorrat (bald verbrauchen),
-  Einkaufsliste (offen, aufgebraucht/knapp), Produktion (nachkochen, vorgemerkt), Heute gegessen (kcal, Kosten) und Ausgaben im
-  Monat – ein Tipp öffnet jeweils Details. Neue Nutzer sehen einmal „Neu hier? So funktioniert Kombi“ (3 Schritte). Passt
+  Einkaufsliste (offen, aufgebraucht/knapp), Produktion (nachkochen, vorgemerkt) und Heute gegessen (kcal) – ein Tipp öffnet jeweils Details. Neue Nutzer sehen einmal „Neu hier? So funktioniert Kombi“ (3 Schritte). Passt
   gerade kein ganzes Gericht, sagt der Start das offen und bietet zwei nächste Schritte an („Ideen mit kleinem Einkauf“,
   „Eingekauftes in den Vorrat“).
 - **🍽️ Essen:** „Heute“ – Ideen aus dem Vorrat (KI oder Kombi-Regeln), „Nur Reste verwerten“. Jede Karte hat direkt
@@ -30,17 +29,17 @@ Ansicht hat eine Adresse (z. B. `#/vorrat/gefrierfach`), „Zurück“ funktioni
   „Woche“ – flexibel planen, tauschen, verschieben, entfernen.
 - **🍳 Rezeptseite:** Jedes „Kochen“ (Start, Essen, Woche, Gemerkt) öffnet eine **eigene Seite**: großes Bild, Name, Dauer,
   Portionen, „Alles da“/„2 fehlen“, Zutaten mit Mengen (was fehlt oder nicht reicht, ist markiert), Zubereitung mit
-  nummerierten Schritten, unter „Preis und Nährwerte“ die Details. **Anschauen ändert nichts.** „Kochen starten“ fragt, was aus
+  nummerierten Schritten, unter „Nährwerte“ die Details. **Anschauen ändert nichts.** „Kochen starten“ fragt, was aus
   dem Vorrat abgezogen wird; danach führt der **Kochmodus** Schritt für Schritt (große Schrift, unten **Zurück · Weiter ·
   Fertig**, Zutaten jederzeit einblendbar, Display bleibt an) bis zu „Guten Appetit!“ mit dem, was im Vorrat bleibt – und
   Rückgängig.
 - **📦 Vorrat:** Suche, „Dein Vorrat · 16 Artikel“ mit **einer** Zeile zur Lage („2 bald verbrauchen · 1 wird knapp ·
-  1 aufgebraucht“) und dem Wert nur aus bekannten Preisen, „Jetzt wichtig“, Lagerorte als Fotokarten, „Wichtigste Vorräte“ mit
+  1 aufgebraucht“), „Jetzt wichtig“, Lagerorte als Fotokarten, „Wichtigste Vorräte“ mit
   Zustand, alle Sorten. **„Wird knapp“** (noch etwas da, aber unter dem Mindestbestand) und **„aufgebraucht“** (nichts mehr da)
   sind getrennte Zustände mit eigener Farbe. Eine Sorte im Detail: Menge und Zustand, Entnehmen, Damit möglich, Passt dazu,
-  Auftauen – und unter „Details“ Preis, Haltbarkeit, Nährwerte, Zusammensetzung, Nutzung, Chargen. Findet die Suche nichts,
+  Auftauen – und unter „Details“ Haltbarkeit, Nährwerte, Zusammensetzung, Nutzung, Chargen. Findet die Suche nichts,
   gibt es „Suche leeren“ und „Etwas Neues eintragen“.
-- **Einbuchen** (= in den Vorrat aufnehmen): **＋** oben im Vorrat → Sorte → Menge, optional MHD und bezahlter Betrag (zählt dann als Einkauf).
+- **Einbuchen** (= in den Vorrat aufnehmen): **＋** oben im Vorrat → Sorte → Menge, optional MHD.
 - **Entnehmen:** zuerst aus geöffneten Chargen, dann aus der mit dem frühesten Ablauf, sonst aus der ältesten (FIFO).
 - **Rückgängig:** Nach jeder Buchung erscheint einige Sekunden lang „Rückgängig“. Das bucht eine Korrektur, ohne etwas zu löschen.
 - **🍲 Produktion** (= Vorkochen auf Vorrat): „Jetzt sinnvoll“ mit Foto und Grund („Läuft bald ab: Gehackte Tomaten“),
@@ -48,10 +47,11 @@ Ansicht hat eine Adresse (z. B. `#/vorrat/gefrierfach`), „Zurück“ funktioni
   „Vorkochen“, wenn es eine passende Idee gibt), Empfohlen (Kombi-Regeln, „Neue Ideen“ fragt die KI), „Essen diese Woche“ (nur
   Mahlzeiten – dieselbe Zählung wie Essen → Woche), Vorgemerkt, deine Komponenten, größer vorkochen, **Verlauf**.
 - **🛒 Einkauf:** „Zum Einkaufen“, „Für geplante Gerichte“, „Im Wagen“, „Fast leer oder aufgebraucht“ (Zutaten unter dem
-  Mindestbestand) – verrechnet mit dem Vorrat, Kosten nur aus bekannten Preisen. Abhaken bucht nichts; „Einbuchen“ übernimmt
+  Mindestbestand) – verrechnet mit dem Vorrat. Abhaken bucht nichts; „Einbuchen“ übernimmt
   die tatsächlich gekaufte Menge in den Vorrat.
-- **Ehrlich bei fehlenden Daten, überall gleich:** „Preis unbekannt“ und „kcal unbekannt“, wenn nichts hinterlegt ist,
-  „ab …“ (mit „N ohne Preis“), wenn nur ein Teil bekannt ist – nie geschätzt, nie als 0.
+- **Ohne Geld:** Kombi rechnet nur mit Mengen – keine Preise, Kosten oder Ausgaben.
+- **Ehrlich bei fehlenden Daten, überall gleich:** „kcal unbekannt“, wenn keine Nährwerte hinterlegt sind, „ab …“, wenn nur
+  ein Teil bekannt ist – nie geschätzt, nie als 0.
 - Hell- und Dunkelmodus (eigene, warme Farben für beide) folgen der Systemeinstellung.
 
 > **Ohne Login:** Wer die App-Adresse kennt, kann den Bestand ansehen und ändern. Die Adresse also
@@ -68,10 +68,10 @@ Ansicht hat eine Adresse (z. B. `#/vorrat/gefrierfach`), „Zurück“ funktioni
    2. [`supabase/migrations/20260927180000_ohne_login.sql`](supabase/migrations/20260927180000_ohne_login.sql): gibt der App ohne Login Zugriff
    3. [`supabase/seed.sql`](supabase/seed.sql): Beispieldaten, 17 Sorten vom Kochtag 27.09.2026
    4. [`supabase/migrations/20260928090000_was_essen.sql`](supabase/migrations/20260928090000_was_essen.sql): Lagerort und Tabellen für „Was essen wir?“
-   5. [`supabase/migrations/20260929090000_baukasten.sql`](supabase/migrations/20260929090000_baukasten.sql): Art, Einheit, Preisbezug, Zusammensetzung, Ablaufdatum, „geöffnet“, strukturierte Rezepte
+   5. [`supabase/migrations/20260929090000_baukasten.sql`](supabase/migrations/20260929090000_baukasten.sql): Art, Einheit, Zusammensetzung, Ablaufdatum, „geöffnet“, strukturierte Rezepte
    6. [`supabase/migrations/20260930090000_planung_einkauf.sql`](supabase/migrations/20260930090000_planung_einkauf.sql): Wochenplan, Einkaufsliste, Auftauen, Kochen/Herstellen in einem Schritt, Funktion der Komponenten, Nutzung
-   7. [`supabase/migrations/20261001090000_kosten_naehrwerte.sql`](supabase/migrations/20261001090000_kosten_naehrwerte.sql): echte Kosten je Charge, Protokoll von Mahlzeiten und Produktion (Geld im Monat), Einkauf mit Preis, Nährwerte
-   8. [`supabase/migrations/20261002090000_ausgaben.sql`](supabase/migrations/20261002090000_ausgaben.sql): sonstige Ausgaben (Kantine, Bäcker …) – eintragen und entfernen, nie löschen
+   7. [`supabase/migrations/20261001090000_kosten_naehrwerte.sql`](supabase/migrations/20261001090000_kosten_naehrwerte.sql): Protokoll von Mahlzeiten und Produktion, Nährwerte (die Preis-Spalten darin nutzt die App nicht mehr)
+   8. [`supabase/migrations/20261002090000_ausgaben.sql`](supabase/migrations/20261002090000_ausgaben.sql): sonstige Ausgaben – nur für die Vollständigkeit des Schemas, die App nutzt sie nicht mehr
    9. [`supabase/migrations/20261003090000_bilder_zutaten.sql`](supabase/migrations/20261003090000_bilder_zutaten.sql): eigene Bilder je Sorte (`image_*`), semantische Zutat je Sorte, Bild-Cache (`bild`), Speicher-Bucket „bilder“
 
    Bereits ausgeführte Dateien einfach überspringen und mit der nächsten weitermachen. Jede Datei nur **einmal** ausführen.
@@ -123,7 +123,7 @@ Zum Testen auf dem Handy im selben WLAN: `npm run dev -- --host` starten und die
 
 Kombi fragt nicht „Welches Rezept möchtest du kochen?“, sondern „Was machen wir aus dem, was da ist?“.
 
-- **Eine Karte nach der anderen.** Name, ein appetitlicher Satz, Bild, Zeit, Portionen, echte Kosten, kcal, verwendeter Vorrat, was fehlt, „Verbraucht zuerst: …“ – und die Aktionen **Jetzt kochen**, **Merken**, **Einplanen**. Das ganze Rezept steht auf der Rezeptseite, nicht klein in der Karte.
+- **Eine Karte nach der anderen.** Name, ein appetitlicher Satz, Bild, Zeit, Portionen, kcal, verwendeter Vorrat, was fehlt, „Verbraucht zuerst: …“ – und die Aktionen **Jetzt kochen**, **Merken**, **Einplanen**. Das ganze Rezept steht auf der Rezeptseite, nicht klein in der Karte.
 - **Komplettgerichte** haben eine eigene Rolle: „heute einfach die Pizza“, Pizza mit Beilage oder ein Rezept aus Komponenten.
 - **Merken** → gefällt mir + Rezept speichern (gibt es den Namen schon, wird nicht doppelt gespeichert), **Einplanen** (für einen Tag) oder **Jetzt kochen**.
 - **Die Rezeptseite** ist eine eigene, ganze Seite: Bild, Name, Dauer, Portionen, „Alles da“, Zutaten mit Mengen und Farbpunkt (was fehlt oder nicht reicht, steht dabei), Hinweise („läuft in 2 Tagen ab“, „2 davon sind für „Lasagne“ eingeplant“) und die nummerierten Schritte. **Kochen starten** zeigt genau, was abgezogen wird – beim Komplettgericht „2 Portionen TK-Pizza“, beim Rezept „2× Tomaten-Basis + 2× Linsen + 250 g Pasta“ – änderbar. Erst „Abziehen & loslegen“ bucht, und zwar alles in **einer** Transaktion (klappt ein Posten nicht, wird nichts gebucht). Danach: **Kochmodus** – ein Schritt pro Bildschirm mit Zurück / Weiter / Fertig (Display bleibt an, wo der Browser es kann), am Ende „Guten Appetit!“, „Im Vorrat bleibt“ und Rückgängig.
@@ -135,8 +135,8 @@ Kombi fragt nicht „Welches Rezept möchtest du kochen?“, sondern „Was mach
 - **Abwechslung:** über Gerichtstyp, Hauptzutat, Sattmacher, Richtung, Zubereitung, warm/kalt und Textur. Nach drei Wraps kommt kein vierter, solange es Alternativen gibt.
 - **Was muss weg?** Spontan genannte Kühlschrank-Reste werden für diese Suche berücksichtigt, aber nicht gespeichert.
 - **Immer vorhanden:** Wasser, Salz, Pfeffer, Öl. Alles andere muss im Bestand stehen.
-- **Notfall:** Reicht der Vorrat nicht, schlägt Kombi **eine** Zutat vor. Die Software bewertet dafür, wie viele Gerichte sie ermöglicht, wie gut sie zum Vorhandenen passt, Haltbarkeit, Lagerung und – nur wenn bekannt – den Preis.
-- **Idee für euren Baukasten:** Gelegentlich schlägt die KI einen neuen vorkochbaren Baustein vor (Art, Lagerort, Portionen; Kosten nur aus bekannten Preisen). Angelegt wird er erst nach „Baustein übernehmen“ im vorausgefüllten Formular.
+- **Notfall:** Reicht der Vorrat nicht, schlägt Kombi **eine** Zutat vor. Die Software bewertet dafür, wie viele Gerichte sie ermöglicht, wie gut sie zum Vorhandenen passt, Haltbarkeit und Lagerung.
+- **Idee für euren Baukasten:** Gelegentlich schlägt die KI einen neuen vorkochbaren Baustein vor (Art, Lagerort, Portionen). Angelegt wird er erst nach „Baustein übernehmen“ im vorausgefüllten Formular.
 
 ## 🍲 Produktion & Komponenten
 
@@ -144,8 +144,8 @@ Kombi ist ein Baukasten: **Zutaten** (einzelne Lebensmittel), **Komponenten** (v
 
 Komponenten haben keinen eigenen Reiter mehr, sondern erscheinen dort, wo sie gebraucht werden: „Aus deinen Komponenten“ beim Essen, „Komponenten im Bestand“ im Vorrat, Herstellen und Entdecken in der Produktion.
 
-- **Empfohlen:** Kombi rechnet Ideen aus dem Vorrat nach Regeln; „Neue Ideen“ fragt die KI – **A) verwerten**, was da ist, oder **B) neu**, mit „fehlt: …“. Die Software prüft jede Idee (nur echte Zutaten, Name passend zum Inhalt), rechnet Mengen, Kosten und Kalorien aus hinterlegten Daten und bewertet die **Nutzbarkeit** (1–5 ★) selbst.
-- **Produktion in zwei Schritten:** Portionen wählen → Zutaten werden **skaliert** und gegen den Vorrat geprüft (vorhanden / nur teilweise / fehlt / nicht im Vorrat erfasst) → optional „Fehlendes auf die Einkaufsliste“ → bestätigen mit der **tatsächlichen** Menge („3 statt 4 Portionen“ zählt) und optional MHD. Erst dann wird gebucht – **eine** Transaktion: Zutaten raus, neue Charge rein, mit den echten Kosten der entnommenen Zutaten. Gibt es die Komponente noch nicht als Sorte, wird sie dabei angelegt.
+- **Empfohlen:** Kombi rechnet Ideen aus dem Vorrat nach Regeln; „Neue Ideen“ fragt die KI – **A) verwerten**, was da ist, oder **B) neu**, mit „fehlt: …“. Die Software prüft jede Idee (nur echte Zutaten, Name passend zum Inhalt), rechnet Mengen und Kalorien aus hinterlegten Daten und bewertet die **Nutzbarkeit** (1–5 ★) selbst.
+- **Produktion in zwei Schritten:** Portionen wählen → Zutaten werden **skaliert** und gegen den Vorrat geprüft (vorhanden / nur teilweise / fehlt / nicht im Vorrat erfasst) → optional „Fehlendes auf die Einkaufsliste“ → bestätigen mit der **tatsächlichen** Menge („3 statt 4 Portionen“ zählt) und optional MHD. Erst dann wird gebucht – **eine** Transaktion: Zutaten raus, neue Charge rein. Gibt es die Komponente noch nicht als Sorte, wird sie dabei angelegt.
 - **Nichts wird automatisch gespeichert.** Vormerken legt nur einen Plan an (Fehlendes landet auf der Einkaufsliste).
 - **Nährwerte aus der Produktion:** Hat die Komponente noch keine Nährwerte, rechnet Kombi sie nach dem Herstellen aus den **tatsächlich entnommenen** Zutaten (÷ hergestellte Portionen) und hinterlegt sie – aber nur, wenn für **jede** Zutat Menge und Nährwerte bekannt sind (kein „Öl nach Gefühl“, keine nicht erfasste Zutat). Sonst bleibt „unbekannt“. Von Hand eingetragene Werte werden nie überschrieben. Eine gegessene Portion zählt danach mit ihren eigenen kcal – die Zutaten darin nicht noch einmal.
 - **Größer vorkochen?** Nur aus echten Buchungen: Wird eine selbstgemachte Komponente mindestens 2× in 8 Wochen hergestellt und regelmäßig verbraucht, schlägt Kombi eine Menge vor, die etwa 2 Wochen reicht – begrenzt durch die Haltbarkeit. Zu wenig Daten → keine Empfehlung.
@@ -157,8 +157,7 @@ Die Liste verbindet alles: Einkauf → Vorrat → Komponente → Essen → Verbr
 - **Quellen:** geplante Mahlzeiten, vorgemerkte Komponenten, fehlende Zutaten eines Rezepts, von Hand („500 g Zwiebeln“, „2 Paprika“, „Basilikum“), Mindestbestand.
 - **Verrechnet:** Gleiche Produkte werden zusammengeführt (150 g + 200 g + 300 g Zwiebeln, 200 g im Vorrat → **eine** Zeile „450 g“). Geplantes wird gegen den verwendbaren Vorrat gerechnet (Abgelaufenes zählt nicht, Geöffnetes schon), jede Menge nur einmal – der spätere Plan bekommt nur den Rest.
 - **Bedienen:** „Zum Einkaufen“ und „Für geplante Gerichte“, abhaken, Menge ändern oder etwas dazukaufen, später, löschen/ausblenden, zurückholen.
-- **Abhaken bucht nichts.** Erst „Einbuchen“ im Wagen bucht – mit der **tatsächlich** gekauften Menge (300 statt 500 g), optional MHD und bezahltem Preis (wird der neue Preis der Sorte). Jede Zeile lässt sich nur einmal einbuchen; Rückgängig geht.
-- **Kosten nur aus echten Preisen:** Summe der bekannten + „N ohne Preis“. Gerechnet wird in ganzen Packungen: 450 g gebraucht, gespeichert „0,99 € für 1 kg“ → eine Packung, 0,99 €.
+- **Abhaken bucht nichts.** Erst „Einbuchen“ im Wagen bucht – mit der **tatsächlich** gekauften Menge (300 statt 500 g), optional MHD. Jede Zeile lässt sich nur einmal einbuchen; Rückgängig geht.
 
 ## 🧊 Auftauen
 
@@ -169,7 +168,7 @@ Für heute oder morgen geplante Mahlzeiten zeigt „Für heute auftauen“, was 
 | Software (verlässlich, getestet) | KI (kreativ) |
 |---|---|
 | Bestand, Mengen, Einheiten, Portionen | Ideen und Kombinationen |
-| Kosten und Preise (siehe unten) | Namen und Beschreibungen |
+| Kalorien aus hinterlegten Nährwerten | Namen und Beschreibungen |
 | Ablauf, geöffnet, Entnahme-Reihenfolge | Zubereitung und Varianten |
 | Prüfung jedes Vorschlags, Rangfolge, Abwechslung | Interpretation des Vorhandenen |
 | Nutzbarkeit, Reservierungen, Einkaufsliste, Auftau- und Batch-Regeln | Komponenten-Ideen und wofür sie taugen |
@@ -197,32 +196,22 @@ Rezepte, Komponenten, Zutaten und Lagerorte bekommen Bilder – aber **nie eine 
 
 ## 🥕 Zutaten: Produkt → Zutat → Verwendung
 
-Die Sorte bleibt das gekaufte Produkt („REWE Strauchtomaten 500 g“, mit Preis, Menge, Lagerort). Was es als Lebensmittel **ist**, steht getrennt im Katalog `supabase/functions/_shared/kombi/zutaten.ts`: „Tomate“ – Gemüse, frisch, roh/gekocht, passt in Soße, Salat, Pasta, Bowl, Curry. Rund 80 normale Lebensmittel (Tomate, Gurke, Joghurt, Zwiebel, Knoblauch, Paprika, Kartoffeln, Karotten, Spinat, Brokkoli, Reis, Pasta, Brot, Wraps, Haferflocken, Linsen, Kichererbsen, Bohnen, Käse, Tofu, Seitan …).
+Die Sorte bleibt das gekaufte Produkt („REWE Strauchtomaten 500 g“, mit Menge und Lagerort). Was es als Lebensmittel **ist**, steht getrennt im Katalog `supabase/functions/_shared/kombi/zutaten.ts`: „Tomate“ – Gemüse, frisch, roh/gekocht, passt in Soße, Salat, Pasta, Bowl, Curry. Rund 80 normale Lebensmittel (Tomate, Gurke, Joghurt, Zwiebel, Knoblauch, Paprika, Kartoffeln, Karotten, Spinat, Brokkoli, Reis, Pasta, Brot, Wraps, Haferflocken, Linsen, Kichererbsen, Bohnen, Käse, Tofu, Seitan …).
 
 - Erkannt wird deterministisch aus dem Produktnamen (Marke, Größe, Beiwörter werden ignoriert); Spezielles vor Allgemeinem („Tomatensoße“ ist keine rohe Tomate, „Gehackte Tomaten (Dose)“ sind Dosentomaten). **Unbekanntes bleibt unbekannt** – es wird nichts geraten. Optional überschreibt die Spalte `block_typ.zutat` die Erkennung.
 - Genutzt für: das JSON an die KI (Kategorie, Verwendung), Bildsuche/-beschreibung (englische Begriffe), die Prüfung gefundener Fotos und die Regel-Vorschläge ohne KI.
 - **Ohne KI (Demo/Regeln):** Neben dem Baukasten (Basis + Protein + Sattmacher + Gemüse) gibt es eine Stufe „frische Küche“ für normale Zutaten: Salat, Bowl, Toast, Auflauf, Frühstück – z. B. „Sommer-Crunch mit Joghurt“ aus Tomate, Gurke, Joghurt oder „Überbackene Brokkoli-Pasta“. Belag wird nie über den Bestand hinaus eingeplant.
 
-### Kosten
+### Ohne Kosten
 
-Eine zentrale, deterministische Funktion (`supabase/functions/_shared/kombi/kosten.ts`):
-
-- Preis pro Einheit = gespeicherter Preis ÷ Menge, auf die er sich bezieht. **2,00 € für 4 Portionen → 0,50 € pro Portion; 2 Portionen verbraucht → 1,00 €.**
-- Gramm, ml und Stück werden genauso proportional gerechnet (1,29 € für 500 g → 125 g = 0,32 €). Gerundet wird erst am Ende.
-- Unbekannter Preis bleibt unbekannt: „Preis unbekannt“ bzw. „ab 0,40 € / Portion“, wenn nur ein Teil bekannt ist. „ca. 1,24 € / Portion“ erscheint nur, wenn alles berechnet werden konnte.
-- **Einkauf ≠ Verbrauch ≠ Herstellung:** Einkaufskosten in ganzen Packungen; Herstellungskosten einer Komponente aus ihren Zutaten; wird die fertige Komponente verwendet, zählt ihr Portionspreis – sie wird nicht noch einmal als Einkauf berechnet.
-- **Echte Kosten je Charge** (Migration 7): Jede Einbuchung mit Preis und jede Produktion merkt sich, was sie gekostet hat. Beim Kochen zählt der Wert der tatsächlich entnommenen Chargen – eine spätere Preisänderung der Sorte ändert daran nichts. Beispiel: Tomaten-Basis kostet 1,44 € für 6 Portionen → 2 Portionen verbraucht = 0,48 €.
-
-### Geld im Monat (Start)
-
-- **Für Einkäufe ausgegeben:** nur, was wirklich bezahlt wurde – Einkäufe aus der Liste und Einbuchungen mit „Bezahlt“. Einkäufe ohne Preisangabe werden gezählt, aber nicht geschätzt.
-- **Gekocht** und **Produktion:** Wert der verbrauchten Zutaten (Warenwert) – das ist kein zusätzliches Geld und wird **nie** zu den Ausgaben addiert. „Ø pro Mahlzeit“ erscheint nur, wenn für jede Mahlzeit alle Preise bekannt sind; sonst steht dort „ab …“ oder „unbekannt“.
-- **Sonstiges** (Migration 8): von Hand eingetragene Ausgaben ohne Bezug zum Vorrat, z. B. Kantine oder Bäcker. Die große Zahl ist **Einkäufe + Sonstiges** – nur echtes Geld; die Produktion steht daneben als Warenwert und wird nicht addiert.
-- **Vergleich zum Vormonat:** fair bis zum gleichen Tag (am 28. also 1.–28. des Vormonats). Gab es im Vormonat keine Ausgaben, wird nichts verglichen.
+Kombi rechnet nicht mit Geld: keine Preise, keine Kosten pro Portion, keine Ausgaben. Die Datenbank bleibt dafür
+unverändert – ältere Preis-Spalten (`kosten_cent`, `kosten_menge`) und die Tabelle `ausgabe` bleiben bestehen, die App
+liest und schreibt sie nur nicht mehr. Gespeicherte Rezepte und Vorlieben älterer Versionen funktionieren weiter; ihre
+Kostenangaben werden beim Laden ignoriert. **Nach diesem Update die Edge Function neu deployen** (siehe unten).
 
 ### Kalorien
 
-- **Heute auf dem Start:** kcal **pro Person** = kcal der tatsächlich entnommenen Mengen ÷ Portionen, summiert über die heute gekochten Mahlzeiten; dazu die heutigen Essenskosten (Warenwert der gekochten Mahlzeiten + sonstige Ausgaben von heute, z. B. Kantine) und Frühstück/Mittag/Abendessen nach Uhrzeit. „ab …“, wenn für manche Sorten Nährwerte fehlen, „kcal unbekannt“, wenn keine bekannt sind. Ein **persönliches Tagesziel** (500–8.000 kcal) lässt sich über einen Tipp auf „Heute“ setzen – es bleibt nur auf diesem Gerät; der Balken erscheint nur bei vollständig bekannten Werten.
+- **Heute auf dem Start:** kcal **pro Person** = kcal der tatsächlich entnommenen Mengen ÷ Portionen, summiert über die heute gekochten Mahlzeiten; dazu Frühstück/Mittag/Abendessen nach Uhrzeit. „ab …“, wenn für manche Sorten Nährwerte fehlen, „kcal unbekannt“, wenn keine bekannt sind. Ein **persönliches Tagesziel** (500–8.000 kcal) lässt sich über einen Tipp auf „Heute“ setzen – es bleibt nur auf diesem Gerät; der Balken erscheint nur bei vollständig bekannten Werten.
 - **Komponenten** haben eigene Nährwerte (z. B. Tomaten-Basis 45 kcal / Portion). Wird eine Portion gegessen, zählen diese 45 kcal – die Tomaten darin nicht noch einmal.
 - Nur aus hinterlegten Nährwerten (von der Packung): kcal, Eiweiß, Kohlenhydrate, Fett – **je 100 g/ml** oder je Portion/Stück. Leer = **unbekannt, nicht 0**.
 - Gerichte rechnen aus den echten Mengen: „620 kcal / Portion“, „ab 450 kcal“, wenn nur ein Teil bekannt ist, sonst „kcal unbekannt“. Wasser, Salz und Pfeffer zählen als 0 kcal, Öl ohne Menge bleibt unbekannt.
@@ -276,10 +265,10 @@ Die Kette ist nachvollziehbar: **App → Edge Function `was-essen` → KI-Anbiet
 
 ### Was die KI bekommt und liefert
 
-- **Strukturiertes JSON statt Stichworten:** `{"inventar":[{"id":"b31","name":"Strauchtomaten","typ":"zutat","rolle":"Gemüse","menge":500,"einheit":"g","portionen":5,"lagerort":"kuehlschrank","ablauf_in_tagen":null,"geoeffnet":false,…,"zutat":{"id":"tomate","kategorie":"gemuese","verwendung":["sosse","salat","pasta","bowl","curry"]},"preisklasse":"€€"}],"kuehlschrank_reste":[{"id":"k1","name":"halbe Paprika","menge":null}],"immer_da":[…]}` – `menge: null` heißt **unbekannt** (nie eine Zahl behaupten), `zusammensetzung: null` heißt **unbekannt** (nichts über den Inhalt behaupten).
+- **Strukturiertes JSON statt Stichworten:** `{"inventar":[{"id":"b31","name":"Strauchtomaten","typ":"zutat","rolle":"Gemüse","menge":500,"einheit":"g","portionen":5,"lagerort":"kuehlschrank","ablauf_in_tagen":null,"geoeffnet":false,…,"zutat":{"id":"tomate","kategorie":"gemuese","verwendung":["sosse","salat","pasta","bowl","curry"]}}],"kuehlschrank_reste":[{"id":"k1","name":"halbe Paprika","menge":null}],"immer_da":[…]}` – `menge: null` heißt **unbekannt** (nie eine Zahl behaupten), `zusammensetzung: null` heißt **unbekannt** (nichts über den Inhalt behaupten).
 - Die KI liefert Gerichte mit Namen, Beschreibung, Zubereitung, Eigenschaften und höchstens eine **Bildanforderung** `{"image_request":{"needed":true,"query":"tomato cucumber yogurt bowl","style":"appetizing food photography","aspect_ratio":"4:3"}}` – **nie eine URL**.
 - **Kreative Namen erwünscht** („Rote Samt-Pasta“, „Sommer-Crunch mit Zitronenjoghurt“), langweilige Standardnamen („Tomaten-Pasta“, „Gemüse-Reis“) nicht – aber jedes Zutat-Wort im Namen muss im Gericht stecken.
-- Die Software entfernt aus KI-Texten: Preise, **Kalorien-/Nährwertbehauptungen** („nur 450 kcal“, „proteinreich“), **Bestandsmengen** („Du hast noch 3 Tomaten“), **Links und Bild-URLs**, Diät-Behauptungen und „hausgemacht“ ohne Grundlage. Mengen, Kosten und kcal rechnet ausschließlich die Software.
+- Die Software entfernt aus KI-Texten: Preise, **Kalorien-/Nährwertbehauptungen** („nur 450 kcal“, „proteinreich“), **Bestandsmengen** („Du hast noch 3 Tomaten“), **Links und Bild-URLs**, Diät-Behauptungen und „hausgemacht“ ohne Grundlage. Mengen und kcal rechnet ausschließlich die Software.
 - Die KI verändert nichts: keine Entnahme, keine Buchung, nichts wird gespeichert – Vorschläge werden erst nach Bestätigung zu Plänen, Sorten oder Buchungen.
 
 ### KI-Benchmark
@@ -290,22 +279,22 @@ Die Kette ist nachvollziehbar: **App → Edge Function `was-essen` → KI-Anbiet
 - Ohne Keys laufen nur die Kombi-Regeln (und mit `--attrappe` eine absichtlich halluzinierende Attrappe, die zeigt, dass Erfundenes bestraft wird). Mit Keys: `GROQ_API_KEY=… GEMINI_API_KEY=… BENCH_ANBIETER=groq,gemini npm run benchmark` (Modelle über `BENCH_MODELL_GROQ` usw.) – oder in GitHub: **Actions → KI-Benchmark → Run workflow** (Keys als Repository-Secrets `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`).
 - Stand 28.09.2026, lokal gemessen (ohne KI-Keys): Kombi-Regeln Ø 71 Punkte, 66/78 Vorschläge bestanden, **0 Halluzinationen**; Attrappe Ø 5 Punkte, 378 gezählte erfundene Fakten. **Echte KI-Modelle wurden noch nicht verglichen** – dafür fehlen hier die Keys.
 
-> **Datenschutz:** An die KI gehen nur Sortennamen, Mengen, Preisklassen (keine Beträge), bekannte Zusammensetzungen, Notizen, Namen gespeicherter Rezepte und euer Kühlschrank-Text. Gratis-Stufen dürfen Eingaben laut ihren Bedingungen teils zur Verbesserung ihrer Modelle nutzen.
+> **Datenschutz:** An die KI gehen nur Sortennamen, Mengen, bekannte Zusammensetzungen, Notizen, Namen gespeicherter Rezepte und euer Kühlschrank-Text. Gratis-Stufen dürfen Eingaben laut ihren Bedingungen teils zur Verbesserung ihrer Modelle nutzen.
 
 ### So ist es gebaut
 
 ```
 App: Bestand laden → Snapshot (+ Kühlschrank, + Grundausstattung) → Session-Kontext (gesehen, Feedback)
   → Edge Function „was-essen“ (API-Key nur hier) → KI-Anbieter (austauschbar) → JSON
-  → Prüfung durch die Kombi-Engine: nur echte Bausteine, Mengen/Kosten selbst gerechnet,
+  → Prüfung durch die Kombi-Engine: nur echte Bausteine, Mengen selbst gerechnet,
     erfundene Zutaten und Behauptungen raus, Duplikate und abgelehnte Richtungen raus,
     Rangfolge, Auswahl mit Abwechslung
   → Karte → Nutzer entscheidet → erst dann Datenbankänderung (entnehmen(), Rezept, Sorte)
 ```
 
 - **Kombi-Engine** (`supabase/functions/_shared/kombi/`): reines TypeScript ohne Abhängigkeiten. Läuft in der Edge Function (Deno), im Browser (Demo-Modus) und in den Node-Tests. Sie hat keinen Datenbankzugriff und kann den Bestand deshalb gar nicht ändern.
-- **Rangfolge:** vorhandene Zutaten statt Einkauf, Dringlichkeit (geöffnet > bald ablaufend > kleine Reste > Komplettgerichte > Komponenten > Vorräte), sehr günstig (Stufen, nicht linear), einfach, sättigend, Abwechslung, Session-Vorlieben und gespeicherte Lieblingsrezepte, natürlicher Name. Alles ist ein Faktor unter mehreren, nichts „blind“. Die Gewichte stehen gebündelt in `bewertung.ts`.
-- **Tabellen:** `koch_session`, `vorschlag` (was gezeigt wurde), `vorschlag_feedback` (like, dislike, similar, skip, save, cook), `rezept` (mit Gerichtstyp, Zutaten und Mengen, Portionen, Schritten, Bestandsarten, Tags, berechneten Kosten und Feedback). Die App darf dort nur lesen und anlegen.
+- **Rangfolge:** vorhandene Zutaten statt Einkauf, Dringlichkeit (geöffnet > bald ablaufend > kleine Reste > Komplettgerichte > Komponenten > Vorräte), einfach, sättigend, Abwechslung, Session-Vorlieben und gespeicherte Lieblingsrezepte, natürlicher Name. Alles ist ein Faktor unter mehreren, nichts „blind“. Die Gewichte stehen gebündelt in `bewertung.ts`.
+- **Tabellen:** `koch_session`, `vorschlag` (was gezeigt wurde), `vorschlag_feedback` (like, dislike, similar, skip, save, cook), `rezept` (mit Gerichtstyp, Zutaten und Mengen, Portionen, Schritten, Bestandsarten, Tags und Feedback). Die App darf dort nur lesen und anlegen.
 
 ## Tests
 
@@ -319,8 +308,8 @@ Die Tests prüfen die Akzeptanzkriterien direkt in der Datenbank:
 - Die Zugriffsrechte stimmen: Die App darf lesen, Sorten pflegen und buchen, aber Chargen und Bewegungen nicht direkt ändern.
 - Baukasten: Einordnung vorhandener Sorten, Einheiten in g/ml, Ablaufdatum, Entnahme-Reihenfolge geöffnet → frühester Ablauf → FIFO, strukturierte Rezepte.
 - Planung & Einkauf: `kochen()` alles oder nichts (Plan erledigt, nicht doppelt, Rückgängig), `herstellen()` in einem Schritt, Auftauen ändert keinen Bestand, Einkauf → Vorrat mit tatsächlicher Menge und ohne Doppelbuchung, Nutzung ohne Rückgängig-Buchungen, Rechte ohne Login.
-- Sonstige Ausgaben: eintragen, als entfernt markieren und zurückholen, nicht löschbar, Betrag nachträglich nicht änderbar, unplausible Beträge und Daten abgelehnt.
-- Kosten & Nährwerte: Einkauf 1000 g für 3,00 € → Produktion → 6 Portionen für 1,44 € → 2 Portionen gegessen = 0,48 € (nicht doppelt gezählt, spätere Preisänderung ohne Wirkung), tatsächliche Menge (7 statt 8), unvollständige Preise lernen keinen Preis, Rückgängig nur für unberührte Chargen, kcal aus Nährwerten, Protokolle ohne direkten Schreibzugriff.
+- Sonstige Ausgaben (Datenbank, von der App nicht mehr genutzt): eintragen, als entfernt markieren und zurückholen, nicht löschbar, Betrag nachträglich nicht änderbar, unplausible Beträge und Daten abgelehnt.
+- Kosten je Charge (Datenbank, von der App nicht mehr genutzt) & Nährwerte: Einkauf 1000 g für 3,00 € → Produktion → 6 Portionen für 1,44 € → 2 Portionen gegessen = 0,48 € (nicht doppelt gezählt, spätere Preisänderung ohne Wirkung), tatsächliche Menge (7 statt 8), unvollständige Preise lernen keinen Preis, Rückgängig nur für unberührte Chargen, kcal aus Nährwerten, Protokolle ohne direkten Schreibzugriff.
 - Bilder & Zutaten: eigenes Bild nur https, keine zufälligen Hotlinks im Cache, gefundenes Bild nur mit Lizenz und Quelle, generiert = `image_generated`, Status beim Anlegen nicht setzbar, kaputt markieren statt löschen (Zeitstempel aktualisiert), URL nachträglich nicht änderbar, Zutat nur als Katalog-id.
 - Rezepte bereinigen (`scripts/rezepte-bereinigen.sql`): Doppelte (Groß/klein, Leer- und Satzzeichen egal) werden entfernt, je Name bleibt das neueste, ein zweiter Lauf ändert nichts.
 
@@ -330,26 +319,26 @@ npm run test:ki     # nur „Was essen wir?“ – läuft überall, auch unter W
 npm run test:db     # nur Datenbank
 ```
 
-Die 281 Tests in `tests/ki/` laufen ohne KI und ohne Kosten, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+Die 260 Tests in `tests/ki/` laufen ohne KI und ohne Gebühren, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
 - Bilder: nur sichere https-URLs, keine Hotlinks, Priorität eigen → gefunden → generiert → lokal → keins, kaputte Quelle (Status „fehler“) und fehlendes Bild → Fallback, Bildanforderung der KI (übernommen / „steak“ verworfen / URL verworfen / fehlt), Beschreibung nur aus Rezeptdaten, unbekannte Pizza bleibt Pizza, Commons-Auswertung (Lizenz, Motiv, fremde Zutaten, Pflanze statt Lebensmittel), Pipeline gefunden/generiert/nichts/offline, Keys nie im Ergebnis, jede App-Anfrage besteht die Prüfung der Function
 - Semantische Zutaten: „REWE Strauchtomaten 500 g“ → Tomate, Spezielles vor Allgemeinem, Unbekanntes bleibt unbekannt
 - KI-Verbindung: Health-Check ohne Keys, Probelauf (JSON gültig/ungültig, nur Halluzinationen → nicht ok), Edge Function GET/POST/Bild
 - Wahrheit: keine Bestandsmengen, kcal-/Nährwertbehauptungen, Links in KI-Texten; Prompt als strukturiertes JSON
-- Startseite „Heute“: kcal pro Person, teilweise/unbekannt ≠ 0, Kosten inkl. Sonstiges, Ziel, Komponente ohne Doppelzählung; ein Hinweis statt Kacheln; Produktionsgründe aus Daten
+- Startseite „Heute“: kcal pro Person, teilweise/unbekannt ≠ 0, Ziel, Komponente ohne Doppelzählung; ein Hinweis statt Kacheln; Produktionsgründe aus Daten
 - Benchmark: 30 Szenarien, Halluzinationen werden gezählt, die Attrappe verliert deutlich, Regeln ohne erfundene Fakten, normale Zutaten ergeben Gerichte
-- die Kostenfunktion (2,00 € für 4 Portionen, Gramm/ml/Stück, unbekannt, teilweise, Rundung am Ende)
+- keine Kosten mehr: weder in Gerichten, Rezepten, Komponenten, Einkaufsliste noch im Prompt
 - keine erfundenen Bestände, Zutaten, Inhalte oder Preise (z. B. keine „Salami-Pizza“ bei unbekanntem Belag) – und keine falschen Alarme bei guten Namen
 - Komplettgericht / Komplettgericht mit Beilage / Rezept und „Heute kochen“ in Einheiten
 - geöffnet, bald ablaufend, abgelaufen, Reste; Priorität mit Augenmaß
 - Abwechslung (kein vierter Wrap), „gerade etwas anderes“ ≠ „Nicht meins“, Lieblingsrezepte
-- Notfall-Einkauf mit Begründung aus Daten, Baustein-Ideen mit Kosten nur aus bekannten Preisen
+- Notfall-Einkauf mit Begründung aus Daten, Baustein-Ideen ohne Preisangaben der KI
 - strukturiert gespeicherte Rezepte, alte Rezepte, „keine Datenbankänderung ohne Bestätigung“
 - Kochansicht und Entnahmetext (Komplettgericht / Rezept), Reservierungen anderer Pläne
-- Komponenten: Rolle, Zusammensetzung, unbekannter Inhalt, keine erfundenen Inhalte, Nutzbarkeit, Kosten, fehlende Zutaten, gespeichert erst nach Bestätigung
-- Einkaufsliste: Zusammenführen, Verrechnen mit dem Vorrat, reservierte Mengen, tatsächlich gekaufte Menge, unbekannte Preise, Packungsgrößen, Mangel
+- Komponenten: Rolle, Zusammensetzung, unbekannter Inhalt, keine erfundenen Inhalte, Nutzbarkeit, fehlende Zutaten, gespeichert erst nach Bestätigung
+- Einkaufsliste: Zusammenführen, Verrechnen mit dem Vorrat, reservierte Mengen, tatsächlich gekaufte Menge, Zeilenstatus, Mangel
 - Woche ohne Doppelreservierung, geplante Mahlzeit entfernen, Resteverwertung (auch „nichts Sinnvolles möglich“), Auftau-Regeln, Batch-Cooking nur aus echten Daten
 - Kalorien: Summe aus echten Mengen, je Portion, unbekannt ≠ 0, teilweise („ab …“), Makros nur wenn vollständig, KI-Angaben ignoriert; Produktion skalieren (vorhanden / benötigt / fehlt)
-- Oberfläche ohne Browser: fünf Bereiche, Zustand beim Wechsel, Adressen und Zurück, Start immer zuerst; Startseite: Vorschlag vor allen Kennzahlen, Geplantes zuerst, nichts doppelt, Produktionszeile aus denselben Daten wie die Produktion; Ausgaben ohne Doppelzählung, Monatskosten, Ø pro Mahlzeit, heute gekocht; „wird knapp“ ≠ „aufgebraucht“ ≠ „bald verbrauchen“ mit denselben Zahlen in Start, Vorrat, Produktion; gemerkte Rezepte ohne Doppelte; Lagerorte, Füllstand, Vorratswert, Suche
+- Oberfläche ohne Browser: fünf Bereiche, Zustand beim Wechsel, Adressen und Zurück, Start immer zuerst; Startseite: Vorschlag vor allen Kennzahlen, Geplantes zuerst, nichts doppelt, Produktionszeile aus denselben Daten wie die Produktion; heute gekocht; „wird knapp“ ≠ „aufgebraucht“ ≠ „bald verbrauchen“ mit denselben Zahlen in Start, Vorrat, Produktion; gemerkte Rezepte ohne Doppelte; Lagerorte, Füllstand, Suche
 
 Für `test:db` müssen die Postgres-Programme installiert sein (macOS: `brew install postgresql`, Ubuntu/WSL: `sudo apt install postgresql`). Das Skript startet eine Wegwerf-Datenbank und löscht sie danach wieder. Die echte Supabase-Datenbank wird nie angefasst. Zum Schluss prüft es, dass `scripts/schema-stand.sql` nach allen Migrationen „komplett“ meldet – so bleibt die Diagnose für die echte Datenbank aktuell. Die beiden Skripte für den SQL-Editor (`schema-stand.sql`, `daten-export.sql`) bleiben **unter 100 Zeilen**, in reinem ASCII und ohne Kommentare: Der Supabase-SQL-Editor hängt an SELECT-Abfragen automatisch `limit 1000` an – bei längeren Texten mitten hinein (beobachtet: in Zeile 100), was als „syntax error“ endet. Tritt so ein Fehler auf, neben „Run“ die Begrenzung auf **„No limit“** stellen.
 Bei jedem Push laufen alle Tests, der App-Build und eine Deno-Prüfung der Edge Function automatisch in GitHub Actions (Workflow „CI“).
@@ -372,7 +361,7 @@ plötzlich nichts mehr anzeigt.
 
 | Tabelle     | Inhalt |
 |-------------|--------|
-| `block_typ` | Sorten. Physisch: Einheit (`portion`, `stueck`, `g`, `ml`), Portionsgröße, Preis mit Bezugsmenge (`kosten_cent` für `kosten_menge` Einheiten), Lagerort, Haltbarkeit, Mindestbestand. Bedeutung (optional): Art (`zutat`, `komponente`, `komplettgericht`), Farbe/Kategorie, Herkunft, Zusammensetzung (leer = unbekannt), Notiz |
+| `block_typ` | Sorten. Physisch: Einheit (`portion`, `stueck`, `g`, `ml`), Portionsgröße, Lagerort, Haltbarkeit, Mindestbestand. Bedeutung (optional): Art (`zutat`, `komponente`, `komplettgericht`), Farbe/Kategorie, Herkunft, Zusammensetzung (leer = unbekannt), Notiz |
 | `charge`    | eine Einbuchung: Sorte, Start-Menge, aktuelle Menge, Datum, optional Ablaufdatum und „geöffnet seit“ |
 | `bewegung`  | jede Bestandsänderung: `kochtag` (+), `verbrauch` (−), `korrektur` (Rückgängig) |
 | `bestand`   | View: Menge pro Sorte plus `nachkochen`, `bald_ablaufen`, nächster Ablauf, geöffnete und abgelaufene Menge, Startmenge, aufgetaute Menge |
@@ -380,10 +369,10 @@ plötzlich nichts mehr anzeigt.
 | `einkauf_eintrag`, `einkauf_status`, `einkauf_buchung` | eigene Einträge, Zustand je Zeile (gekauft, später, ausgeblendet), Verlauf „Einkauf → Vorrat“ |
 | `auftauen`  | geplant → aufgetaut → verbraucht (oder abgebrochen) |
 | `nutzung`   | View: Verbrauch und Herstellungen der letzten Wochen (ohne Rückgängig-Buchungen) |
-| `mahlzeit`, `herstellung` | Protokoll: was gekocht bzw. produziert wurde, mit Wert der entnommenen Zutaten und kcal (Migration 7) |
-| `ausgabe`   | sonstige Ausgaben: Datum, Betrag, Notiz; nur „entfernt“ lässt sich ändern (Migration 8) |
+| `mahlzeit`, `herstellung` | Protokoll: was gekocht bzw. produziert wurde, mit kcal (Migration 7) |
+| `ausgabe`   | sonstige Ausgaben aus älteren Versionen (Migration 8) – von der App nicht mehr genutzt |
 
-Ab Migration 7 hat jede `charge` ihre echten Kosten (`kosten_cent`), jede Sorte optional Nährwerte (`kcal`, `protein_g`, `kohlenhydrate_g`, `fett_g` für `naehrwert_menge` Einheiten; leer = unbekannt).
+Ab Migration 7 hat jede Sorte optional Nährwerte (`kcal`, `protein_g`, `kohlenhydrate_g`, `fett_g` für `naehrwert_menge` Einheiten; leer = unbekannt).
 
 **Regeln in der Datenbank** (nicht in der App):
 
@@ -408,7 +397,7 @@ supabase/migrations/…_kosten_naehrwerte.sql  Kosten je Charge, Mahlzeit/Herste
 supabase/migrations/…_ausgaben.sql   sonstige Ausgaben
 supabase/migrations/…_bilder_zutaten.sql  Bilder je Sorte, semantische Zutat, Bild-Cache, Speicher-Bucket
 supabase/functions/was-essen/        Edge Function: KI-Aufruf mit Prüfung (API-Key nur hier)
-supabase/functions/_shared/kombi/    Kombi-Engine: Snapshot, Prüfung, Kosten (kosten.ts), Mengen,
+supabase/functions/_shared/kombi/    Kombi-Engine: Snapshot, Prüfung, Mengen,
                                      Wahrheitsprüfung (wahrheit.ts), Abwechslung, Lernen, Einkauf, KI-Anbieter,
                                      Rollen (rollen.ts), Einkaufsliste, Planung/Auftauen, Komponenten, Batch,
                                      Nährwerte (naehrwerte.ts)
@@ -426,7 +415,7 @@ src/api.ts                           alle Supabase-Aufrufe
 src/haushalt.ts                      Pläne, Einkauf, Auftauen, kochen/essen/produzieren – Supabase-Aufrufe
 src/Inventar.tsx                     Rahmen: fünf Bereiche, Adressen/Zurück, gemeinsame Berechnung, Kochansicht
 src/navigation.ts, src/dashboard.ts  Bereiche, Adressen, Zustand; Heute wichtig, Lagerorte, Füllstand (getestet)
-src/Start.tsx, src/startseite.ts     Startseite („Was möchtest du heute kochen?“); Vorschläge, Überblick, Geld im Monat (getestet)
+src/Start.tsx, src/startseite.ts     Startseite („Was möchtest du heute kochen?“); Vorschläge, Überblick (getestet)
 src/Hilfe.tsx                        „So funktioniert Kombi“: drei Schritte und alle Begriffe in einfacher Sprache
 src/rezepte.ts                       gemerkte Rezepte ohne Doppelte (getestet)
 src/GerichtBild.tsx                  Gerichtsbild: echtes Foto oder gezeichneter „Teller von oben“ aus den echten Zutaten
@@ -436,7 +425,7 @@ src/Produktion.tsx                   Jetzt sinnvoll, Vorgemerkt, Empfohlen, Prod
 src/Einkauf.tsx                      Einkaufsliste und „Einbuchen“
 src/Woche.tsx, src/Auftauen.tsx      Wochenplan und „Für heute auftauen“
 src/KochAnsicht.tsx, PostenListe.tsx Rezeptseite, Bestätigung „Abziehen & loslegen“ und Kochmodus Schritt für Schritt
-src/Einfrieren.tsx                   Einbuchen-Dialog (Menge in der Einheit, optional MHD und bezahlter Betrag)
+src/Einfrieren.tsx                   Einbuchen-Dialog (Menge in der Einheit, optional MHD)
 src/Sorten.tsx                       Sorten anlegen und bearbeiten (Schnellweg + Mehr Details, Nährwerte)
 src/Essen.tsx, src/essenApi.ts       „Heute essen“: Session, Karte, Entscheidungen, Demo-Modus
 src/GerichtKarte.tsx                 Rezeptkarte
@@ -451,12 +440,12 @@ supabase/functions/_shared/kombi/bild_dienst.ts Bildsuche, optionale Generierung
 supabase/functions/_shared/kombi/zutaten.ts     semantische Zutaten: Produkt → Zutat → Verwendung
 supabase/functions/_shared/kombi/gesundheit.ts  Health-Check, Probelauf, ENGINE_VERSION
 scripts/benchmark.ts, scripts/benchmark/        KI-Benchmark (30 Szenarien, Messung, Punkte)
-src/farben.ts, src/format.ts         Farbsystem, Begriffe, Mengen-, Datums- und Euro-Anzeige
+src/farben.ts, src/format.ts         Farbsystem, Begriffe, Mengen- und Datumsanzeige
 ```
 
 ## Noch nicht enthalten
 
 Login, dauerhafte Vorlieben über Sessions hinweg (außer gespeicherten Rezepten), Push-Benachrichtigungen und Platz im Gefrierfach gibt es noch nicht. Eigene Fotos lassen sich als https-Adresse hinterlegen, aber noch nicht hochladen.
-**Kassenbon-Import** ist als Idee vorgesehen (Foto → erkannte Positionen → Zuordnung zu Sorten → Mengen, Preise, MHD prüfen → erst nach Bestätigung einbuchen), aber noch nicht gebaut – er braucht eine Texterkennung.
+**Kassenbon-Import** ist als Idee vorgesehen (Foto → erkannte Positionen → Zuordnung zu Sorten → Mengen und MHD prüfen → erst nach Bestätigung einbuchen), aber noch nicht gebaut – er braucht eine Texterkennung.
 Lokale Fotos gibt es für die Lebensmittel aus den Design-Entwürfen (Tomaten, Tomatensoße, Pasta, Curry, Falafel, Ofengemüse, Pizza, Spinat, Käse, Haferflocken); weitere kommen über die Bildsuche (nach Migration 9 und neuem Deployment der Function) oder als Symbol.
 Ein Login lässt sich später ohne Umbau der Datenbank wieder einschalten, siehe Kommentar in der Migration „ohne_login“.

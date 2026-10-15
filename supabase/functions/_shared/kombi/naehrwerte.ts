@@ -1,6 +1,6 @@
 // Kalorien und Nährwerte – ausschließlich aus hinterlegten Daten, nie geschätzt.
 //
-// Nährwerte stehen je Sorte wie der Preis: „X kcal für N Einheiten“ (z. B. 359 kcal für 100 g).
+// Nährwerte stehen je Sorte: „X kcal für N Einheiten“ (z. B. 359 kcal für 100 g).
 // null heißt unbekannt – nicht 0. Fehlt ein Wert, wird nichts ergänzt: Das Ergebnis ist dann
 // „teilweise“ (Summe der bekannten, mit Liste des Unbekannten) oder „unbekannt“.
 import type { Einheit, FehlendeZutat, GerichtZutat } from './typen.ts';

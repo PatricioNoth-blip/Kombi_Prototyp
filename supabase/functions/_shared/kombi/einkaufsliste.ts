@@ -9,12 +9,8 @@
 //   • Gleiche Produkte werden zusammengeführt (gleicher Produktschlüssel + gleiche Einheit).
 //   • Eigene Einträge (von Hand, Notfall, Mangel …) werden nicht gegen den Vorrat gerechnet:
 //     Sie sind ausdrücklich zusätzlich gewünscht.
-//   • Preise nur aus bekannten Daten: gespeicherter Preis „X € für N“ = eine Packung.
-//     Gekauft werden ganze Packungen – es wird kein Preis für genau 450 g erfunden.
 //   • Hier wird nichts gebucht. Einkauf → Vorrat läuft über einkauf_buchen() in der Datenbank.
 import type { Art, Einheit, Farbe, Herkunft, Lagerort } from './typen.ts';
-import { mengeText } from './mengen.ts';
-import { summiereKosten } from './kosten.ts';
 import { normalisiere } from './text.ts';
 
 export type VorratSorte = {
@@ -27,8 +23,6 @@ export type VorratSorte = {
   groesse_g: number;
   anzahl: number;
   abgelaufen: number;
-  kosten_cent: number | null;
-  kosten_menge: number;
   mindestbestand: number;
   lagerort: Lagerort;
   /** gekauft/selbstgemacht – unbekannt, wenn nicht angegeben */
@@ -84,7 +78,6 @@ export type Einkaufszeile = {
   bedarf_plaene: number | null;
   vom_vorrat: number;
   sorte: VorratSorte | null;
-  preis: { packungen: number; cent: number; text: string } | null;
   status: 'offen' | 'gekauft' | 'zurueckgestellt' | 'ignoriert';
   eintrag_ids: number[];
 };
@@ -220,26 +213,10 @@ export function verteile(plaene: PlanBedarf[], sorten: VorratSorte[]): Verteilun
   return { reserviert: v.reserviert, frei: v.frei, pro_plan: v.proPlan };
 }
 
-// ───────── Preise ─────────
-
-/** Kaufpreis in ganzen Packungen (gespeicherter Preis „X € für N“ = eine Packung). */
-export function packungspreis(menge: number | null, sorte: VorratSorte | null): Einkaufszeile['preis'] {
-  if (!sorte || sorte.kosten_cent === null || menge === null || menge <= 0) return null;
-  const packung = Math.max(1, sorte.kosten_menge);
-  const packungen = Math.ceil(menge / packung - 1e-9);
-  return {
-    packungen,
-    cent: packungen * sorte.kosten_cent,
-    text: packung === 1 ? mengeText(packungen, sorte.einheit) : `${packungen} × ${mengeText(packung, sorte.einheit)}`,
-  };
-}
-
 // ───────── Die Liste ─────────
 
 export type Einkaufsliste = {
   zeilen: Einkaufszeile[];
-  /** Kosten der offenen und abgehakten Zeilen – nur aus bekannten Preisen */
-  kosten: { bekannt_cent: number | null; unbekannt: number; status: 'berechnet' | 'teilweise' | 'unbekannt' | 'leer' };
   verteilung: Verteilung;
 };
 
@@ -262,7 +239,7 @@ export function berechneEinkaufsliste(e: {
       z = {
         schluessel, einheit, einheit_schluessel: einheit ?? 'offen', name: sorte?.name ?? name, menge: null, menge_offen: false,
         kategorie: kategorie && kategorie !== 'sonstiges' ? kategorie : kategorieFuer(name, sorte),
-        quellen: [], bedarf_plaene: null, vom_vorrat: 0, sorte, preis: null,
+        quellen: [], bedarf_plaene: null, vom_vorrat: 0, sorte,
         status: 'offen', eintrag_ids: [],
       };
       zeilen.set(key, z);
@@ -299,21 +276,13 @@ export function berechneEinkaufsliste(e: {
   for (const z of zeilen.values()) {
     const s = e.status.find((x) => x.schluessel === z.schluessel && x.einheit === z.einheit_schluessel);
     if (s) z.status = s.status;
-    z.preis = z.menge_offen ? null : packungspreis(z.menge, z.sorte);
   }
 
   const liste = [...zeilen.values()].sort(
     (a, b) => REIHENFOLGE.indexOf(a.kategorie) - REIHENFOLGE.indexOf(b.kategorie) || a.name.localeCompare(b.name, 'de'),
   );
-  const aktiv = liste.filter((z) => z.status === 'offen' || z.status === 'gekauft');
-  const k = summiereKosten(aktiv.map((z) => ({ name: z.name, cent: z.preis?.cent ?? null })), 1);
   return {
     zeilen: liste,
-    kosten: {
-      bekannt_cent: k.gesamt_cent,
-      unbekannt: k.unbekannt.length,
-      status: aktiv.length === 0 ? 'leer' : k.status,
-    },
     verteilung: { reserviert: v.reserviert, frei: v.frei, pro_plan: v.proPlan },
   };
 }

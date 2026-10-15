@@ -2,10 +2,9 @@
 // Nur was hier steht, gilt als vorhanden. Unbekanntes bleibt null – es wird nichts ergänzt.
 import { naehrwertAus } from './naehrwerte.ts';
 import type {
-  Art, Einheit, Farbe, Gerichtstyp, Gewuerzrichtung, Herkunft, Lagerort, PreisInfo, Snapshot, SnapshotZutat,
+  Art, Einheit, Farbe, Gerichtstyp, Gewuerzrichtung, Herkunft, Lagerort, Snapshot, SnapshotZutat,
 } from './typen.ts';
 import { ARTEN, EINHEITEN, GERICHTSTYPEN, GEWUERZRICHTUNGEN } from './typen.ts';
-import { bezugText } from './mengen.ts';
 import { normalisiere } from './text.ts';
 
 /**
@@ -19,13 +18,11 @@ export type BestandZeile = {
   anzahl: number;
   bald_ablaufen: boolean;
   groesse_g: number;
-  kosten_cent: number | null;
   lagerort?: Lagerort | null;
   art?: Art | null;
   herkunft?: Herkunft | null;
   einheit?: Einheit | null;
   portion_menge?: number | null;
-  kosten_menge?: number | null;
   zusammensetzung?: string[] | null;
   notiz?: string | null;
   naechster_ablauf?: string | null;
@@ -144,8 +141,6 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       anzahl: verwendbar,
       portion_menge: portionMenge,
       groesse_g: z.groesse_g,
-      kosten_cent: z.kosten_cent ?? null,
-      kosten_menge: Math.max(1, Math.round(z.kosten_menge ?? 1)),
       zusammensetzung: saubereZusammensetzung(z.zusammensetzung),
       notiz: z.notiz ? z.notiz.replace(/\s+/g, ' ').trim().slice(0, 200) || null : null,
       bald_verbrauchen: z.bald_ablaufen,
@@ -173,8 +168,6 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       anzahl: null,
       portion_menge: 1,
       groesse_g: null,
-      kosten_cent: null,
-      kosten_menge: 1,
       zusammensetzung: null,
       notiz: null,
       // Spontan genannte Reste sind meist angebrochen – bevorzugt verbrauchen.
@@ -203,8 +196,6 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
       anzahl: null,
       portion_menge: 1,
       groesse_g: null,
-      kosten_cent: null,
-      kosten_menge: 1,
       zusammensetzung: null,
       notiz: null,
       bald_verbrauchen: false,
@@ -219,45 +210,7 @@ export function baueSnapshot(bestand: BestandZeile[], kuehlschrankText: string, 
     });
   }
 
-  const preise: PreisInfo[] = bestand
-    .filter((z) => z.kosten_cent !== null && z.kosten_cent !== undefined)
-    .map((z) => {
-      const einheit = einheitVon(z);
-      return {
-        name: z.name,
-        kosten_cent: z.kosten_cent as number,
-        kosten_menge: Math.max(1, Math.round(z.kosten_menge ?? 1)),
-        einheit,
-        portion_menge: einheit === 'portion' ? 1 : Math.max(1, Math.round(z.portion_menge ?? 1)),
-      };
-    });
-
-  return { datum, zutaten, preise, abgelaufen };
-}
-
-/** Bekannter Preis nach Namen (auch von gerade leeren Sorten) – sonst null. */
-export function bekannterPreisInfo(snapshot: Snapshot, name: string): PreisInfo | null {
-  const n = normalisiere(name);
-  if (!n) return null;
-  return (
-    snapshot.preise.find((p) => normalisiere(p.name) === n) ??
-    snapshot.preise.find((p) => {
-      const pn = normalisiere(p.name);
-      return pn.length >= 4 && (n.includes(pn) || pn.includes(n));
-    }) ??
-    null
-  );
-}
-
-/** Bekannter Preis (für die gespeicherte Bezugsmenge) nach Namen – sonst null. */
-export function bekannterPreis(snapshot: Snapshot, name: string): number | null {
-  return bekannterPreisInfo(snapshot, name)?.kosten_cent ?? null;
-}
-
-/** „für 500 g“ usw. zum bekannten Preis – sonst null. */
-export function bekannterPreisBezug(snapshot: Snapshot, name: string): string | null {
-  const p = bekannterPreisInfo(snapshot, name);
-  return p ? bezugText(p.kosten_menge, p.einheit) : null;
+  return { datum, zutaten, abgelaufen };
 }
 
 /** Grobe Prüfung: Lässt sich aus dem Vorhandenen überhaupt eine Mahlzeit bauen? */

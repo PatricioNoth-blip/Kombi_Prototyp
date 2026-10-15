@@ -629,9 +629,8 @@ span.chip { cursor: default; }
 .vorrat-held > * { position: relative; }
 .vorrat-held > img { position: absolute; }
 .vorrat-held-kopf { display: grid; gap: 4px; max-width: 62%; }
-.vorrat-held-kopf .geld-zahl { font-size: 30px; }
-.geld-titel { font-size: var(--t-sekundaer); font-weight: 650; color: var(--text-2); }
-.geld-zahl { font-family: var(--schrift-titel); font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; color: var(--titel); font-variant-numeric: tabular-nums; }
+.vorrat-held-titel { font-size: var(--t-sekundaer); font-weight: 650; color: var(--text-2); }
+.vorrat-held-zahl { font-family: var(--schrift-titel); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; color: var(--titel); font-variant-numeric: tabular-nums; }
 .vorrat-lage { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: var(--t-sekundaer); font-weight: 650; }
 .vorrat-lage .icon { margin-top: 2px; }
 .status-leer { color: var(--titel); font-weight: 650; }
@@ -934,7 +933,6 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .feld-inline input { width: auto; flex: 1 1 90px; min-width: 80px; }
 .feld-inline > span { color: var(--text-2); font-size: var(--t-sekundaer); }
 .feld-inline input[type='date'] { flex: 1 1 160px; }
-.preis-zeile input { max-width: 130px; }
 .reihe { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hinweis-klein { display: flex; gap: 8px; align-items: flex-start; margin-top: -8px; padding: 10px 12px; border-radius: var(--r-klein); background: var(--achtung-weich); font-size: var(--t-meta); }
 .hinweis-klein .icon { margin-top: 1px; color: var(--achtung); }
@@ -962,9 +960,9 @@ details.mehr input, details.mehr textarea, details.mehr select { background: var
 .tag-raster { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .tag-raster .zahl { font-size: var(--t-titel); }
 
-/* Geld im Detail */
-.ausgabe-form { display: grid; grid-template-columns: 110px 1fr auto; gap: 8px; }
-.ausgabe-form .knopf { min-height: 48px; }
+/* Tagesziel (Heute gegessen) */
+.ziel-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.ziel-form .knopf { min-height: 48px; }
 
 /* ───────── Bewegung ───────── */
 @keyframes auftauchen { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

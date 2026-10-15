@@ -6,13 +6,12 @@ import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
 import { aehnlichkeit } from '../supabase/functions/_shared/kombi/aehnlichkeit.ts';
 import { berechneLeitplanken, verletztAusschluss } from '../supabase/functions/_shared/kombi/praeferenz.ts';
 import { GRUNDAUSSTATTUNG, kuehlschrankEintraege } from '../supabase/functions/_shared/kombi/snapshot.ts';
-import { kostenText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { uuid } from '../supabase/functions/_shared/kombi/id.ts';
 import { kategorieFuer, type PlanStand } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
 import { restSnapshot, type AuftauEintrag } from '../supabase/functions/_shared/kombi/planung.ts';
 import { fehlerText, type Sorte } from './api';
 import {
-  favoritenAus, holeVorschlaege, ladeRezepte, ladeSnapshot, protokolliereFeedback, protokolliereVorschlaege,
+  favoritenAus, gespeicherteOptionen, holeVorschlaege, ladeRezepte, ladeSnapshot, protokolliereFeedback, protokolliereVorschlaege,
   speichereRezept, starteSession, type Quelle, type Rezept,
 } from './essenApi';
 import { GerichtKarte } from './GerichtKarte';
@@ -69,7 +68,7 @@ type Entscheidung = 'dislike' | 'similar' | 'skip';
 
 const SPEICHER = 'kombi-essen';
 const MINUTEN: (number | null)[] = [10, 15, 20, 30, null];
-const START_OPTIONEN: Optionen = { personen: 2, max_minuten: 15, guenstig: true };
+const START_OPTIONEN: Optionen = { personen: 2, max_minuten: 15 };
 /** Wohin die Karte bei welcher Entscheidung verschwindet */
 const ABGANG: Record<Entscheidung, string> = { dislike: 'links', skip: 'oben', similar: 'klein' };
 /** Passt nicht? Drei klare Wege zum nächsten Vorschlag – „Anderer Vorschlag“ lernt nichts, „Nicht meins“ schon. */
@@ -82,7 +81,7 @@ const ENTSCHEIDUNGEN: { aktion: Entscheidung; icon: IconName; text: string; labe
 function ladeVorlieben(): { optionen: Optionen; kuehlschrank: string } {
   try {
     const d = JSON.parse(localStorage.getItem(SPEICHER) ?? '{}');
-    return { optionen: { ...START_OPTIONEN, ...(d.optionen ?? {}) }, kuehlschrank: typeof d.kuehlschrank === 'string' ? d.kuehlschrank : '' };
+    return { optionen: gespeicherteOptionen(d.optionen), kuehlschrank: typeof d.kuehlschrank === 'string' ? d.kuehlschrank : '' };
   } catch {
     return { optionen: START_OPTIONEN, kuehlschrank: '' };
   }
@@ -336,10 +335,6 @@ export function Essen({
           ))}
         </div>
       </div>
-      <label className="option-zeile schalter">
-        <span className="option-name"><Icon name="preis" groesse={18} /> Möglichst günstig</span>
-        <input type="checkbox" role="switch" checked={optionen.guenstig} onChange={() => optionenAendern({ guenstig: !optionen.guenstig })} />
-      </label>
       <KiStatus />
     </div>
   );
@@ -348,7 +343,6 @@ export function Essen({
     session.current?.grundmodus.art === 'reste' ? 'Reste verwerten' : null,
     `${optionen.personen} ${optionen.personen === 1 ? 'Person' : 'Personen'}`,
     optionen.max_minuten ? `${optionen.max_minuten} Min` : 'Zeit egal',
-    optionen.guenstig ? 'günstig' : null,
     reste > 0 ? `${reste} ${reste === 1 ? 'Rest' : 'Reste'}` : null,
   ].filter(Boolean) as string[];
 
@@ -453,7 +447,7 @@ export function Essen({
         <p className="meta-text">
           {ergebnisHinweis && `${ergebnisHinweis} `}
           {muster.length > 0 && `${muster.join(' ')} `}
-          {quelle && (quelle.art === 'ki' ? `Idee von der KI (${quelle.anbieter}) – Mengen, Preise und Kalorien rechnet Kombi selbst.` : 'Vorschläge nach Kombi-Regeln (ohne KI).')}
+          {quelle && (quelle.art === 'ki' ? `Idee von der KI (${quelle.anbieter}) – Mengen und Kalorien rechnet Kombi selbst.` : 'Vorschläge nach Kombi-Regeln (ohne KI).')}
           {quelle?.hinweis && ` ${quelle.hinweis}`}
         </p>
       )}
@@ -514,7 +508,7 @@ export function Essen({
                   <span className="zeile-meta">Idee zum Vorkochen</span>
                   <span className="zeile-titel">{baustein.name}</span>
                   <span className="zeile-meta">
-                    {ARTEN_INFO.find((a) => a.id === baustein.bestandsart)!.name} · {farbInfo(baustein.farbe).bedeutung} · {baustein.portionen} Portionen · {kostenText(baustein.kosten)}
+                    {ARTEN_INFO.find((a) => a.id === baustein.bestandsart)!.name} · {farbInfo(baustein.farbe).bedeutung} · {baustein.portionen} Portionen
                   </span>
                 </span>
                 <button type="button" className="knopf klein" onClick={() => setBausteinFormular(baustein)}>Übernehmen</button>
@@ -597,9 +591,6 @@ export function Essen({
             groesse_g: bausteinFormular.portion_g ?? 100,
             herkunft: 'selbstgemacht',
             zusammensetzung: bausteinFormular.zutaten.length ? bausteinFormular.zutaten : null,
-            // Preis nur, wenn er vollständig aus bekannten Preisen berechnet wurde
-            kosten_cent: bausteinFormular.kosten.status === 'berechnet' ? bausteinFormular.kosten.pro_portion_cent : null,
-            kosten_menge: 1,
           }}
           onFertig={(text) => {
             setBausteinFormular(null);

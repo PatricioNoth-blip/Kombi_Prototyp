@@ -264,7 +264,7 @@ if (protokoll) {
   await pruefe('Kosten einer Charge nicht direkt änderbar', async () =>
     erwarteFehler(await db.from('charge').update({ kosten_cent: 1 }).eq('id', -1), '42501'));
 } else if (planung) {
-  console.log('ℹ Migration „kosten_naehrwerte“ noch nicht eingespielt – Ausgaben, Kosten je Mahlzeit und Kalorien sind ausgeblendet.');
+  console.log('ℹ Migration „kosten_naehrwerte“ noch nicht eingespielt – Kalorien und der Verlauf sind ausgeblendet.');
 }
 
 // Migration „ausgaben“ (optional): sonstige Ausgaben – eintragen und als entfernt markieren, nie löschen.
@@ -281,7 +281,7 @@ if (ausgaben) {
   await pruefe('Ausgaben nicht löschbar', async () =>
     erwarteFehler(await db.from('ausgabe').delete().eq('id', -1), '42501'));
 } else if (planung) {
-  console.log('ℹ Migration „ausgaben“ noch nicht eingespielt – „Sonstiges“ auf der Startseite ist ausgeblendet.');
+  console.log('ℹ Migration „ausgaben“ noch nicht eingespielt – die App nutzt sie nicht mehr.');
 }
 
 // ───────── Schema je Migration (nur lesend – Überblick, kein Fehler, wenn etwas fehlt) ─────────

@@ -51,7 +51,7 @@ export function anfrageFuer(s: Szenario): KiAnfrage {
   const snapshot: Snapshot = baueSnapshot(s.bestand, s.kuehlschrank ?? '', STICHTAG);
   return {
     snapshot,
-    optionen: { personen: 2, max_minuten: 30, guenstig: true, ...s.optionen },
+    optionen: { personen: 2, max_minuten: 30, ...s.optionen },
     gesehen: s.gesehen ?? [],
     feedback: s.feedback ?? [],
     modus: s.modus ?? { art: 'normal' },

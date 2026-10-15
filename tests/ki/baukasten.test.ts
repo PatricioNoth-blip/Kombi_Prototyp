@@ -15,23 +15,20 @@ import { anfrage, ids, OPTIONEN, SEED, snapshot, zeile } from './fixtures.ts';
 const DATUM = '2026-09-28';
 
 const HAUSHALT: BestandZeile[] = [
-  zeile(30, 'TK-Pizza Margherita', 'blau', 350, 200, 4, { art: 'komplettgericht', herkunft: 'gekauft', kosten_menge: 4, zusammensetzung: ['Tomatensoße', 'Mozzarella'] }),
-  zeile(31, 'Suppe', 'blau', 300, null, 3, { art: 'komplettgericht', herkunft: 'selbstgemacht' }),
-  zeile(32, 'Spaghetti', 'gelb', 125, 129, 380, { art: 'zutat', einheit: 'g', portion_menge: 125, kosten_menge: 500, lagerort: 'vorrat', geoeffnet: 380 }),
-  zeile(33, 'Linsen-Bolognese', 'rot', 150, 90, 4, { art: 'komponente', kosten_menge: 3, naechster_ablauf: '2026-09-30', bald_ablaufen: true }),
-  zeile(34, 'Joghurt', 'weiss', 150, 99, 2, { art: 'zutat', lagerort: 'kuehlschrank', abgelaufen: 2 }),
-  zeile(35, 'Brötchen', 'gelb', 80, 25, 6, { art: 'zutat', einheit: 'stueck', portion_menge: 2 }),
+  zeile(30, 'TK-Pizza Margherita', 'blau', 350, 4, { art: 'komplettgericht', herkunft: 'gekauft', zusammensetzung: ['Tomatensoße', 'Mozzarella'] }),
+  zeile(31, 'Suppe', 'blau', 300, 3, { art: 'komplettgericht', herkunft: 'selbstgemacht' }),
+  zeile(32, 'Spaghetti', 'gelb', 125, 380, { art: 'zutat', einheit: 'g', portion_menge: 125, lagerort: 'vorrat', geoeffnet: 380 }),
+  zeile(33, 'Linsen-Bolognese', 'rot', 150, 4, { art: 'komponente', naechster_ablauf: '2026-09-30', bald_ablaufen: true }),
+  zeile(34, 'Joghurt', 'weiss', 150, 2, { art: 'zutat', lagerort: 'kuehlschrank', abgelaufen: 2 }),
+  zeile(35, 'Brötchen', 'gelb', 80, 6, { art: 'zutat', einheit: 'stueck', portion_menge: 2 }),
 ];
 
 describe('Snapshot: zwei Ebenen – physischer Bestand und bekannte Bedeutung', () => {
   const s = baueSnapshot(HAUSHALT, 'halbe Zucchini', DATUM);
   const z = (name: string) => s.zutaten.find((x) => x.name === name)!;
 
-  test('Art, Herkunft, Einheit, Portionsgröße und Preisbezug kommen aus den Daten', () => {
-    assert.deepEqual(
-      [z('TK-Pizza Margherita').art, z('TK-Pizza Margherita').herkunft, z('TK-Pizza Margherita').kosten_menge],
-      ['komplettgericht', 'gekauft', 4],
-    );
+  test('Art, Herkunft, Einheit und Portionsgröße kommen aus den Daten', () => {
+    assert.deepEqual([z('TK-Pizza Margherita').art, z('TK-Pizza Margherita').herkunft], ['komplettgericht', 'gekauft']);
     assert.deepEqual([z('Spaghetti').einheit, z('Spaghetti').anzahl, z('Spaghetti').portion_menge], ['g', 380, 125]);
     assert.deepEqual([z('Brötchen').einheit, z('Brötchen').portion_menge], ['stueck', 2]);
   });
@@ -61,12 +58,12 @@ describe('Snapshot: zwei Ebenen – physischer Bestand und bekannte Bedeutung', 
     assert.equal(a('Pizza').art, 'komplettgericht');
     assert.equal(a('TK-Spinat').art, 'zutat');
     assert.equal(a('Tomatensoße').art, 'komponente');
-    assert.deepEqual([a('Tomatensoße').einheit, a('Tomatensoße').portion_menge, a('Tomatensoße').kosten_menge], ['portion', 1, 1]);
+    assert.deepEqual([a('Tomatensoße').einheit, a('Tomatensoße').portion_menge], ['portion', 1]);
     assert.equal(a('Pizza').zusammensetzung, null);
   });
 
   test('ein kleiner Rest in Gramm wird erkannt', () => {
-    const rest = baueSnapshot([zeile(40, 'Reis', 'gelb', 100, 99, 90, { einheit: 'g', portion_menge: 75, lagerort: 'vorrat' })], '', DATUM);
+    const rest = baueSnapshot([zeile(40, 'Reis', 'gelb', 100, 90, { einheit: 'g', portion_menge: 75, lagerort: 'vorrat' })], '', DATUM);
     assert.equal(rest.zutaten[0].rest, true);
   });
 });
@@ -130,15 +127,6 @@ describe('Geöffnetes, Ablaufendes und Reste werden gerettet – und begründet'
       'Du hast alles zuhause.',
     ]);
   });
-
-  test('Kosten: bekannte Preise proportional, Kühlschrank-Rest ehrlich unbekannt', () => {
-    assert.ok(p.ok);
-    // Spaghetti 250 g × 1,29 €/500 g = 64,5 ct; Bolognese 2 × 0,90 €/3 = 60 ct → 124,5 ct
-    assert.equal(p.wert.kosten.gesamt_cent, 125);
-    assert.equal(p.wert.kosten.pro_portion_cent, 62);
-    assert.equal(p.wert.kosten.status, 'teilweise');
-    assert.deepEqual(p.wert.kosten.unbekannt, ['halbe Zucchini']);
-  });
 });
 
 describe('Validierung vor dem Kochen', () => {
@@ -165,7 +153,7 @@ describe('Validierung vor dem Kochen', () => {
 });
 
 describe('Rezepte strukturiert speichern', () => {
-  test('Gerichtstyp, Zutaten mit Mengen, Portionen, Schritte, Bestandsarten, Tags, Kosten, Feedback', () => {
+  test('Gerichtstyp, Zutaten mit Mengen, Portionen, Schritte, Bestandsarten, Tags, Feedback', () => {
     const s = baueSnapshot(HAUSHALT, '', DATUM);
     const p = pruefeGericht({
       name: 'Spaghetti Bolognese', zutaten: [{ id: 'b32', portionen: 2 }, { id: 'b33', portionen: 2 }, { id: 'g-salz' }],
@@ -184,8 +172,7 @@ describe('Rezepte strukturiert speichern', () => {
     assert.deepEqual(r.schritte, ['Spaghetti kochen.', 'Mit Bolognese mischen.']);
     assert.deepEqual(r.bestandsarten.sort(), ['komponente', 'zutat']);
     assert.deepEqual(r.tags, ['schnell', 'rettet lebensmittel', 'italienisch']);
-    assert.equal(r.kosten_pro_portion_cent, 62);
-    assert.equal(r.kosten_status, 'berechnet');
+    assert.equal('kosten_pro_portion_cent' in r, false, 'keine Kosten');
     assert.deepEqual(r.feedback, ['like', 'save']);
     assert.equal(r.daten, p.wert, 'vollständiger Vorschlag bleibt erhalten');
   });

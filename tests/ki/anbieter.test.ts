@@ -94,7 +94,7 @@ describe('Konfiguration über Umgebungsvariablen', () => {
 });
 
 describe('Prompt', () => {
-  test('enthält Haushalt nach Art mit IDs, Kühlschrank, Gesehenes und vorsichtige Hinweise – aber keine Preisbeträge', () => {
+  test('enthält Haushalt nach Art mit IDs, Kühlschrank, Gesehenes und vorsichtige Hinweise – ohne Preise', () => {
     const a: KiAuftrag = {
       ...anfrage({ snapshot: snapshot(SEED, 'halbe Paprika'), gesehen: [{ name: 'Curry A', eigenschaften: fb('dislike', 'x').eigenschaften, zutaten: [] }] }),
       leitplanken: berechneLeitplanken([fb('dislike', 'A', { gerichtstyp: 'curry' }), fb('dislike', 'B', { gerichtstyp: 'curry' })], { art: 'normal' }),
@@ -106,11 +106,12 @@ describe('Prompt', () => {
     assert.deepEqual([pizza.name, pizza.typ, pizza.rolle, pizza.menge, pizza.einheit, pizza.lagerort, pizza.zusammensetzung],
       ['Pizza', 'komplettgericht', 'Komplettgericht', 4, 'portion', 'gefrierfach', null], 'Zusammensetzung unbekannt = null');
     const linsen = json.inventar.find((x: { id: string }) => x.id === 'b3');
-    assert.deepEqual([linsen.typ, linsen.rolle, linsen.menge, linsen.preisklasse], ['komponente', 'Protein', 6, '€ (sehr günstig)'], 'Preisklasse statt Betrag');
+    assert.deepEqual([linsen.typ, linsen.rolle, linsen.menge], ['komponente', 'Protein', 6]);
+    assert.equal('preisklasse' in linsen, false, 'keine Preise im Prompt');
     assert.equal(json.inventar.find((x: { id: string }) => x.id === 'b6').typ, 'zutat');
     assert.deepEqual(json.inventar.map((x: { typ: string }) => x.typ).filter((t: string, i: number, l: string[]) => l.indexOf(t) === i),
       ['komplettgericht', 'komponente', 'zutat'], 'nach Art geordnet');
-    assert.doesNotMatch(text, /\d+,\d\d €/, 'keine Euro-Beträge im Prompt');
+    assert.doesNotMatch(text, /€|günstig/i, 'kein Geld im Prompt');
     assert.deepEqual(json.kuehlschrank_reste, [{ id: 'k1', name: 'halbe Paprika', menge: null }], 'Menge unbekannt – keine Zahl');
     assert.ok(json.immer_da.some((x: { id: string }) => x.id === 'g-salz'));
     assert.match(text, /- Curry A/);
@@ -131,7 +132,7 @@ describe('Eingabeprüfung der Edge Function', () => {
     };
     const a = pruefeAnfrage(roh);
     assert.equal(a.snapshot.zutaten.some((z) => z.name === 'Hack'), false);
-    assert.deepEqual(a.optionen, { personen: 12, max_minuten: 5, guenstig: true });
+    assert.deepEqual(a.optionen, { personen: 12, max_minuten: 5 });
     assert.equal(a.gesehen.length, 60);
     assert.deepEqual(a.feedback.map((f) => f.aktion), ['dislike']);
     assert.equal(a.modus.art, 'aehnlich');

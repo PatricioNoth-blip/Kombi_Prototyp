@@ -1,7 +1,7 @@
 // Semantische Zutatenebene: GEKAUFTES PRODUKT → SEMANTISCHE ZUTAT → VERWENDUNGSMÖGLICHKEITEN.
 //
-// Die Sorte in der Datenbank ist das konkrete Produkt („REWE Strauchtomaten 500 g“, mit Preis,
-// Menge, Lagerort). Was dieses Produkt als Lebensmittel IST („Tomate“: Gemüse, frisch, roh und
+// Die Sorte in der Datenbank ist das konkrete Produkt („REWE Strauchtomaten 500 g“, mit Menge
+// und Lagerort). Was dieses Produkt als Lebensmittel IST („Tomate“: Gemüse, frisch, roh und
 // gekocht verwendbar, passt in Soße, Salat, Pasta …), steht hier – getrennt und deterministisch.
 //
 // Regeln:
@@ -9,7 +9,7 @@
 //     es wird nichts geraten.
 //   • Spezielles vor Allgemeinem: „Tomatensoße“ ist keine rohe Tomate, „gehackte Tomaten (Dose)“
 //     sind Dosentomaten.
-//   • Die Zutatenebene liefert nur Bedeutung. Mengen, Preise und Nährwerte kommen weiterhin
+//   • Die Zutatenebene liefert nur Bedeutung. Mengen und Nährwerte kommen weiterhin
 //     ausschließlich aus den Daten der Sorte.
 import type { Gerichtstyp } from './typen.ts';
 import { normalisiere } from './text.ts';

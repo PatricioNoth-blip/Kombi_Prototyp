@@ -11,7 +11,7 @@ import { produktSchluessel } from '../supabase/functions/_shared/kombi/einkaufsl
 import type { AuftauEintrag } from '../supabase/functions/_shared/kombi/planung.ts';
 import { bedarfAusGericht, bedarfAusKomponente } from '../supabase/functions/_shared/kombi/planung.ts';
 import type { NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts';
-import type { EinkaufsBuchung, HerstellungsZeile, MahlzeitZeile, SonstigeAusgabe } from './startseite.ts';
+import type { HerstellungsZeile, MahlzeitZeile } from './startseite.ts';
 import { vormonatsanfang } from './startseite.ts';
 import { artVon, einheitVon, portionMengeVon } from './format';
 import { naehrwertAus, naehrwerteFuerGericht, type Naehrwert, type Naehrwerte } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
@@ -33,23 +33,18 @@ export type Haushaltsdaten = {
   status: ZeilenStatus[];
   auftauen: AuftauEintrag[];
   nutzung: NutzungZeile[];
-  /** Einkäufe, Herstellungen und Mahlzeiten seit Monatsanfang (für die Startseite) */
-  einkaeufe: EinkaufsBuchung[];
+  /** Herstellungen und Mahlzeiten der letzten Wochen (Verlauf, „Heute gegessen“) */
   herstellungen: HerstellungsZeile[];
   mahlzeiten: MahlzeitZeile[];
-  /** sonstige Ausgaben seit Anfang des Vormonats */
-  sonstige: SonstigeAusgabe[];
   /** Migration „planung_einkauf“ vorhanden? */
   planung: boolean;
-  /** Migration „kosten_naehrwerte“ vorhanden? (Protokoll von Kochen/Produktion, Kosten je Charge) */
+  /** Migration „kosten_naehrwerte“ vorhanden? (Protokoll von Kochen und Produktion, Kalorien) */
   protokoll: boolean;
-  /** Migration „ausgaben“ vorhanden? (sonstige Ausgaben) */
-  ausgaben: boolean;
 };
 
 export const LEER: Haushaltsdaten = {
-  plaene: [], eintraege: [], status: [], auftauen: [], nutzung: [], einkaeufe: [], herstellungen: [], mahlzeiten: [], sonstige: [],
-  planung: false, protokoll: false, ausgaben: false,
+  plaene: [], eintraege: [], status: [], auftauen: [], nutzung: [], herstellungen: [], mahlzeiten: [],
+  planung: false, protokoll: false,
 };
 
 function heute(): string {
@@ -58,9 +53,6 @@ function heute(): string {
 }
 
 function meldung(e: { message: string; code?: string }): string {
-  if (/ausgabe/.test(e.message) && (e.code === 'PGRST205' || e.code === '42P01')) {
-    return 'Dafür fehlt noch die Migration „ausgaben“ (siehe README).';
-  }
   if (/essen|produzieren|einkaufen|mahlzeit|herstellung/.test(e.message) && (e.code === 'PGRST202' || e.code === 'PGRST205')) {
     return 'Dafür fehlt noch die Migration „kosten_naehrwerte“ (siehe README).';
   }
@@ -74,18 +66,16 @@ function pruefe(error: { message: string; code?: string } | null) {
 
 /** Lädt alles für Planung/Einkauf/Auftauen. Fehlt die Migration, gibt es leere Listen. */
 export async function ladeHaushalt(): Promise<Haushaltsdaten> {
-  // ab Anfang des Vormonats: für den Vergleich „bis zum gleichen Tag im Vormonat“
+  // Verlauf und „Heute gegessen“: ab Anfang des Vormonats genügt
   const ab = vormonatsanfang(heute());
-  const [plaene, eintraege, status, auftauen, nutzung, einkaeufe, herstellungen, mahlzeiten, sonstige] = await Promise.all([
+  const [plaene, eintraege, status, auftauen, nutzung, herstellungen, mahlzeiten] = await Promise.all([
     supabase.from('plan').select('*').eq('status', 'geplant').order('erstellt_am'),
     supabase.from('einkauf_eintrag').select('*').eq('status', 'offen').order('erstellt_am'),
     supabase.from('einkauf_status').select('schluessel, einheit, status'),
     supabase.from('auftauen').select('id, block_typ_id, menge, auftauen_am, plan_id, status'),
     supabase.from('nutzung').select('*'),
-    supabase.from('einkauf_buchung').select('erstellt_am, preis_cent, rueckgaengig').gte('erstellt_am', ab),
-    supabase.from('herstellung').select('datum, kosten_cent, kosten_unbekannt, rueckgaengig, block_typ_id, menge, erstellt_am').gte('datum', ab),
-    supabase.from('mahlzeit').select('datum, titel, portionen, kosten_cent, kosten_unbekannt, kcal, kcal_unbekannt, rueckgaengig, erstellt_am').gte('datum', ab),
-    supabase.from('ausgabe').select('id, datum, betrag_cent, notiz, entfernt').gte('datum', ab).order('datum', { ascending: false }),
+    supabase.from('herstellung').select('datum, rueckgaengig, block_typ_id, menge, erstellt_am').gte('datum', ab),
+    supabase.from('mahlzeit').select('datum, titel, portionen, kcal, kcal_unbekannt, rueckgaengig, erstellt_am').gte('datum', ab),
   ]);
   if (plaene.error) return LEER; // Migration fehlt (oder keine Verbindung) → ohne Planung weiter
   const protokoll = !mahlzeiten.error && !herstellungen.error;
@@ -95,13 +85,10 @@ export async function ladeHaushalt(): Promise<Haushaltsdaten> {
     status: (status.data ?? []) as ZeilenStatus[],
     auftauen: ((auftauen.data ?? []) as AuftauEintrag[]).filter((a) => a.status === 'geplant' || a.status === 'aufgetaut'),
     nutzung: (nutzung.data ?? []) as NutzungZeile[],
-    einkaeufe: (einkaeufe.data ?? []) as EinkaufsBuchung[],
     herstellungen: protokoll ? (herstellungen.data ?? []) as HerstellungsZeile[] : [],
     mahlzeiten: protokoll ? (mahlzeiten.data ?? []) as MahlzeitZeile[] : [],
-    sonstige: sonstige.error ? [] : (sonstige.data ?? []) as SonstigeAusgabe[],
     planung: true,
     protokoll,
-    ausgaben: !sonstige.error,
   };
 }
 
@@ -118,8 +105,6 @@ export function alsVorratSorte(s: Sorte): VorratSorte {
     groesse_g: s.groesse_g,
     anzahl: s.anzahl,
     abgelaufen: s.abgelaufen ?? 0,
-    kosten_cent: s.kosten_cent,
-    kosten_menge: s.kosten_menge ?? 1,
     mindestbestand: s.mindestbestand,
     lagerort: s.lagerort ?? 'gefrierfach',
     herkunft: s.herkunft ?? null,
@@ -214,7 +199,7 @@ export async function zeilenStatus(schluessel: string, einheit: string, status: 
 
 /** Gekaufte Menge in den Vorrat – nur einmal (die Datenbank sperrt die Zeile). Gibt die Buchung zurück. */
 export async function einkaufBuchen(p: {
-  schluessel: string; einheit: string; block_typ_id: number; menge: number; ablauf_am: string | null; preis_cent: number | null;
+  schluessel: string; einheit: string; block_typ_id: number; menge: number; ablauf_am: string | null;
 }): Promise<number> {
   const { data, error } = await supabase.rpc('einkauf_buchen', {
     p_schluessel: p.schluessel,
@@ -222,7 +207,6 @@ export async function einkaufBuchen(p: {
     p_block_typ_id: p.block_typ_id,
     p_menge: p.menge,
     p_ablauf_am: p.ablauf_am,
-    p_preis_cent: p.preis_cent,
   });
   pruefe(error);
   return data as number;
@@ -279,12 +263,9 @@ export async function auftauStatus(id: number, status: 'aufgetaut' | 'abgebroche
 
 // ───────── Mit Protokoll (Migration „kosten_naehrwerte“) ─────────
 
-export type EssenErgebnis = {
-  mahlzeit_id: number; bewegung_ids: number[];
-  kosten_cent: number | null; kosten_unbekannt: number; kcal: number | null; kcal_unbekannt: number;
-};
+export type EssenErgebnis = { mahlzeit_id: number; bewegung_ids: number[]; kcal: number | null; kcal_unbekannt: number };
 
-/** Kochen + festhalten, was es tatsächlich gekostet hat (aus den entnommenen Chargen) – eine Transaktion. */
+/** Kochen + als Mahlzeit festhalten (für „Heute gegessen“ und Kalorien) – eine Transaktion. */
 export async function essen(posten: Posten, planId: string | null, titel: string, portionen: number): Promise<EssenErgebnis> {
   const { data, error } = await supabase.rpc('essen', {
     p_posten: posten.map((p) => ({ block_typ_id: p.block_typ_id, menge: p.menge })),
@@ -301,12 +282,9 @@ export async function essenRueckgaengig(mahlzeitId: number): Promise<void> {
   pruefe(error);
 }
 
-export type ProduktionErgebnis = {
-  herstellung_id: number; bewegung_ids: number[];
-  kosten_cent: number | null; kosten_bekannt_cent: number | null; kosten_unbekannt: number;
-};
+export type ProduktionErgebnis = { herstellung_id: number; bewegung_ids: number[] };
 
-/** Herstellen mit tatsächlicher Menge und echten Kosten (nur wenn alle Zutatenpreise bekannt sind). */
+/** Herstellen mit tatsächlicher Menge – Zutaten raus, neue Charge rein, als Herstellung festgehalten. */
 export async function produzieren(posten: Posten, blockTypId: number, menge: number, ablaufAm: string | null, planId: string | null, nichtErfasst: number): Promise<ProduktionErgebnis> {
   const { data, error } = await supabase.rpc('produzieren', {
     p_posten: posten.map((p) => ({ block_typ_id: p.block_typ_id, menge: p.menge })),
@@ -322,30 +300,5 @@ export async function produzieren(posten: Posten, blockTypId: number, menge: num
 
 export async function produzierenRueckgaengig(herstellungId: number): Promise<void> {
   const { error } = await supabase.rpc('produzieren_rueckgaengig', { p_herstellung_id: herstellungId });
-  pruefe(error);
-}
-
-/** Direkt einbuchen mit bezahltem Preis – zählt als Einkaufsausgabe. */
-export async function einkaufen(blockTypId: number, menge: number, ablaufAm: string | null, preisCent: number): Promise<number> {
-  const { data, error } = await supabase.rpc('einkaufen', {
-    p_block_typ_id: blockTypId, p_menge: menge, p_ablauf_am: ablaufAm, p_preis_cent: preisCent,
-  });
-  pruefe(error);
-  return data as number;
-}
-
-// ───────── Sonstige Ausgaben (Migration „ausgaben“) ─────────
-
-/** Eine sonstige Ausgabe eintragen – echter, bezahlter Betrag, nichts geschätzt. */
-export async function ausgabeEintragen(betragCent: number, notiz: string | null, datum: string | null = null): Promise<void> {
-  const zeile: { betrag_cent: number; notiz: string | null; datum?: string } = { betrag_cent: betragCent, notiz: notiz?.trim().slice(0, 80) || null };
-  if (datum) zeile.datum = datum;
-  const { error } = await supabase.from('ausgabe').insert(zeile);
-  pruefe(error);
-}
-
-/** Nichts wird gelöscht: entfernen = ausblenden, zurückholen geht jederzeit. */
-export async function ausgabeEntfernen(id: number, entfernt: boolean): Promise<void> {
-  const { error } = await supabase.from('ausgabe').update({ entfernt }).eq('id', id);
   pruefe(error);
 }

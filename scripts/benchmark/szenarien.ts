@@ -8,37 +8,36 @@ export const STICHTAG = '2026-09-28';
 
 let naechsteId = 100;
 const z = (name: string, farbe: BestandZeile['farbe'], anzahl: number, teil: Partial<BestandZeile> = {}): BestandZeile => ({
-  id: naechsteId++, name, farbe, anzahl, bald_ablaufen: false, groesse_g: 100, kosten_cent: null, lagerort: 'kuehlschrank', art: 'zutat', ...teil,
+  id: naechsteId++, name, farbe, anzahl, bald_ablaufen: false, groesse_g: 100, lagerort: 'kuehlschrank', art: 'zutat', ...teil,
 });
-const g = (menge: number, preis: number | null, teil: Partial<BestandZeile> = {}): Partial<BestandZeile> =>
-  ({ einheit: 'g', portion_menge: 100, kosten_cent: preis, kosten_menge: 1000, ...teil });
+const g = (teil: Partial<BestandZeile> = {}): Partial<BestandZeile> => ({ einheit: 'g', portion_menge: 100, ...teil });
 
 // ───────── Bausteine ─────────
-export const TOMATE = z('Strauchtomaten', 'gruen', 500, g(500, 399, { kcal: 18, naehrwert_menge: 100 }));
-export const GURKE = z('Salatgurke', 'gruen', 1, { einheit: 'stueck', kosten_cent: 69, kcal: 45 });
-export const JOGHURT = z('Griechischer Joghurt', 'schwarz', 400, g(400, 298, { kcal: 97, naehrwert_menge: 100 }));
-export const ZWIEBEL = z('Zwiebeln', 'gruen', 600, g(600, 129, { lagerort: 'vorrat' }));
+export const TOMATE = z('Strauchtomaten', 'gruen', 500, g({ kcal: 18, naehrwert_menge: 100 }));
+export const GURKE = z('Salatgurke', 'gruen', 1, { einheit: 'stueck', kcal: 45 });
+export const JOGHURT = z('Griechischer Joghurt', 'schwarz', 400, g({ kcal: 97, naehrwert_menge: 100 }));
+export const ZWIEBEL = z('Zwiebeln', 'gruen', 600, g({ lagerort: 'vorrat' }));
 export const KNOBLAUCH = z('Knoblauch', 'weiss', 3, { einheit: 'stueck', lagerort: 'vorrat' });
-export const PAPRIKA = z('Paprika rot', 'gruen', 2, { einheit: 'stueck', kosten_cent: 79 });
-export const KARTOFFEL = z('Kartoffeln festkochend', 'gelb', 1500, g(1500, 199, { lagerort: 'vorrat', portion_menge: 250 }));
-export const KAROTTE = z('Karotten', 'gruen', 500, g(500, 99));
-export const SPINAT = z('Blattspinat', 'gruen', 200, g(200, 199, { naechster_ablauf: '2026-09-29', bald_ablaufen: true }));
-export const BROKKOLI = z('Brokkoli', 'gruen', 1, { einheit: 'stueck', kosten_cent: 149 });
-export const REIS = z('Basmati Reis', 'gelb', 1000, g(1000, 249, { lagerort: 'vorrat', portion_menge: 75, kcal: 350 }));
-export const PASTA = z('Spaghetti', 'gelb', 500, g(500, 99, { lagerort: 'vorrat', portion_menge: 125, kcal: 359 }));
-export const BROT = z('Vollkornbrot', 'gelb', 6, { einheit: 'stueck', lagerort: 'vorrat', kosten_cent: 219 });
-export const WRAPS = z('Weizen Wraps', 'gelb', 6, { einheit: 'stueck', lagerort: 'vorrat', kosten_cent: 149 });
-export const HAFER = z('Haferflocken', 'gelb', 500, g(500, 89, { lagerort: 'vorrat', portion_menge: 50 }));
-export const LINSEN = z('Rote Linsen', 'braun', 500, g(500, 179, { lagerort: 'vorrat', portion_menge: 80 }));
-export const KICHER = z('Kichererbsen (Dose)', 'braun', 2, { einheit: 'stueck', lagerort: 'vorrat', kosten_cent: 89 });
-export const BOHNEN = z('Kidneybohnen', 'braun', 1, { einheit: 'stueck', lagerort: 'vorrat', kosten_cent: 79 });
-export const KAESE = z('Gouda gerieben', 'schwarz', 200, g(200, 199, { kcal: 356, naehrwert_menge: 100 }));
-export const TOFU = z('Tofu natur', 'braun', 400, g(400, 229));
-export const SEITAN = z('Seitan', 'braun', 250, g(250, 299));
-export const MAIS = z('Mais (Dose)', 'gruen', 1, { einheit: 'stueck', lagerort: 'vorrat', kosten_cent: 89 });
+export const PAPRIKA = z('Paprika rot', 'gruen', 2, { einheit: 'stueck' });
+export const KARTOFFEL = z('Kartoffeln festkochend', 'gelb', 1500, g({ lagerort: 'vorrat', portion_menge: 250 }));
+export const KAROTTE = z('Karotten', 'gruen', 500, g());
+export const SPINAT = z('Blattspinat', 'gruen', 200, g({ naechster_ablauf: '2026-09-29', bald_ablaufen: true }));
+export const BROKKOLI = z('Brokkoli', 'gruen', 1, { einheit: 'stueck' });
+export const REIS = z('Basmati Reis', 'gelb', 1000, g({ lagerort: 'vorrat', portion_menge: 75, kcal: 350 }));
+export const PASTA = z('Spaghetti', 'gelb', 500, g({ lagerort: 'vorrat', portion_menge: 125, kcal: 359 }));
+export const BROT = z('Vollkornbrot', 'gelb', 6, { einheit: 'stueck', lagerort: 'vorrat' });
+export const WRAPS = z('Weizen Wraps', 'gelb', 6, { einheit: 'stueck', lagerort: 'vorrat' });
+export const HAFER = z('Haferflocken', 'gelb', 500, g({ lagerort: 'vorrat', portion_menge: 50 }));
+export const LINSEN = z('Rote Linsen', 'braun', 500, g({ lagerort: 'vorrat', portion_menge: 80 }));
+export const KICHER = z('Kichererbsen (Dose)', 'braun', 2, { einheit: 'stueck', lagerort: 'vorrat' });
+export const BOHNEN = z('Kidneybohnen', 'braun', 1, { einheit: 'stueck', lagerort: 'vorrat' });
+export const KAESE = z('Gouda gerieben', 'schwarz', 200, g({ kcal: 356, naehrwert_menge: 100 }));
+export const TOFU = z('Tofu natur', 'braun', 400, g());
+export const SEITAN = z('Seitan', 'braun', 250, g());
+export const MAIS = z('Mais (Dose)', 'gruen', 1, { einheit: 'stueck', lagerort: 'vorrat' });
 
 const komp = (name: string, farbe: BestandZeile['farbe'], anzahl: number, zusammensetzung: string[] | null, teil: Partial<BestandZeile> = {}) =>
-  z(name, farbe, anzahl, { art: 'komponente', lagerort: 'gefrierfach', herkunft: 'selbstgemacht', zusammensetzung, kosten_cent: 24, ...teil });
+  z(name, farbe, anzahl, { art: 'komponente', lagerort: 'gefrierfach', herkunft: 'selbstgemacht', zusammensetzung, ...teil });
 export const TOMATEN_BASIS = komp('Tomaten-Basis', 'rot', 6, ['Tomaten', 'Zwiebeln', 'Knoblauch'], { kcal: 45 });
 export const FALAFEL = komp('Falafel', 'braun', 8, null);
 export const OFENGEMUESE = komp('Ofengemüse', 'gruen', 4, ['Paprika', 'Zucchini', 'Zwiebeln']);
@@ -48,9 +47,9 @@ export const LINSEN_BOLO = komp('Linsen-Bolognese', 'braun', 4, ['Linsen', 'Toma
 export const SOSSE_UNBEKANNT = komp('Soße vom Wochenende', 'rot', 2, null);
 
 const fertig = (name: string, anzahl: number, teil: Partial<BestandZeile> = {}) =>
-  z(name, 'blau', anzahl, { art: 'komplettgericht', lagerort: 'gefrierfach', kosten_cent: 150, ...teil });
+  z(name, 'blau', anzahl, { art: 'komplettgericht', lagerort: 'gefrierfach', ...teil });
 export const PIZZA = fertig('TK-Pizza', 2, { herkunft: 'gekauft' });
-export const LASAGNE = fertig('Lasagne-Portion', 3, { herkunft: 'selbstgemacht', kosten_cent: 85 });
+export const LASAGNE = fertig('Lasagne-Portion', 3, { herkunft: 'selbstgemacht' });
 export const CHILI = fertig('Chili sin Carne', 4, { zusammensetzung: ['Bohnen', 'Tomaten', 'Mais', 'Paprika'] });
 export const BURRITO = fertig('Burrito', 2);
 
@@ -102,7 +101,7 @@ export const SZENARIEN: Szenario[] = [
   { id: 'komp-frisch', titel: 'Komponenten-Ideen aus frischen Zutaten', bestand: [TOMATE, ZWIEBEL, KNOBLAUCH, KICHER, KAROTTE], aufgabe: 'komponenten', anzahl: 3 },
   { id: 'komp-gross', titel: 'Komponenten-Ideen, großer Haushalt', bestand: ALLES, aufgabe: 'komponenten', anzahl: 4 },
   { id: 'woche', titel: 'Woche: 3 Abende planen', bestand: ALLES, aufgabe: 'woche', anzahl: 3 },
-  { id: 'schnell-guenstig', titel: '10 Minuten, günstig', bestand: ALLES, optionen: { max_minuten: 10, guenstig: true } },
+  { id: 'schnell', titel: '10 Minuten', bestand: ALLES, optionen: { max_minuten: 10 } },
   { id: 'vier-personen', titel: 'Vier Personen', bestand: [PASTA, LINSEN_BOLO, TOMATEN_BASIS, KAESE, BROKKOLI], optionen: { personen: 4 } },
   { id: 'sosse-unbekannt', titel: 'Soße mit unbekannter Zusammensetzung + Pasta', bestand: [SOSSE_UNBEKANNT, PASTA, KAESE] },
   { id: 'abgelaufen', titel: 'Abgelaufener Joghurt darf nicht eingeplant werden', bestand: [{ ...JOGHURT, abgelaufen: 400 }, HAFER, BROT] },

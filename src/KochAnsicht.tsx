@@ -3,13 +3,12 @@ import type { EntnahmePosten, KochZeile } from '../supabase/functions/_shared/ko
 import { entnahmeText, kochAnsicht, kochenBestaetigen } from '../supabase/functions/_shared/kombi/aktionen.ts';
 import type { FehlendeZutat, Gericht } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { Naehrwerte } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
-import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import * as api from './api';
 import { fehlerText, type Sorte } from './api';
 import { essen, essenRueckgaengig, kochen, kochenRueckgaengig } from './haushalt';
 import { Blatt, useScrollSperre } from './Blatt';
 import { Icon } from './Icon';
-import { euroKurz, kcalKurz, mengeText } from './format';
+import { kcalKurz, mengeText } from './format';
 import { PostenListe } from './PostenListe';
 import { GerichtBild } from './GerichtBild';
 
@@ -23,7 +22,7 @@ type Props = {
   reserviert: Map<number, { menge: number; plaene: string[] }>;
   /** Migration „planung_einkauf“: eine Buchung für alles (sonst nacheinander) */
   planung: boolean;
-  /** Migration „kosten_naehrwerte“: Kosten und kcal der Mahlzeit werden festgehalten */
+  /** Migration „kosten_naehrwerte“: die Mahlzeit wird festgehalten (Kalorien, „Heute gegessen“) */
   protokoll: boolean;
   /** z. B. „Gespeichertes Rezept“ – erklärt, woher das Rezept kommt */
   herkunft?: string | null;
@@ -33,7 +32,7 @@ type Props = {
   onSchliessen: () => void;
 };
 
-type Gebucht = { text: string; rueck: () => Promise<unknown>; danach: { name: string; text: string }[]; wert: string | null; warnung: string | null };
+type Gebucht = { text: string; rueck: () => Promise<unknown>; danach: { name: string; text: string }[]; warnung: string | null };
 type Stufe = 'rezept' | 'bestaetigen' | 'kochen' | 'fertig';
 
 /**
@@ -83,12 +82,10 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
     try {
       let rueck: () => Promise<unknown>;
       let warnung: string | null = null;
-      let wert: string | null = null;
       if (protokoll) {
-        // eine Transaktion – und der tatsächliche Wert der entnommenen Chargen wird festgehalten
+        // eine Transaktion – und die Mahlzeit wird festgehalten (Kalorien, „Heute gegessen“)
         const e = await essen(aktiv, planId, g.name, g.portionen);
         rueck = () => essenRueckgaengig(e.mahlzeit_id);
-        if (e.kosten_cent !== null) wert = `Wert ${e.kosten_unbekannt ? 'ab ' : ''}${euroText(e.kosten_cent)}`;
       } else if (planung) {
         const ids = await kochen(aktiv, planId);
         rueck = () => kochenRueckgaengig(ids, planId);
@@ -102,7 +99,7 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
         const rest = Math.max(0, (sorteVon(p.block_typ_id)?.anzahl ?? 0) - p.menge);
         return { name: p.name, text: rest === 0 ? 'aufgebraucht' : `noch ${mengeText(rest, p.einheit)}` };
       });
-      setGebucht({ text: entnahmeText(aktiv), rueck, danach, wert, warnung });
+      setGebucht({ text: entnahmeText(aktiv), rueck, danach, warnung });
       setStufe('kochen');
       onGekocht();
     } catch (e) {
@@ -227,16 +224,13 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
         </section>
 
         <details className="mehr abstand-oben">
-          <summary>Preis und Nährwerte</summary>
+          <summary>Nährwerte</summary>
           <div className="info-zeilen">
-            <div className="info-zeile"><span>Preis je Portion</span><span>{euroKurz(g.kosten)}</span></div>
             <div className="info-zeile"><span>Kalorien je Portion</span><span>{kcalKurz(n)}</span></div>
             {makros.length > 0 && <div className="info-zeile"><span>je Portion</span><span>{makros.join(' · ')}</span></div>}
-            <div className="info-zeile"><span>Wert aus dem Vorrat</span><span>{g.kosten.gesamt_cent === null ? 'Preis unbekannt' : `${g.kosten.status === 'teilweise' ? 'ab ' : ''}${euroText(g.kosten.gesamt_cent)}`}</span></div>
           </div>
           <p className="meta-text">
-            Nur aus hinterlegten Preisen und Nährwerten – Kombi schätzt nichts. „ab …“ heißt: mindestens, einiges fehlt.
-            {g.kosten.unbekannt.length > 0 && ` Ohne Preis: ${g.kosten.unbekannt.join(', ')}.`}
+            Nur aus hinterlegten Nährwerten – Kombi schätzt nichts. „ab …“ heißt: mindestens, für einiges fehlen Angaben.
             {n.unbekannt.length > 0 && ` Ohne Nährwerte: ${n.unbekannt.join(', ')}.`}
             {herkunft && ' Beim Kochen zählt der aktuelle Vorrat.'}
           </p>
@@ -357,7 +351,7 @@ function Kochmodus({ g, zeilen, fehlt, gebucht, fertig, laeuft, onFertig, onWeit
         <div className="km-fertig">
           <span className="km-fertig-icon" aria-hidden="true"><Icon name="haken" groesse={34} /></span>
           <h2>Guten Appetit!</h2>
-          <p className="leise">{gebucht ? `Aus dem Vorrat abgezogen: ${gebucht.text}${gebucht.wert ? ` · ${gebucht.wert}` : ''}.` : 'Am Vorrat wurde nichts geändert.'}</p>
+          <p className="leise">{gebucht ? `Aus dem Vorrat abgezogen: ${gebucht.text}.` : 'Am Vorrat wurde nichts geändert.'}</p>
           {gebucht?.warnung && <p className="status-achtung klein">{gebucht.warnung}</p>}
           {gebucht && gebucht.danach.length > 0 && (
             <section className="abschnitt">

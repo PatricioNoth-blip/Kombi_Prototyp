@@ -6,7 +6,6 @@ import { restSnapshot } from '../supabase/functions/_shared/kombi/planung.ts';
 import { bereiteProduktionVor, komponenteAlsSorte, type ProduktionsZeile } from '../supabase/functions/_shared/kombi/komponenten.ts';
 import { GERICHT_EMOJI, GERICHT_NAME, ROLLEN } from '../supabase/functions/_shared/kombi/rollen.ts';
 import { batchEmpfehlungen, type BatchSorte, type NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts';
-import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { fehlerText, ladeBestand, setzeNaehrwerte, speichereSorte, type Sorte, type SorteDaten } from './api';
 import { baueSnapshotAus, holeKomponenten, type Quelle } from './essenApi';
 import {
@@ -19,7 +18,7 @@ import { Blatt } from './Blatt';
 import { PostenListe } from './PostenListe';
 import { Icon } from './Icon';
 import { lagerort } from './farben';
-import { artVon, einheitVon, euroKurz, heuteIso, kcalKurz, mengeText, portionMengeVon, portionenVon } from './format';
+import { artVon, einheitVon, heuteIso, kcalKurz, mengeText, portionMengeVon, portionenVon } from './format';
 import { istDringend, nachzukochen, plusTageIso, produktionsGruende, zustand } from './dashboard';
 import { normalisiere } from '../supabase/functions/_shared/kombi/text.ts';
 import { Bild, type BildArt } from './Bild';
@@ -137,7 +136,7 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
       // nur der freie Vorrat: Geplantes wird nicht noch einmal verplant
       const snapshot = restSnapshot(baueSnapshotAus(await ladeBestand(), ''), reserviert);
       const a = await holeKomponenten({
-        snapshot, optionen: { personen: 2, max_minuten: null, guenstig: true }, gesehen: [], feedback: [],
+        snapshot, optionen: { personen: 2, max_minuten: null }, gesehen: [], feedback: [],
         modus: { art: 'normal' }, anzahl: 6, aufgabe: 'komponenten',
       });
       setKiIdeen(a.ergebnis.komponenten);
@@ -247,7 +246,7 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
         )}
         <p className="abschnitt-fuss">
           {quelle?.art === 'ki'
-            ? `Ideen von der KI (${quelle.anbieter}) – Mengen, Kosten und Nutzbarkeit rechnet Kombi selbst.`
+            ? `Ideen von der KI (${quelle.anbieter}) – Mengen und Nutzbarkeit rechnet Kombi selbst.`
             : 'Aus deinem Vorrat nach Kombi-Regeln. „Neue Ideen“ fragt die KI. Angelegt wird nichts, bevor du es bestätigst.'}
         </p>
       </Box>
@@ -307,15 +306,11 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
                       <span className="zeile-titel">{s?.name ?? 'Komponente'}</span>
                       <span className="zeile-meta">{tagName(heute, v.datum)} · +{mengeText(v.menge ?? 0, s ? einheitVon(s) : 'portion')}</span>
                     </span>
-                    <span className="zeile-wert">
-                      {v.kosten_cent === null ? 'Preis unbekannt' : `${v.kosten_unbekannt ? 'ab ' : ''}${euroText(v.kosten_cent)}`}
-                    </span>
                   </div>
                 </li>
               );
             })}
           </ul>
-          <p className="abschnitt-fuss">Wert der verarbeiteten Zutaten – schon in den Einkäufen enthalten, nie doppelt gezählt.</p>
         </Box>
       )}
 
@@ -416,7 +411,7 @@ function KomponenteBlatt({ k, bestand, planung, onStarten, onVormerken, onSchlie
     <Blatt titel={k.name} untertitel={`${ROLLEN[k.rolle].name} · ${k.portionen} Portionen · ${lagerort(k.lagerort).name}`} onSchliessen={onSchliessen}>
       {k.beschreibung && <p className="vorschlag-text">{k.beschreibung}</p>}
       <p className="meta abstand-oben">
-        <span>{k.zeit_min} Min</span><span>{euroKurz(k.kosten)} / Portion</span><span>{kcalKurz(k.naehrwerte)} / Portion</span>
+        <span>{k.zeit_min} Min</span><span>{kcalKurz(k.naehrwerte)} / Portion</span>
       </p>
 
       <section className="abschnitt">
@@ -466,11 +461,9 @@ function KomponenteBlatt({ k, bestand, planung, onStarten, onVormerken, onSchlie
         {k.schritte.length > 0 && <ol className="schritte-kurz">{k.schritte.map((s, i) => <li key={i}>{s}</li>)}</ol>}
         <ul className="klein">{k.nutzbarkeit.gruende.map((g) => <li key={g}>{g}</li>)}</ul>
         <div className="info-zeilen">
-          <div className="info-zeile"><span>Herstellung gesamt</span><span>{k.kosten.gesamt_cent === null ? 'unbekannt' : `${k.kosten.status === 'teilweise' ? 'ab ' : ''}${euroText(k.kosten.gesamt_cent)}`}</span></div>
           <div className="info-zeile"><span>Haltbar</span><span>ca. {k.haltbar_tage} Tage</span></div>
-          {k.kosten.unbekannt.length > 0 && <div className="info-zeile"><span>Ohne Preis</span><span>{k.kosten.unbekannt.join(', ')}</span></div>}
         </div>
-        <p className="meta-text">Nutzbarkeit, Mengen und Kosten rechnet Kombi – nicht die KI.</p>
+        <p className="meta-text">Nutzbarkeit und Mengen rechnet Kombi – nicht die KI.</p>
       </details>
     </Blatt>
   );
@@ -483,7 +476,7 @@ const ZEILEN_TEXT: Record<ProduktionsZeile['status'], string> = {
 /**
  * Produktion in zwei Schritten: planen (Menge wählen, Zutaten skalieren, gegen den Vorrat prüfen)
  * und bestätigen (tatsächliche Menge, Haltbarkeit). Gebucht wird erst beim Bestätigen – in EINER
- * Transaktion: Zutaten raus, neue Charge mit den tatsächlichen Kosten rein.
+ * Transaktion: Zutaten raus, neue Charge rein.
  */
 function ProduktionBlatt({ auftrag, plan, bestand, sorten, protokoll, onMeldung, onGeaendert, onFertig, onSchliessen }: {
   auftrag: Auftrag; plan: Plan | null; bestand: Sorte[]; sorten: VorratSorte[]; protokoll: boolean;
@@ -505,18 +498,6 @@ function ProduktionBlatt({ auftrag, plan, bestand, sorten, protokoll, onMeldung,
 
   const zeilen = vorbereitet.zeilen.filter((z) => z.status !== 'immer_da');
   const immerDa = vorbereitet.zeilen.filter((z) => z.status === 'immer_da').map((z) => z.name);
-
-  // Vorschau aus gespeicherten Preisen – gebucht werden die echten Kosten der entnommenen Chargen
-  const vorschau = (() => {
-    let cent = 0;
-    let unbekannt = vorbereitet.nicht_erfasst.length;
-    for (const p of posten.filter((x) => x.menge > 0)) {
-      const s = sorten.find((x) => x.id === p.block_typ_id);
-      if (!s || s.kosten_cent === null) unbekannt++;
-      else cent += (p.menge * s.kosten_cent) / Math.max(1, s.kosten_menge);
-    }
-    return { cent: Math.round(cent), unbekannt };
-  })();
 
   function weiter() {
     setPosten(vorbereitet.posten.map((p) => ({ ...p })));
@@ -563,9 +544,6 @@ function ProduktionBlatt({ auftrag, plan, bestand, sorten, protokoll, onMeldung,
       const name = ziel?.name ?? k.name;
       if (protokoll) {
         const r = await produzieren(aktiv, id, menge, ablauf || null, plan?.id ?? null, vorbereitet.nicht_erfasst.length);
-        const kosten = r.kosten_cent !== null
-          ? ` · ${euroText(r.kosten_cent)} (${euroText(Math.round(r.kosten_cent / Math.max(1, tatsaechlich)))} / Portion)`
-          : r.kosten_bekannt_cent ? ` · ab ${euroText(r.kosten_bekannt_cent)} (einige ohne Preis)` : ' · Preis unbekannt';
         // Nährwerte der Komponente aus den tatsächlich entnommenen Zutaten – nur vollständig bekannt,
         // und nur, wenn die Sorte noch keine hat (Werte von der Packung werden nie überschrieben)
         let kcalText = '';
@@ -584,7 +562,7 @@ function ProduktionBlatt({ auftrag, plan, bestand, sorten, protokoll, onMeldung,
             }
           }
         }
-        onFertig(`${name}: +${mengeText(menge, einheit)} im Vorrat${kosten}${kcalText}`, () => produzierenRueckgaengig(r.herstellung_id));
+        onFertig(`${name}: +${mengeText(menge, einheit)} im Vorrat${kcalText}`, () => produzierenRueckgaengig(r.herstellung_id));
       } else {
         const ids = await herstellen(aktiv, id, menge, ablauf || null, plan?.id ?? null);
         onFertig(`${name}: +${mengeText(menge, einheit)} im Vorrat.`, () => kochenRueckgaengig(ids, plan?.id ?? null));
@@ -692,14 +670,7 @@ function ProduktionBlatt({ auftrag, plan, bestand, sorten, protokoll, onMeldung,
             <input type="date" value={ablauf} min={heuteIso()} onChange={(e) => setAblauf(e.target.value)} />
           </label>
         </div>
-        <p className="abschnitt-fuss">
-          {tatsaechlich !== geplant ? `Gezählt wird die echte Menge: ${tatsaechlich} statt ${geplant} Portionen. ` : ''}
-          {vorschau.unbekannt === 0
-            ? `Warenwert ≈ ${euroText(vorschau.cent)} · ≈ ${euroText(Math.round(vorschau.cent / Math.max(1, tatsaechlich)))} / Portion.`
-            : vorschau.cent > 0
-              ? `Warenwert ab ${euroText(vorschau.cent)} – ${vorschau.unbekannt} ohne Preis.`
-              : 'Warenwert unbekannt – keine Preise hinterlegt.'}
-        </p>
+        {tatsaechlich !== geplant && <p className="abschnitt-fuss">Gezählt wird die echte Menge: {tatsaechlich} statt {geplant} Portionen.</p>}
       </section>
 
       {fehler && <p className="fehlertext">{fehler}</p>}
@@ -708,7 +679,7 @@ function ProduktionBlatt({ auftrag, plan, bestand, sorten, protokoll, onMeldung,
           <Icon name="haken" /> {laeuft ? 'Bucht …' : `${tatsaechlich} Portionen einbuchen`}
         </button>
         <button type="button" className="link breit abstand-oben" disabled={laeuft} onClick={() => setStufe('planen')}>Zurück</button>
-        <p className="abschnitt-fuss">Eine Buchung: Zutaten raus, neue Charge rein – mit den echten Kosten der entnommenen Zutaten. Das zählt nicht noch einmal als Einkauf.</p>
+        <p className="abschnitt-fuss">Eine Buchung: Die Zutaten werden aus dem Vorrat abgezogen, die fertigen Portionen eingebucht.</p>
       </div>
     </Blatt>
   );

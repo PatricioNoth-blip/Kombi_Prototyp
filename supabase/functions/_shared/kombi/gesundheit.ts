@@ -7,7 +7,7 @@ import { erzeugeVorschlaege } from './engine.ts';
 import { kiKonfiguration } from './anbieter/konfiguration.ts';
 
 /** Version der Kombi-Engine – steht in App und Edge Function; weicht sie ab, ist die Function veraltet. */
-export const ENGINE_VERSION = '2026-09-28.3';
+export const ENGINE_VERSION = '2026-10-15.1';
 
 export type KiProbe = {
   ok: boolean;
@@ -31,13 +31,13 @@ export type KiProbe = {
 /** Kleiner, fester Haushalt für den Probelauf (keine echten Daten, nichts wird gespeichert). */
 export const PROBE_ANFRAGE: KiAnfrage = {
   snapshot: baueSnapshot([
-    { id: 1, name: 'Tomaten-Basis', farbe: 'rot', anzahl: 4, bald_ablaufen: false, groesse_g: 150, kosten_cent: 24, art: 'komponente', zusammensetzung: ['Tomaten', 'Zwiebeln', 'Knoblauch'] },
-    { id: 2, name: 'Linsen gekocht', farbe: 'braun', anzahl: 4, bald_ablaufen: true, groesse_g: 150, kosten_cent: 12, art: 'komponente', zusammensetzung: ['Linsen'] },
-    { id: 3, name: 'Spaghetti', farbe: 'gelb', anzahl: 500, bald_ablaufen: false, groesse_g: 125, kosten_cent: 99, art: 'zutat', einheit: 'g', portion_menge: 125, kosten_menge: 500, lagerort: 'vorrat' },
-    { id: 4, name: 'Gurke', farbe: 'gruen', anzahl: 1, bald_ablaufen: false, groesse_g: 300, kosten_cent: 69, art: 'zutat', einheit: 'stueck', lagerort: 'kuehlschrank' },
-    { id: 5, name: 'Joghurt', farbe: 'schwarz', anzahl: 500, bald_ablaufen: false, groesse_g: 100, kosten_cent: null, art: 'zutat', einheit: 'g', portion_menge: 100, lagerort: 'kuehlschrank' },
+    { id: 1, name: 'Tomaten-Basis', farbe: 'rot', anzahl: 4, bald_ablaufen: false, groesse_g: 150, art: 'komponente', zusammensetzung: ['Tomaten', 'Zwiebeln', 'Knoblauch'] },
+    { id: 2, name: 'Linsen gekocht', farbe: 'braun', anzahl: 4, bald_ablaufen: true, groesse_g: 150, art: 'komponente', zusammensetzung: ['Linsen'] },
+    { id: 3, name: 'Spaghetti', farbe: 'gelb', anzahl: 500, bald_ablaufen: false, groesse_g: 125, art: 'zutat', einheit: 'g', portion_menge: 125, lagerort: 'vorrat' },
+    { id: 4, name: 'Gurke', farbe: 'gruen', anzahl: 1, bald_ablaufen: false, groesse_g: 300, art: 'zutat', einheit: 'stueck', lagerort: 'kuehlschrank' },
+    { id: 5, name: 'Joghurt', farbe: 'schwarz', anzahl: 500, bald_ablaufen: false, groesse_g: 100, art: 'zutat', einheit: 'g', portion_menge: 100, lagerort: 'kuehlschrank' },
   ], '', '2026-09-28'),
-  optionen: { personen: 2, max_minuten: 30, guenstig: true },
+  optionen: { personen: 2, max_minuten: 30 },
   gesehen: [],
   feedback: [],
   modus: { art: 'normal' },

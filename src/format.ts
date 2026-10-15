@@ -1,8 +1,7 @@
-// Anzeige-Helfer für Datum, Geld, Mengen und Preise.
+// Anzeige-Helfer für Datum und Mengen.
 import type { Art, Einheit, Sorte } from './api';
 import { artAusAltdaten } from '../supabase/functions/_shared/kombi/snapshot.ts';
-import { bezugText, mengeText, portionenText } from '../supabase/functions/_shared/kombi/mengen.ts';
-import { euroText, portionspreis } from '../supabase/functions/_shared/kombi/kosten.ts';
+import { mengeText, portionenText } from '../supabase/functions/_shared/kombi/mengen.ts';
 
 /** '2026-09-27' → '27.09.2026' */
 export function datum(iso: string): string {
@@ -25,28 +24,9 @@ export function tageSeit(iso: string): number {
   return Math.round((heute - Date.UTC(j, m - 1, t)) / 86_400_000);
 }
 
-/** 17 → '0,17 €' */
-export function euro(cent: number): string {
-  return (cent / 100).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-}
+// ───────── Sorten anzeigen (Einheiten, Portionen – über die zentrale Engine-Logik) ─────────
 
-/** Kompakt für Übersichten: ab 100 € ohne Cent („142 €“), darunter genau („23,40 €“). Details zeigen immer genau. */
-export function euroKompakt(cent: number): string {
-  if (Math.abs(cent) >= 10_000) return `${Math.round(cent / 100).toLocaleString('de-DE')} €`;
-  return euro(cent);
-}
-
-/** '0,17' / '0.17' / '1' → Cent; leer → null; ungültig → NaN */
-export function euroZuCent(text: string): number | null {
-  const t = text.replace('€', '').trim().replace(',', '.');
-  if (t === '') return null;
-  const wert = Number(t);
-  return Number.isFinite(wert) && wert >= 0 ? Math.round(wert * 100) : NaN;
-}
-
-// ───────── Sorten anzeigen (Einheiten, Portionen, Preise – über die zentrale Engine-Logik) ─────────
-
-export { bezugText, mengeText, portionenText };
+export { mengeText, portionenText };
 
 export const einheitVon = (s: Pick<Sorte, 'einheit'>): Einheit => s.einheit ?? 'portion';
 export const portionMengeVon = (s: Pick<Sorte, 'einheit' | 'portion_menge'>): number =>
@@ -65,19 +45,6 @@ export function mengeKurz(menge: number, einheit: Einheit): { zahl: string; einh
 /** Portionen, die die Menge ergibt (abgerundet auf halbe) */
 export function portionenVon(s: Sorte): number {
   return Math.floor((s.anzahl / portionMengeVon(s)) * 2) / 2;
-}
-
-/** „0,50 € / Portion“ – berechnet aus gespeichertem Preis und Bezugsmenge; sonst „Preis unbekannt“ */
-export function portionspreisText(s: Pick<Sorte, 'kosten_cent' | 'kosten_menge' | 'einheit' | 'portion_menge'>): string {
-  const p = portionspreis({ kosten_cent: s.kosten_cent, kosten_menge: s.kosten_menge ?? 1, portion_menge: portionMengeVon(s) });
-  return p === null ? 'Preis unbekannt' : `${euroText(p)} / Portion`;
-}
-
-/** Gespeicherter Preis mit Bezug: „2,00 € für 4 Portionen“ */
-export function preisMitBezug(s: Pick<Sorte, 'kosten_cent' | 'kosten_menge' | 'einheit'>): string | null {
-  if (s.kosten_cent === null) return null;
-  // geschütztes Leerzeichen: „500 g“ nicht umbrechen
-  return `${euroText(s.kosten_cent)} ${bezugText(s.kosten_menge ?? 1, einheitVon(s)).replace(/(\d) /g, '$1\u00a0')}`;
 }
 
 export function tageBis(iso: string): number {
@@ -99,13 +66,7 @@ export function heuteIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// ───────── Kurzformen für die Zeile „18 Min · 0,64 € · 620 kcal“ (je Portion) ─────────
-
-/** „0,64 €“, „ab 0,40 €“ oder „Preis unbekannt“ – je Portion, nur aus bekannten Preisen */
-export function euroKurz(k: { status: 'berechnet' | 'teilweise' | 'unbekannt'; pro_portion_cent: number | null }): string {
-  if (k.status === 'unbekannt' || k.pro_portion_cent === null) return 'Preis unbekannt';
-  return `${k.status === 'teilweise' ? 'ab ' : ''}${(k.pro_portion_cent / 100).toFixed(2).replace('.', ',')} €`;
-}
+// ───────── Kurzform für die Zeile „18 Min · 620 kcal“ (je Portion) ─────────
 
 /** „620 kcal“, „ab 450 kcal“ oder „kcal unbekannt“ – je Portion, nur aus hinterlegten Nährwerten */
 export function kcalKurz(n: { status: 'berechnet' | 'teilweise' | 'unbekannt'; kcal_portion: number | null } | null | undefined): string {

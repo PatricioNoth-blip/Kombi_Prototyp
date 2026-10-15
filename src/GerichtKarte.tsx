@@ -1,7 +1,7 @@
 import type { Gericht } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { Naehrwerte } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
 import { Icon } from './Icon';
-import { euroKurz, kcalKurz, mengeText } from './format';
+import { kcalKurz, mengeText } from './format';
 import { GerichtBild } from './GerichtBild';
 
 /** Zutaten in Kurzform: „Tomaten-Basis, Spaghetti“ */
@@ -25,7 +25,7 @@ type Aktionen = {
 };
 
 /**
- * Ein Vorschlag: Bild, Name, ein Satz, Zeit · Portionen · Preis · kcal, woraus es besteht, was fehlt –
+ * Ein Vorschlag: Bild, Name, ein Satz, Zeit · Portionen · kcal, woraus es besteht, was fehlt –
  * und die Hauptaktion „Jetzt kochen“ (öffnet die Rezeptseite). Das ganze Rezept mit Schritten steht
  * auf der Rezeptseite, nicht klein in der Karte.
  */
@@ -43,7 +43,6 @@ export function GerichtKarte({ g, naehrwerte: n, kompakt = false, aktionen }: { 
         <p className="fakten">
           <span><Icon name="uhr" groesse={16} /> {g.zeit_min} Min</span>
           <span><Icon name="personen" groesse={16} /> {g.portionen} {g.portionen === 1 ? 'Portion' : 'Portionen'}</span>
-          <span><Icon name="preis" groesse={16} /> {euroKurz(g.kosten)}{g.kosten.pro_portion_cent !== null ? ' / Portion' : ''}</span>
           <span><Icon name="flamme" groesse={16} /> {kcalKurz(n)}</span>
         </p>
         {komponenten.length > 0 && (

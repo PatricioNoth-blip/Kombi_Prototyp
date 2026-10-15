@@ -5,30 +5,30 @@ import type {
   Eigenschaften, FeedbackEintrag, GerichtKurz, KiAnbieter, KiAnfrage, KiAuftrag, Optionen, RohAntwort, Snapshot,
 } from '../../supabase/functions/_shared/kombi/typen.ts';
 
-export const zeile = (id: number, name: string, farbe: BestandZeile['farbe'], groesse_g: number, kosten_cent: number | null, anzahl: number, extra: Partial<BestandZeile> = {}): BestandZeile =>
-  ({ id, name, farbe, groesse_g, kosten_cent, anzahl, bald_ablaufen: false, lagerort: 'gefrierfach', ...extra });
+export const zeile = (id: number, name: string, farbe: BestandZeile['farbe'], groesse_g: number, anzahl: number, extra: Partial<BestandZeile> = {}): BestandZeile =>
+  ({ id, name, farbe, groesse_g, anzahl, bald_ablaufen: false, lagerort: 'gefrierfach', ...extra });
 
 export const SEED: BestandZeile[] = [
-  zeile(1, 'Tomatensoße', 'rot', 100, 17, 6),
-  zeile(2, 'Curry-Basis Kokos', 'rot', 100, 33, 6),
-  zeile(3, 'Linsen gekocht', 'braun', 100, 8, 6),
-  zeile(4, 'Kichererbsen', 'braun', 100, 8, 6),
-  zeile(5, 'Bohnen-Patty', 'braun', 80, 30, 4),
-  zeile(6, 'TK-Gemüsemix', 'gruen', 100, 20, 10),
-  zeile(7, 'TK-Spinat', 'gruen', 100, 22, 4),
-  zeile(8, 'Brötchen', 'gelb', 80, 10, 12),
-  zeile(9, 'Wrap', 'gelb', 60, 6, 4),
-  zeile(10, 'Booster Italien', 'weiss', 30, 20, 6),
-  zeile(11, 'Booster Indien', 'weiss', 30, 25, 6),
-  zeile(12, 'Booster Mexiko', 'weiss', 30, 23, 6),
-  zeile(13, 'Pizza', 'blau', 400, 150, 4),
-  zeile(14, 'Linsensuppe', 'blau', 250, 50, 8),
-  zeile(15, 'Lasagne-Portion', 'blau', 350, 85, 6),
-  zeile(16, 'Burrito', 'blau', 250, 80, 8),
-  zeile(17, 'Chili-Reis-Box', 'blau', 400, 100, 4),
+  zeile(1, 'Tomatensoße', 'rot', 100, 6),
+  zeile(2, 'Curry-Basis Kokos', 'rot', 100, 6),
+  zeile(3, 'Linsen gekocht', 'braun', 100, 6),
+  zeile(4, 'Kichererbsen', 'braun', 100, 6),
+  zeile(5, 'Bohnen-Patty', 'braun', 80, 4),
+  zeile(6, 'TK-Gemüsemix', 'gruen', 100, 10),
+  zeile(7, 'TK-Spinat', 'gruen', 100, 4),
+  zeile(8, 'Brötchen', 'gelb', 80, 12),
+  zeile(9, 'Wrap', 'gelb', 60, 4),
+  zeile(10, 'Booster Italien', 'weiss', 30, 6),
+  zeile(11, 'Booster Indien', 'weiss', 30, 6),
+  zeile(12, 'Booster Mexiko', 'weiss', 30, 6),
+  zeile(13, 'Pizza', 'blau', 400, 4),
+  zeile(14, 'Linsensuppe', 'blau', 250, 8),
+  zeile(15, 'Lasagne-Portion', 'blau', 350, 6),
+  zeile(16, 'Burrito', 'blau', 250, 8),
+  zeile(17, 'Chili-Reis-Box', 'blau', 400, 4),
 ];
 
-export const OPTIONEN: Optionen = { personen: 2, max_minuten: 15, guenstig: true };
+export const OPTIONEN: Optionen = { personen: 2, max_minuten: 15 };
 
 export function snapshot(bestand: BestandZeile[] = SEED, kuehlschrank = ''): Snapshot {
   return baueSnapshot(bestand, kuehlschrank, '2026-09-28');

@@ -4,18 +4,16 @@ import { mangelVorschlaege, type Einkaufsliste, type PlanStand } from '../supaba
 import { restSnapshot } from '../supabase/functions/_shared/kombi/planung.ts';
 import { erzeugeKomponenten, erzeugeVorschlaege } from '../supabase/functions/_shared/kombi/engine.ts';
 import { regelbasiert } from '../supabase/functions/_shared/kombi/anbieter/regelbasiert.ts';
-import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
-import { fehlerText, type Sorte } from './api';
-import { baueSnapshotAus } from './essenApi';
-import { alsVorratSorte, ausgabeEintragen, ausgabeEntfernen, type Haushaltsdaten } from './haushalt';
+import type { Sorte } from './api';
+import { baueSnapshotAus, gespeicherteOptionen } from './essenApi';
+import { alsVorratSorte, type Haushaltsdaten } from './haushalt';
 import { GerichtBild } from './GerichtBild';
 import { Blatt } from './Blatt';
 import { SoGehts } from './Hilfe';
 import { Icon, type IconName } from './Icon';
-import { euro, euroKompakt, euroZuCent } from './format';
 import {
-  monatsbilanz, produktionsZeile, sinnvolleProduktion, startAbschnitte, startVorschlaege, tagesuebersicht,
-  type Monatsbilanz, type StartAbschnitt, type StartVorschlag, type Tagesuebersicht,
+  produktionsZeile, sinnvolleProduktion, startAbschnitte, startVorschlaege, tagesuebersicht,
+  type StartAbschnitt, type StartVorschlag, type Tagesuebersicht,
 } from './startseite';
 import { nachzukochen, vorratsLage, vorratsLageText } from './dashboard';
 import type { Bereich } from './navigation';
@@ -38,17 +36,14 @@ type Props = {
   onEinbuchen: () => void;
   /** „So funktioniert Kombi“ öffnen */
   onHilfe: () => void;
-  onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void;
-  onGeaendert: () => void;
 };
 
-const START_OPTIONEN: Optionen = { personen: 2, max_minuten: 15, guenstig: true };
+const START_OPTIONEN: Optionen = { personen: 2, max_minuten: 15 };
 
-/** Dieselben Vorlieben wie unter „Essen“ (Personen, Zeit, günstig) */
+/** Dieselben Vorlieben wie unter „Essen“ (Personen, Zeit) */
 function optionenAusEssen(): Optionen {
   try {
-    const d = JSON.parse(localStorage.getItem('kombi-essen') ?? '{}');
-    return { ...START_OPTIONEN, ...(d.optionen ?? {}) };
+    return gespeicherteOptionen(JSON.parse(localStorage.getItem('kombi-essen') ?? '{}').optionen);
   } catch {
     return START_OPTIONEN;
   }
@@ -111,16 +106,14 @@ function willkommenGesehen(): boolean {
  * Darunter EIN großer Vorschlag aus dem Vorrat mit „Jetzt kochen“, zwei weitere Ideen und – ruhig und
  * nachrangig – der Überblick über den Haushalt. Kennzahlen öffnen sich erst beim Antippen.
  */
-export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaellig, ideen, onKochen, onBereich, onEinbuchen, onHilfe, onMeldung, onGeaendert }: Props) {
-  const [geldOffen, setGeldOffen] = useState(false);
+export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaellig, ideen, onKochen, onBereich, onEinbuchen, onHilfe }: Props) {
   const [tagOffen, setTagOffen] = useState(false);
   const [ziel, setZiel] = useState<number | null>(ladeZiel);
   const [willkommen, setWillkommen] = useState(() => !willkommenGesehen());
 
   if (bestand.length === 0) return <ErsterStart onEinbuchen={onEinbuchen} onBereich={onBereich} onHilfe={onHilfe} />;
 
-  const bilanz = monatsbilanz(h, heute);
-  const tag = tagesuebersicht(h.mahlzeiten, h.sonstige, heute, ziel);
+  const tag = tagesuebersicht(h.mahlzeiten, heute, ziel);
   const lage = vorratsLage(bestand, heute);
   const gekochtHeute = h.mahlzeiten.filter((m) => !m.rueckgaengig && m.datum === heute).map((m) => m.titel);
   const vorschlaege = startVorschlaege(h.plaene, ideen?.gerichte ?? [], gekochtHeute, heute);
@@ -177,15 +170,11 @@ export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaell
             text={[`${lage.artikel} Artikel da`, vorratsLageText({ ...lage, knapp: 0, aufgebraucht: 0 })].filter(Boolean).join(' · ')}
             achtung={lage.abgelaufen + lage.bald > 0} />
           <UeberblickZeile icon="wagen" ton="ton-blau" titel="Einkaufsliste" onClick={() => onBereich('einkauf')}
-            text={!h.planung ? 'Noch nicht eingerichtet' : einkaufZeile(offen.length, liste.kosten, nachzukaufen)} achtung={nachzukaufen.length > 0} />
+            text={!h.planung ? 'Noch nicht eingerichtet' : einkaufZeile(offen.length, nachzukaufen)} achtung={nachzukaufen.length > 0} />
           <UeberblickZeile icon="topf" ton="ton-gelb" titel="Produktion" untertitel="Vorkochen auf Vorrat" onClick={() => onBereich('produktion')}
             text={!h.planung ? 'Noch nicht eingerichtet' : produktion.text} achtung={produktion.achtung} />
           <UeberblickZeile icon="flamme" ton="ton-rot" titel="Heute gegessen" onClick={() => setTagOffen(true)}
             text={!h.protokoll ? 'Noch nicht eingerichtet' : heuteText(tag)} />
-          {h.planung && (h.protokoll || bilanz.ausgegeben.anzahl > 0) && (
-            <UeberblickZeile icon="preis" ton="ton-grau" titel={`Ausgaben im ${bilanz.monat}`} onClick={() => setGeldOffen(true)}
-              text={bilanz.leer ? 'Noch nichts erfasst' : `${euroKompakt(bilanz.gesamt_cent)} bezahlt${bilanz.ausgegeben.ohne_preis ? ` · ${bilanz.ausgegeben.ohne_preis} ohne Preis` : ''}`} />
-          )}
         </ul>
       </section>
     ),
@@ -194,7 +183,6 @@ export function Start({ bestand, heute, h, liste, proPlan, auftauen, auftauFaell
   return (
     <div className="start">
       {startAbschnitte({ auftauen: auftauFaellig > 0 && auftauen !== null, willkommen }).map((a) => teile[a]())}
-      {geldOffen && <GeldBlatt b={bilanz} h={h} heute={heute} onMeldung={onMeldung} onGeaendert={onGeaendert} onSchliessen={() => setGeldOffen(false)} />}
       {tagOffen && (
         <TagBlatt t={tag} h={h} heute={heute} ziel={ziel}
           onZiel={(z) => {
@@ -336,25 +324,19 @@ function UeberblickZeile({ icon, ton, titel, untertitel, text, achtung = false, 
   );
 }
 
-/** „2 Sachen zu kaufen · ca. 4,50 € · Reis aufgebraucht“ */
-function einkaufZeile(offen: number, kosten: Einkaufsliste['kosten'], knapp: { sorte: { name: string; anzahl: number } }[]): string {
+/** „2 Sachen zu kaufen · Reis aufgebraucht“ */
+function einkaufZeile(offen: number, knapp: { sorte: { name: string; anzahl: number } }[]): string {
   const teile = [
     offen ? `${offen} ${offen === 1 ? 'Sache' : 'Sachen'} zu kaufen` : 'Nichts offen',
-    offen && kosten.bekannt_cent ? einkaufKosten(kosten).split(' · ')[0] : null,
     knapp.length ? `${knapp[0].sorte.name} ${knapp[0].sorte.anzahl <= 0 ? 'aufgebraucht' : 'wird knapp'}${knapp.length > 1 ? ` (+${knapp.length - 1})` : ''}` : null,
   ];
   return teile.filter(Boolean).join(' · ');
 }
 
-/** „1 Mahlzeit · 420 kcal · 0,64 €“ – unbekannt bleibt unbekannt */
+/** „1 Mahlzeit · 420 kcal“ – unbekannt bleibt unbekannt */
 function heuteText(t: Tagesuebersicht): string {
-  if (t.mahlzeiten === 0 && t.kosten_status === 'leer') return 'Noch nichts gekocht';
-  const teile = [
-    t.mahlzeiten ? `${t.mahlzeiten} ${t.mahlzeiten === 1 ? 'Mahlzeit' : 'Mahlzeiten'}` : null,
-    t.mahlzeiten ? kcalText(t) : null,
-    kostenText(t),
-  ].filter(Boolean);
-  return teile.join(' · ');
+  if (t.mahlzeiten === 0) return 'Noch nichts gekocht';
+  return `${t.mahlzeiten} ${t.mahlzeiten === 1 ? 'Mahlzeit' : 'Mahlzeiten'} · ${kcalText(t)}`;
 }
 
 /** „1.840 kcal“ · „ab 1.200 kcal“ · „kcal unbekannt“ – nie geschätzt */
@@ -364,12 +346,6 @@ function kcalText(t: Tagesuebersicht): string {
   return `${t.kcal_status === 'teilweise' ? 'ab ' : ''}${kcalZahl(t.kcal)} kcal`;
 }
 
-function kostenText(t: Tagesuebersicht): string {
-  if (t.kosten_status === 'leer') return '0,00 €';
-  if (t.kosten_cent === null) return 'Preis unbekannt';
-  return `${t.kosten_status === 'teilweise' ? 'ab ' : ''}${euro(t.kosten_cent)}`;
-}
-
 /** Heute im Detail: was gegessen wurde, woher die Zahlen kommen – und ein optionales Tagesziel. */
 function TagBlatt({ t, h, heute, ziel, onZiel, onSchliessen }: {
   t: Tagesuebersicht; h: Haushaltsdaten; heute: string; ziel: number | null; onZiel: (z: number | null) => void; onSchliessen: () => void;
@@ -377,7 +353,6 @@ function TagBlatt({ t, h, heute, ziel, onZiel, onSchliessen }: {
   const [eingabe, setEingabe] = useState(ziel ? String(ziel) : '');
   const [fehler, setFehler] = useState<string | null>(null);
   const mahlzeiten = h.mahlzeiten.filter((m) => !m.rueckgaengig && m.datum === heute);
-  const sonstige = h.sonstige.filter((a) => !a.entfernt && a.datum === heute);
 
   function speichern(e: FormEvent) {
     e.preventDefault();
@@ -394,9 +369,9 @@ function TagBlatt({ t, h, heute, ziel, onZiel, onSchliessen }: {
   }
 
   return (
-    <Blatt titel="Heute" untertitel="Nur aus hinterlegten Nährwerten und echten Beträgen – nichts geschätzt." onSchliessen={onSchliessen}>
-      {mahlzeiten.length + sonstige.length === 0 ? (
-        <p className="leise klein">Heute ist noch nichts gekocht oder eingetragen. Gekocht wird über „Kochen starten“ – dann stehen Kalorien und Kosten hier.</p>
+    <Blatt titel="Heute gegessen" untertitel="Nur aus hinterlegten Nährwerten – nichts geschätzt." onSchliessen={onSchliessen}>
+      {mahlzeiten.length === 0 ? (
+        <p className="leise klein">Heute ist noch nichts gekocht. Gekocht wird über „Kochen starten“ – dann stehen die Kalorien hier.</p>
       ) : (
         <ul className="liste">
           {mahlzeiten.map((m, i) => (
@@ -408,15 +383,6 @@ function TagBlatt({ t, h, heute, ziel, onZiel, onSchliessen }: {
                     {m.portionen} {m.portionen === 1 ? 'Portion' : 'Portionen'} · {m.kcal === null ? 'kcal unbekannt' : `${m.kcal_unbekannt ? 'ab ' : ''}${kcalZahl(Math.round(m.kcal / Math.max(1, m.portionen)))} kcal pro Person`}
                   </span>
                 </span>
-                <span className="zeile-wert"><strong>{m.kosten_cent === null ? 'Preis unbekannt' : `${m.kosten_unbekannt ? 'ab ' : ''}${euro(m.kosten_cent)}`}</strong></span>
-              </div>
-            </li>
-          ))}
-          {sonstige.map((a) => (
-            <li key={`s${a.id}`}>
-              <div className="zeile">
-                <span className="zeile-haupt"><span className="zeile-titel">{a.notiz || 'Sonstiges'}</span><span className="zeile-meta">Sonstige Ausgabe</span></span>
-                <span className="zeile-wert"><strong>{euro(a.betrag_cent)}</strong></span>
               </div>
             </li>
           ))}
@@ -426,7 +392,7 @@ function TagBlatt({ t, h, heute, ziel, onZiel, onSchliessen }: {
         Kalorien je Person = Kalorien der entnommenen Mengen ÷ Portionen. Eine Portion Komponente zählt mit ihren eigenen Werten – ihre Zutaten nicht noch einmal.
         {t.kcal_status === 'teilweise' && ' Für manche Sorten fehlen Nährwerte – deshalb „ab“.'}
       </p>
-      <form className="ausgabe-form abstand-oben" onSubmit={speichern}>
+      <form className="ziel-form abstand-oben" onSubmit={speichern}>
         <input type="text" inputMode="numeric" placeholder="Tagesziel, z. B. 2200" value={eingabe} onChange={(e) => setEingabe(e.target.value)} aria-label="Persönliches Tagesziel in kcal" />
         <button type="submit" className="knopf pillen-knopf">Ziel</button>
       </form>
@@ -434,106 +400,4 @@ function TagBlatt({ t, h, heute, ziel, onZiel, onSchliessen }: {
       <p className="abschnitt-fuss">Das Tagesziel ist optional und bleibt nur auf diesem Gerät. Leer lassen und „Ziel“ tippen entfernt es.</p>
     </Blatt>
   );
-}
-
-/** Geld im Detail: was zählt, was nicht – und sonstige Ausgaben eintragen oder entfernen. */
-function GeldBlatt({ b, h, heute, onMeldung, onGeaendert, onSchliessen }: {
-  b: Monatsbilanz; h: Haushaltsdaten; heute: string;
-  onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void; onGeaendert: () => void; onSchliessen: () => void;
-}) {
-  const [betrag, setBetrag] = useState('');
-  const [notiz, setNotiz] = useState('');
-  const [fehler, setFehler] = useState<string | null>(null);
-  const [laeuft, setLaeuft] = useState(false);
-  const diesen = h.sonstige.filter((a) => !a.entfernt && a.datum.slice(0, 7) === heute.slice(0, 7));
-
-  async function hinzufuegen(e: FormEvent) {
-    e.preventDefault();
-    const cent = euroZuCent(betrag);
-    if (cent === null || Number.isNaN(cent) || cent <= 0) return setFehler('Bitte einen Betrag wie 6,20 eingeben.');
-    setFehler(null);
-    setLaeuft(true);
-    try {
-      await ausgabeEintragen(cent, notiz || null);
-      setBetrag('');
-      setNotiz('');
-      onMeldung(`${euroText(cent)} unter „Sonstiges“ eingetragen.`);
-      onGeaendert();
-    } catch (err) {
-      setFehler(fehlerText(err));
-    } finally {
-      setLaeuft(false);
-    }
-  }
-
-  async function entfernen(id: number, text: string) {
-    try {
-      await ausgabeEntfernen(id, true);
-      onMeldung(`${text} entfernt.`, () => ausgabeEntfernen(id, false));
-      onGeaendert();
-    } catch (err) {
-      onMeldung(fehlerText(err));
-    }
-  }
-
-  const zeile = (titel: string, meta: string | null, wert: string) => (
-    <li><div className="zeile"><span className="zeile-haupt"><span className="zeile-titel">{titel}</span>{meta && <span className="zeile-meta">{meta}</span>}</span><span className="zeile-wert"><strong>{wert}</strong></span></div></li>
-  );
-
-  return (
-    <Blatt titel={`Geld im ${b.monat}`} untertitel="Nur echte Beträge – Kombi schätzt nichts." onSchliessen={onSchliessen}>
-      <h3 className="unterkopf">Ausgegeben</h3>
-      <ul className="liste">
-        {zeile('Einkäufe', `${b.ausgegeben.anzahl} ${b.ausgegeben.anzahl === 1 ? 'Einkauf' : 'Einkäufe'}${b.ausgegeben.ohne_preis ? ` · ${b.ausgegeben.ohne_preis} ohne Preis` : ''}`, euro(b.ausgegeben.cent))}
-        {zeile('Sonstiges', h.ausgaben ? `${b.sonstiges.anzahl} ${b.sonstiges.anzahl === 1 ? 'Eintrag' : 'Einträge'}` : 'Migration „ausgaben“ fehlt noch', h.ausgaben ? euro(b.sonstiges.cent) : '–')}
-        {zeile('Zusammen', b.vormonat ? `Vormonat bis zum ${b.vormonat.bis_tag}.: ${euro(b.vormonat.cent)}` : null, euro(b.gesamt_cent))}
-      </ul>
-
-      <h3 className="unterkopf">Warenwert – schon in den Einkäufen enthalten</h3>
-      <ul className="liste">
-        {zeile('Gekocht', `${b.gekocht.anzahl} ${b.gekocht.anzahl === 1 ? 'Mahlzeit' : 'Mahlzeiten'}`, b.gekocht.anzahl ? `${b.gekocht.vollstaendig ? '' : 'ab '}${euro(b.gekocht.cent)}` : '–')}
-        {b.gekocht.pro_mahlzeit_cent !== null && zeile('Ø pro Mahlzeit', null, euro(b.gekocht.pro_mahlzeit_cent))}
-        {zeile('Produktion', `${b.produktion.anzahl}× hergestellt`, b.produktion.anzahl ? `${b.produktion.vollstaendig ? '' : 'ab '}${euro(b.produktion.cent)}` : '–')}
-      </ul>
-      <p className="abschnitt-fuss">Gekocht und Produktion zeigen, was die verbrauchten Zutaten wert waren. Das Geld dafür ist schon bei den Einkäufen gezählt – es wird nie doppelt addiert.</p>
-
-      {h.ausgaben && (
-        <>
-          <h3 className="unterkopf">Sonstiges im {b.monat}</h3>
-          {diesen.length > 0 && (
-            <ul className="liste">
-              {diesen.map((a) => (
-                <li key={a.id}>
-                  <div className="zeile">
-                    <span className="zeile-haupt">
-                      <span className="zeile-titel">{a.notiz || 'Sonstiges'}</span>
-                      <span className="zeile-meta">{new Date(`${a.datum}T12:00:00`).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}</span>
-                    </span>
-                    <span className="zeile-wert"><strong>{euro(a.betrag_cent)}</strong></span>
-                    <button type="button" className="icon-knopf klein" aria-label={`${a.notiz || 'Ausgabe'} entfernen`} onClick={() => void entfernen(a.id!, a.notiz || 'Ausgabe')}>
-                      <Icon name="muell" groesse={15} />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          <form className="ausgabe-form abstand-oben" onSubmit={hinzufuegen}>
-            <input type="text" inputMode="decimal" placeholder="0,00 €" value={betrag} onChange={(e) => setBetrag(e.target.value)} aria-label="Betrag in Euro" />
-            <input type="text" placeholder="Wofür? z. B. Kantine" maxLength={80} value={notiz} onChange={(e) => setNotiz(e.target.value)} aria-label="Wofür" />
-            <button type="submit" className="knopf pillen-knopf" disabled={laeuft || !betrag.trim()} aria-label="Ausgabe hinzufügen"><Icon name="plus" groesse={18} /></button>
-          </form>
-          {fehler && <p className="fehlertext">{fehler}</p>}
-          <p className="abschnitt-fuss">Für Ausgaben ohne Bezug zum Vorrat – z. B. Kantine, Bäcker, bestellt. Entfernen lässt sich rückgängig machen.</p>
-        </>
-      )}
-    </Blatt>
-  );
-}
-
-/** „≈ 12,40 €“ nur aus bekannten Preisen, sonst ehrlich „Preis teilweise bekannt“ */
-export function einkaufKosten(k: Einkaufsliste['kosten']): string {
-  if (k.status === 'leer' || k.status === 'unbekannt' || k.bekannt_cent === null) return 'Preis unbekannt';
-  if (k.status === 'teilweise') return `ab ${euroText(k.bekannt_cent)} · ${k.unbekannt} ohne Preis`;
-  return `ca. ${euroText(k.bekannt_cent)}`;
 }

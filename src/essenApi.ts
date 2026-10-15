@@ -24,6 +24,15 @@ function heute(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Gespeicherte Vorlieben – nur bekannte Felder (ältere Stände hatten z. B. noch „günstig“). */
+export function gespeicherteOptionen(roh: unknown): Optionen {
+  const o = (roh ?? {}) as Partial<Optionen>;
+  return {
+    personen: typeof o.personen === 'number' && o.personen >= 1 && o.personen <= 12 ? o.personen : 2,
+    max_minuten: o.max_minuten === null || typeof o.max_minuten === 'number' ? o.max_minuten : 15,
+  };
+}
+
 /** Kontrollierter Snapshot: aktueller Bestand + Kühlschrank-Freitext + Grundausstattung. */
 export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string): Snapshot {
   const zeilen: BestandZeile[] = bestand.map((s) => ({
@@ -33,13 +42,11 @@ export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string): Snapsho
     anzahl: s.anzahl,
     bald_ablaufen: s.bald_ablaufen,
     groesse_g: s.groesse_g,
-    kosten_cent: s.kosten_cent,
     lagerort: s.lagerort ?? 'gefrierfach',
     art: s.art ?? null,
     herkunft: s.herkunft ?? null,
     einheit: s.einheit ?? null,
     portion_menge: s.portion_menge ?? null,
-    kosten_menge: s.kosten_menge ?? null,
     zusammensetzung: s.zusammensetzung ?? null,
     notiz: s.notiz ?? null,
     naechster_ablauf: s.naechster_ablauf ?? null,
@@ -78,18 +85,14 @@ async function hinweisAus(error: unknown): Promise<string> {
 }
 
 /**
- * Antworten einer noch nicht neu deployten Edge Function haben das alte Format
- * (ohne Beschreibung, Gerichtsart, Kostenstatus …). Sie werden ins neue Format gebracht,
- * damit nichts abstürzt – und die App bittet um ein Update.
+ * Antworten einer noch nicht neu deployten Edge Function haben ein älteres Format
+ * (ohne Beschreibung, Gerichtsart …). Sie werden ins neue Format gebracht,
+ * damit nichts abstürzt – und die App bittet um ein Update. Kostenangaben älterer Versionen fallen weg.
  */
 export function normalisiereErgebnis(e: Ergebnis): { ergebnis: Ergebnis; veraltet: boolean } {
   const veraltet = e.gerichte.some((g) => !('gerichtsart' in g)) ||
-    (!!e.einkauf && !('gruende' in e.einkauf)) || (!!e.baustein_idee && !('kosten' in e.baustein_idee));
-  if (!veraltet) return { ergebnis: e, veraltet };
-  const unbekannt: Gericht['kosten'] = {
-    status: 'unbekannt', gesamt_cent: null, pro_portion_cent: null, personen: 1,
-    unbekannt: [], einkauf_cent: null, einkauf_unbekannt: [],
-  };
+    (!!e.einkauf && !('gruende' in e.einkauf)) || (!!e.baustein_idee && !('bestandsart' in e.baustein_idee));
+  if (!veraltet) return { ergebnis: { ...e, gerichte: e.gerichte.map(gespeichertesGericht) }, veraltet };
   const b = e.baustein_idee as (Partial<NonNullable<Ergebnis['baustein_idee']>> & { name: string; id: string; farbe: NonNullable<Ergebnis['baustein_idee']>['farbe'] }) | null;
   return {
     veraltet,
@@ -97,14 +100,14 @@ export function normalisiereErgebnis(e: Ergebnis): { ergebnis: Ergebnis; veralte
       ...e,
       gerichte: e.gerichte.map(gespeichertesGericht),
       einkauf: e.einkauf
-        ? { ...e.einkauf, preis_bezug: e.einkauf.preis_bezug ?? null, heute: e.einkauf.heute ?? null, gruende: e.einkauf.gruende ?? [] }
+        ? { art: 'einkauf', id: e.einkauf.id, name: e.einkauf.name, ermoeglicht: e.einkauf.ermoeglicht ?? [], heute: e.einkauf.heute ?? null, gruende: e.einkauf.gruende ?? [], begruendung: e.einkauf.begruendung ?? '' }
         : null,
       baustein_idee: b
         ? {
             art: 'baustein', id: b.id, name: b.name, farbe: b.farbe,
             bestandsart: b.bestandsart ?? (b.farbe === 'blau' ? 'komplettgericht' : 'komponente'),
             lagerort: b.lagerort ?? 'gefrierfach', portionen: b.portionen ?? 6, portion_g: b.portion_g ?? null,
-            zutaten: b.zutaten ?? [], verwendbar_fuer: b.verwendbar_fuer ?? [], kosten: b.kosten ?? unbekannt,
+            zutaten: b.zutaten ?? [], verwendbar_fuer: b.verwendbar_fuer ?? [],
             begruendung: b.begruendung ?? '',
           }
         : null,
@@ -213,7 +216,6 @@ export async function starteSession(id: string, optionen: Optionen, kuehlschrank
     id,
     personen: optionen.personen,
     max_minuten: optionen.max_minuten,
-    guenstig: optionen.guenstig,
     kuehlschrank: kuehlschrank.trim() ? kuehlschrank.trim().slice(0, 1000) : null,
   });
   return !error;
@@ -244,8 +246,6 @@ export async function speichereRezept(g: Gericht, protokolliert: boolean, feedba
     schritte: r.schritte,
     bestandsarten: r.bestandsarten,
     tags: r.tags,
-    kosten_pro_portion_cent: r.kosten_pro_portion_cent,
-    kosten_status: r.kosten_status,
     feedback: r.feedback,
   });
   if (fehltMigration(error)) ({ error } = await supabase.from('rezept').insert(basis));
@@ -267,52 +267,45 @@ export async function ladeRezepte(): Promise<Rezept[]> {
   return (data as Rezept[]).map((r) => ({ ...r, daten: gespeichertesGericht(r.daten) }));
 }
 
+/** Kopie ohne die genannten Felder (z. B. Kostenangaben älterer Versionen). */
+function ohne<T extends object>(x: T, ...felder: string[]): T {
+  const kopie = { ...x } as Record<string, unknown>;
+  for (const f of felder) delete kopie[f];
+  return kopie as T;
+}
+
 /**
- * Ältere gespeicherte Rezepte (vor dem Baukasten) haben „bloecke“ statt Mengen und eine
- * einfachere Kostenangabe. Sie werden hier ins aktuelle Format gebracht – ohne etwas zu erfinden:
- * Unbekanntes bleibt unbekannt.
+ * Ältere gespeicherte Rezepte (vor dem Baukasten) haben „bloecke“ statt Mengen; ältere Versionen
+ * hatten außerdem Kostenangaben. Sie werden hier ins aktuelle Format gebracht – ohne etwas zu
+ * erfinden: Unbekanntes bleibt unbekannt, Kostenangaben fallen weg.
  */
 export function gespeichertesGericht(roh: Gericht): Gericht {
-  const alt = roh;
+  const alt = ohne(roh, 'kosten');
   const zutaten = (alt.zutaten ?? []).map((z) => {
     const a = z as Partial<typeof z> & { bloecke?: number | null };
     const menge = z.menge ?? a.bloecke ?? null;
     return {
-      ...z,
+      ...ohne(z, 'kosten_cent'),
       art: z.art ?? null,
       einheit: z.einheit ?? 'portion',
       menge,
       portionen: z.portionen ?? menge,
-      // Alte Rezepte: kosten_cent war der Preis pro Block → Wert = Blöcke × Preis (wie damals gerechnet).
-      kosten_cent: a.einheit !== undefined ? z.kosten_cent : a.kosten_cent != null && menge != null ? a.kosten_cent * menge : null,
       geoeffnet: z.geoeffnet ?? false,
       zusammensetzung: z.zusammensetzung ?? null,
     };
   });
-  const k = (alt.kosten ?? {}) as Partial<Gericht['kosten']> & { vollstaendig?: boolean };
-  const kosten: Gericht['kosten'] = k.status
-    ? (k as Gericht['kosten'])
-    : {
-        status: k.vollstaendig ? 'berechnet' : 'teilweise',
-        gesamt_cent: k.gesamt_cent ?? null,
-        pro_portion_cent: k.pro_portion_cent ?? null,
-        personen: k.personen ?? 2,
-        unbekannt: [],
-        einkauf_cent: null,
-        einkauf_unbekannt: [],
-      };
+  const altePersonen = (roh as Gericht & { kosten?: { personen?: number } }).kosten?.personen;
   return {
     ...alt,
     beschreibung: alt.beschreibung ?? '',
     gerichtsart: alt.gerichtsart ?? 'rezept',
     zutaten,
-    fehlt: (alt.fehlt ?? []).map((f) => ({ ...f, einheit: f.einheit ?? null, preis_bezug: f.preis_bezug ?? null })),
-    portionen: alt.portionen ?? kosten.personen,
+    fehlt: (alt.fehlt ?? []).map((f) => ({ ...ohne(f, 'preis_cent', 'preis_bezug'), einheit: f.einheit ?? null })),
+    portionen: alt.portionen ?? altePersonen ?? 2,
     rettet: alt.rettet ?? [],
     hinweise: alt.hinweise ?? [],
     warum_jetzt: alt.warum_jetzt ?? [],
     schritte: alt.schritte ?? [],
-    kosten,
     // ältere Vorschläge kennen keine Nährwerte – die App rechnet sie aus dem aktuellen Vorrat nach
     naehrwerte: alt.naehrwerte ?? UNBEKANNTE_NAEHRWERTE,
   };

@@ -37,11 +37,3 @@ export function mengeText(menge: number, einheit: Einheit): string {
 export function portionenText(portionen: number): string {
   return portionen === 1 ? '1 Portion' : `${zahl(portionen)} Portionen`;
 }
-
-/** Worauf sich ein gespeicherter Preis bezieht: „pro Portion“, „für 4 Portionen“, „für 500 g“ */
-export function bezugText(kostenMenge: number, einheit: Einheit): string {
-  if (kostenMenge === 1) {
-    return { portion: 'pro Portion', stueck: 'pro Stück', g: 'pro g', ml: 'pro ml' }[einheit];
-  }
-  return `für ${mengeText(kostenMenge, einheit)}`;
-}

@@ -136,15 +136,15 @@ describe('Kalorien im Gericht', () => {
 describe('Produktion: Menge wählen, skalieren, gegen den Vorrat prüfen', () => {
   const sorte = (id: number, name: string, anzahl: number, teil: Partial<VorratSorte> = {}): VorratSorte => ({
     id, name, farbe: 'gruen', art: 'zutat', einheit: 'g', portion_menge: 100, groesse_g: 100, anzahl, abgelaufen: 0,
-    kosten_cent: null, kosten_menge: 1, mindestbestand: 0, lagerort: 'vorrat', ...teil,
+    mindestbestand: 0, lagerort: 'vorrat', ...teil,
   });
   const komponente = {
     portionen: 6,
     zutaten: [
-      { name: 'Gehackte Tomaten', block_typ_id: 20, menge: 500, einheit: 'g' as const, quelle: 'bestand' as const, kosten_cent: null, dringend: false },
-      { name: 'Gehackte Tomaten', block_typ_id: 20, menge: 300, einheit: 'g' as const, quelle: 'einkauf' as const, kosten_cent: null, dringend: false },
-      { name: 'Zwiebeln', block_typ_id: null, menge: 150, einheit: 'g' as const, quelle: 'einkauf' as const, kosten_cent: null, dringend: false },
-      { name: 'Öl', block_typ_id: null, menge: null, einheit: null, quelle: 'grundausstattung' as const, kosten_cent: null, dringend: false },
+      { name: 'Gehackte Tomaten', block_typ_id: 20, menge: 500, einheit: 'g' as const, quelle: 'bestand' as const, dringend: false },
+      { name: 'Gehackte Tomaten', block_typ_id: 20, menge: 300, einheit: 'g' as const, quelle: 'einkauf' as const, dringend: false },
+      { name: 'Zwiebeln', block_typ_id: null, menge: 150, einheit: 'g' as const, quelle: 'einkauf' as const, dringend: false },
+      { name: 'Öl', block_typ_id: null, menge: null, einheit: null, quelle: 'grundausstattung' as const, dringend: false },
     ],
   };
 
@@ -159,7 +159,7 @@ describe('Produktion: Menge wählen, skalieren, gegen den Vorrat prüfen', () =>
     const tom = p.zeilen.find((z) => z.name === 'Gehackte Tomaten')!;
     assert.deepEqual([tom.benoetigt, tom.vorhanden, tom.fehlt, tom.status], [1067, 500, 567, 'teilweise']);
     assert.deepEqual(p.posten, [{ block_typ_id: 20, name: 'Gehackte Tomaten', menge: 500, einheit: 'g', art: 'zutat' }]);
-    assert.deepEqual(p.nicht_erfasst, ['Zwiebeln'], 'nicht geführte Zutat: wird nicht gebucht, Kosten unbekannt');
+    assert.deepEqual(p.nicht_erfasst, ['Zwiebeln'], 'nicht geführte Zutat: wird nicht gebucht');
     assert.deepEqual(p.fehlt.map((f) => [f.name, f.menge]), [['Gehackte Tomaten', 567], ['Zwiebeln', 200]]);
     assert.equal(p.zeilen.find((z) => z.name === 'Öl')!.status, 'immer_da');
   });
@@ -188,7 +188,7 @@ describe('Produktion: Menge wählen, skalieren, gegen den Vorrat prüfen', () =>
 
 describe('Seed ohne Nährwerte', () => {
   test('frische Daten ohne Angaben: nirgends eine Kalorienzahl', () => {
-    const snap = snapshot([zeile(1, 'Tomatensoße', 'rot', 100, 17, 6)]);
+    const snap = snapshot([zeile(1, 'Tomatensoße', 'rot', 100, 6)]);
     assert.equal(snap.zutaten[0].naehrwert, null);
   });
 });
