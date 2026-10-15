@@ -1,0 +1,63 @@
+name: KI-Funktion deployen (Supabase)
+
+# Deployt die Edge Function „was-essen“, sobald sich ihr Code auf main ändert – oder von Hand
+# (Actions → „KI-Funktion deployen“ → Run workflow). Braucht einmalig das Repository-Secret
+# SUPABASE_ACCESS_TOKEN (Supabase → Account → Access Tokens). Ohne Secret wird nichts deployt.
+# Danach prüft der Ablauf, ob Supabase wirklich die neue Version ausliefert (x-kombi-version).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - '.github/workflows/edge-function.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: edge-function
+  cancel-in-progress: false
+
+env:
+  PROJECT_REF: yjjgfdvpqmclocgejrhz
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Zugang vorhanden?
+        id: zugang
+        env:
+          TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::Secret SUPABASE_ACCESS_TOKEN fehlt – nichts deployt. Einrichten: siehe README, Abschnitt „KI einrichten“."
+            echo "da=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "da=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: supabase/setup-cli@v1
+        if: steps.zugang.outputs.da == 'ja'
+        with:
+          version: latest
+
+      - name: Deployen
+        if: steps.zugang.outputs.da == 'ja'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy was-essen --project-ref "$PROJECT_REF" --no-verify-jwt --use-api
+
+      - name: Läuft die neue Version?
+        if: steps.zugang.outputs.da == 'ja'
+        run: |
+          key=$(grep -E '^VITE_SUPABASE_KEY=' .env | cut -d= -f2- | tr -d '"\r')
+          erwartet=$(grep -oP "ENGINE_VERSION = '\K[^']+" supabase/functions/_shared/kombi/gesundheit.ts)
+          for i in $(seq 12); do
+            version=$(curl -s -o /dev/null -D - -H "apikey: $key" -H "authorization: Bearer $key" \
+              "https://$PROJECT_REF.supabase.co/functions/v1/was-essen" | grep -i '^x-kombi-version:' | cut -d' ' -f2 | tr -d '\r')
+            if [ "$version" = "$erwartet" ]; then echo "Supabase liefert Version $version aus."; exit 0; fi
+            sleep 5
+          done
+          echo "::error::Erwartet Version $erwartet, Supabase meldet „${version:-keine}“."
+          exit 1
