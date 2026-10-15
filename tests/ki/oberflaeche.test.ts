@@ -2,9 +2,15 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BEREICHE, hashVon, ladeNav, navigiere, neuerEintrag, routeAus, speichereNav, START, type NavZustand } from '../../src/navigation.ts';
-import { dringendHeute, gruss, heuteGekocht, mahlzeitArt, monatsbilanz, sinnvolleProduktion, startAbschnitte, startHinweis, tagesuebersicht } from '../../src/startseite.ts';
+import {
+  dringendHeute, gruss, heuteGekocht, mahlzeitArt, monatsbilanz, produktionsZeile, sinnvolleProduktion, startAbschnitte, startHinweis, startVorschlaege, tagesuebersicht,
+} from '../../src/startseite.ts';
+import { ohneDoppelte, rezeptSchluessel, schonGespeichert } from '../../src/rezepte.ts';
+import type { Gericht } from '../../supabase/functions/_shared/kombi/typen.ts';
 import type { KomponentenVorschlag } from '../../supabase/functions/_shared/kombi/typen.ts';
-import { freieTage, fuellstand, heuteWichtig, ortKacheln, produktionsGruende, sortenFuer, tagName, vorratswert, zustand } from '../../src/dashboard.ts';
+import {
+  freieTage, fuellstand, heuteWichtig, istDringend, nachzukochen, ortKacheln, produktionsGruende, sortenFuer, tagName, vorratsLage, vorratsLageText, vorratswert, zustand,
+} from '../../src/dashboard.ts';
 import type { Sorte } from '../../src/api.ts';
 import { leseEingabe } from '../../supabase/functions/_shared/kombi/einkaufsliste.ts';
 import { reserviertAusser } from '../../supabase/functions/_shared/kombi/planung.ts';
@@ -148,10 +154,33 @@ describe('Startseite', () => {
     assert.equal(heuteGekocht([m('2026-09-27', 48, 0, 600, 0)], HEUTE_S).titel.length, 0, 'nur heute');
   });
 
-  test('kompakte Reihenfolge: Heute, ein Hinweis, Auftauen, Was essen wir?, Monat, Produktion|Einkauf – kein „Heute wichtig“', () => {
-    assert.deepEqual(startAbschnitte({ hinweis: true, auftauen: true, monat: true }), ['heute', 'hinweis', 'auftauen', 'essen', 'monat', 'kacheln']);
-    assert.deepEqual(startAbschnitte({ hinweis: false, auftauen: false, monat: false }), ['heute', 'essen', 'kacheln']);
-    assert.ok(!startAbschnitte({ hinweis: true, auftauen: true, monat: true }).includes('wichtig' as never));
+  test('erst der Nutzen: Vorschlag zuerst, Kennzahlen nur im Überblick ganz unten', () => {
+    assert.deepEqual(startAbschnitte({ auftauen: true, willkommen: true }), ['essen', 'auftauen', 'willkommen', 'ueberblick']);
+    assert.deepEqual(startAbschnitte({ auftauen: false, willkommen: false }), ['essen', 'ueberblick']);
+    assert.equal(startAbschnitte({ auftauen: true, willkommen: true })[0], 'essen', 'nichts steht über dem Vorschlag');
+    assert.ok(!startAbschnitte({ auftauen: true, willkommen: true }).includes('wichtig' as never));
+  });
+
+  test('Vorschläge: heute Geplantes zuerst, dann Ideen – ohne heute Gekochtes und ohne doppelte Namen', () => {
+    const g = (name: string) => ({ id: name, name } as unknown as Gericht);
+    const plaene = [
+      { id: 'p2', art: 'mahlzeit', datum: '2026-09-30', daten: { gericht: g('Später') } },
+      { id: 'p1', art: 'mahlzeit', datum: HEUTE_S, daten: { gericht: g('Lasagne') } },
+      { id: 'p3', art: 'komponente', datum: null, daten: {} },
+    ];
+    const v = startVorschlaege(plaene, [g('Linsen-Wrap'), g('lasagne'), g('Pasta'), g('Curry')], ['Pasta'], HEUTE_S);
+    assert.deepEqual(v.map((x) => [x.g.name, x.planId]), [['Lasagne', 'p1'], ['Linsen-Wrap', null], ['Curry', null]]);
+    assert.equal(startVorschlaege([], [], [], HEUTE_S).length, 0);
+  });
+
+  test('Überblick „Produktion“: aufgebraucht vor knapp, dann Vorgemerktes – dieselben Daten wie im Bereich Produktion', () => {
+    const tomaten = zustand(sorte(1, 'Tomatensoße', { nachkochen: true, anzahl: 1, mindestbestand: 4 }), HEUTE_S)!;
+    const linsen = zustand(sorte(2, 'Linsen', { nachkochen: true, anzahl: 0, mindestbestand: 2 }), HEUTE_S)!;
+    assert.deepEqual(produktionsZeile([linsen, tomaten], null, 0), { text: 'Linsen aufgebraucht – nachkochen (+1)', achtung: true });
+    assert.deepEqual(produktionsZeile([tomaten], null, 0), { text: 'Tomatensoße wird knapp', achtung: true });
+    assert.equal(produktionsZeile([], { art: 'vorgemerkt', plan_id: 'p', titel: 'Pesto', portionen: 4, grund: '' }, 1).text, 'Pesto: alles da zum Vorkochen');
+    assert.equal(produktionsZeile([], null, 2).text, '2 vorgemerkt');
+    assert.deepEqual(produktionsZeile([], null, 0), { text: 'Gerade nichts nötig', achtung: false });
   });
 
   test('statt fünf Kacheln höchstens eine dezente Zeile – Knappes gehört in den Einkauf', () => {
@@ -246,12 +275,35 @@ describe('Vorrat als Übersicht', () => {
     const w = heuteWichtig(bestand, HEUTE);
     assert.deepEqual(w.map((x) => [x.sorte.name, x.art]), [
       ['Joghurt', 'abgelaufen'], ['Lasagne', 'aufgetaut'], ['Spaghetti', 'geoeffnet'], ['Linsen-Bolognese', 'bald'],
-      ['Reis', 'niedrig'], ['Tomatensoße', 'niedrig'],
+      ['Reis', 'leer'], ['Tomatensoße', 'niedrig'],
     ]);
     assert.equal(w[3].text, 'noch 2 Tage');
-    assert.equal(zustand(bestand[5], HEUTE)!.text, 'leer · nachkaufen');
-    assert.equal(zustand(bestand[4], HEUTE)!.text, 'nur 1 Portion · nachkochen');
+    assert.deepEqual([zustand(bestand[5], HEUTE)!.titel, zustand(bestand[5], HEUTE)!.text], ['Aufgebraucht', 'nachkaufen']);
+    assert.deepEqual([zustand(bestand[4], HEUTE)!.titel, zustand(bestand[4], HEUTE)!.text], ['Wird knapp', 'nur noch 1 Portion · nachkochen']);
     assert.equal(zustand(bestand[6], HEUTE), null);
+  });
+
+  test('„wird knapp“ ≠ „aufgebraucht“ ≠ „bald verbrauchen“ – überall dieselben Zahlen', () => {
+    const bestand = [
+      sorte(1, 'Joghurt', { geoeffnet: 1, art: 'zutat' }),
+      sorte(2, 'Spinat', { bald_ablaufen: true, naechster_ablauf: '2026-09-29' }),
+      sorte(3, 'Milch', { abgelaufen: 1, art: 'zutat' }),
+      sorte(4, 'Reis', { anzahl: 0, nachkochen: true, mindestbestand: 1, art: 'zutat' }),
+      sorte(5, 'Tomatensoße', { anzahl: 1, nachkochen: true, mindestbestand: 4 }),
+      sorte(6, 'Linsen', { anzahl: 0, nachkochen: true, mindestbestand: 2 }),
+      sorte(7, 'Pizza', { anzahl: 0 }),
+      sorte(8, 'Wrap', {}),
+    ];
+    const lage = vorratsLage(bestand, HEUTE);
+    assert.deepEqual(lage, { artikel: 5, abgelaufen: 1, bald: 2, knapp: 1, aufgebraucht: 2 });
+    assert.equal(vorratsLageText(lage), '1 abgelaufen · 2 bald verbrauchen · 1 wird knapp · 2 aufgebraucht');
+    assert.equal(vorratsLageText(vorratsLage([sorte(8, 'Wrap')], HEUTE)), null);
+    assert.equal(istDringend(zustand(bestand[3], HEUTE)), false, 'aufgebraucht ist kein „bald verbrauchen“');
+    assert.equal(zustand(bestand[6], HEUTE), null, 'leer ohne Mindestbestand ist kein Alarm');
+    // Produktion zeigt nur Selbstgemachtes, Zutaten gehören in den Einkauf
+    assert.deepEqual(nachzukochen(bestand, HEUTE).map((w) => [w.sorte.name, w.art]), [['Linsen', 'leer'], ['Tomatensoße', 'niedrig']]);
+    // Lagerort-Kacheln zählen nur, was bald weg muss (Joghurt, Spinat, Milch) – nicht, was knapp oder aufgebraucht ist
+    assert.equal(ortKacheln(bestand, HEUTE)[0].achtung, 3);
   });
 
   test('Lagerort-Kacheln: Gefrierfach in Portionen, sonst Artikel; Farbanteile summieren sich zu 1', () => {
@@ -328,5 +380,29 @@ describe('Eingaben und Reservierungen für die Oberfläche', () => {
     const plaene = [{ id: 'a', titel: 'Lasagne' }, { id: 'b', titel: 'Wraps' }];
     assert.deepEqual([...reserviertAusser(proPlan, plaene, null)], [[1, { menge: 3, plaene: ['Lasagne', 'Wraps'] }]]);
     assert.deepEqual([...reserviertAusser(proPlan, plaene, 'a')], [[1, { menge: 1, plaene: ['Wraps'] }]]);
+  });
+});
+
+describe('Gespeicherte Rezepte ohne Doppelte', () => {
+  const r = (id: string, name: string, erstellt_am: string) => ({ id, name, erstellt_am });
+
+  test('gleicher Name (Groß/klein, Leerzeichen, Bindestrich, Umlaute) = ein Rezept; das neueste bleibt', () => {
+    const liste = ohneDoppelte([
+      r('a', 'Linsen-Bolognese', '2026-09-25T19:00:00Z'),
+      r('b', ' linsen bolognese ', '2026-09-27T19:00:00Z'),
+      r('c', 'Sommer-Crunch mit Joghurt', '2026-09-26T19:00:00Z'),
+      r('d', 'LINSEN-BOLOGNESE', '2026-09-20T19:00:00Z'),
+      r('e', 'Kürbis-Curry', '2026-09-21T19:00:00Z'),
+      r('f', 'Kuerbis Curry', '2026-09-22T19:00:00Z'),
+    ]);
+    assert.deepEqual(liste.map((x) => x.id), ['b', 'c', 'f']);
+    assert.equal(rezeptSchluessel('Ku\u0308rbis-Curry'), rezeptSchluessel('Kürbis Curry'), 'zerlegte Umlaute');
+  });
+
+  test('vor dem Speichern prüfen: Doppeltes wird nicht noch einmal angelegt', () => {
+    const vorhanden = [r('a', 'Linsen-Bolognese', '2026-09-25T19:00:00Z')];
+    assert.equal(schonGespeichert(vorhanden, 'linsen bolognese'), true);
+    assert.equal(schonGespeichert(vorhanden, 'Linsen-Curry'), false);
+    assert.deepEqual(ohneDoppelte([r('x', '   ', '2026-09-25T19:00:00Z')]), [], 'leere Namen fallen weg');
   });
 });

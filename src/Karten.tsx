@@ -1,28 +1,26 @@
-// Gemeinsame Bausteine im Stil der Entwürfe: Abschnitts-Karte, getönte „Heute wichtig“-Kacheln,
-// Angaben mit Icons (Zeit, Preis, kcal, Portionen) und Zustands-Pillen.
+// Gemeinsame Bausteine: Abschnitts-Karte, getönte „Jetzt wichtig“-Kacheln und Zustands-Pillen.
 import type { ReactNode } from 'react';
-import type { Gericht } from '../supabase/functions/_shared/kombi/typen.ts';
-import type { Naehrwerte } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
 import type { Sorte } from './api';
 import type { Wichtig } from './dashboard';
 import { Bild } from './Bild';
 import { Icon, type IconName } from './Icon';
-import { euroKurz, kcalKurz } from './format';
 
-/** Zustand → Tönung: läuft ab / abgelaufen rot, geöffnet gelb, aufgetaut blau, knapp grau */
-export function tonVon(w: Wichtig | null): 'ton-rot' | 'ton-gelb' | 'ton-blau' | 'ton-grau' | 'ton-gruen' {
+/** Zustand → Tönung: läuft ab / abgelaufen rot, geöffnet gelb, aufgetaut blau, knapp grau, aufgebraucht dunkel */
+export function tonVon(w: Wichtig | null): 'ton-rot' | 'ton-gelb' | 'ton-blau' | 'ton-grau' | 'ton-gruen' | 'ton-leer' {
   if (!w) return 'ton-gruen';
   if (w.art === 'abgelaufen' || w.art === 'bald') return 'ton-rot';
   if (w.art === 'geoeffnet') return 'ton-gelb';
   if (w.art === 'aufgetaut') return 'ton-blau';
+  if (w.art === 'leer') return 'ton-leer';
   return 'ton-grau';
 }
 
-/** Kurzer Zustand für Kachel und Pille: „noch 2 Tage“, „geöffnet“, „aufgetaut“, „gut“ */
+/** Kurzer Zustand für Kachel und Pille: „noch 2 Tage“, „geöffnet“, „aufgetaut“, „wird knapp“, „aufgebraucht“, „gut“ */
 export function zustandKurz(w: Wichtig | null): string {
   if (!w) return 'gut';
   if (w.art === 'bald') return w.text === 'bald verbrauchen' ? 'läuft ab' : w.text;
   if (w.art === 'niedrig') return 'wird knapp';
+  if (w.art === 'leer') return 'aufgebraucht';
   return w.titel.toLocaleLowerCase('de-DE');
 }
 
@@ -65,27 +63,4 @@ export function WichtigKacheln({ wichtig, mitPunkt = false, onOeffnen }: { wicht
       ))}
     </div>
   );
-}
-
-/** 🕒 18 Min  € 1,42 €  🔥 620 kcal / Portion */
-export function MetaIcons({ g, n, portionen = false }: { g: Gericht; n: Naehrwerte; portionen?: boolean }) {
-  return (
-    <p className="meta-icons">
-      {portionen && <span><Icon name="personen" groesse={17} /> {g.portionen} {g.portionen === 1 ? 'Portion' : 'Portionen'}</span>}
-      <span><Icon name="uhr" groesse={17} /> {g.zeit_min} Min</span>
-      <span><Icon name="preis" groesse={17} /> {euroKurz(g.kosten)}</span>
-      <span><Icon name="flamme" groesse={17} className="flamme" /> {kcalKurz(n)}{n.kcal_portion !== null ? ' / Portion' : ''}</span>
-    </p>
-  );
-}
-
-/** ✓ Alles da – oder „Fehlt: …“ */
-export function Verfuegbar({ g }: { g: Gericht }) {
-  if (g.fehlt.length === 0) {
-    return <p className="verfuegbar status-ok"><span className="kreis-haken"><Icon name="haken" groesse={13} /></span> Alles vorhanden</p>;
-  }
-  if (g.fehlt.length === 1) {
-    return <p className="verfuegbar status-ok"><span className="kreis-haken"><Icon name="haken" groesse={13} /></span> Fast alles vorhanden <span className="leise">· fehlt: {g.fehlt[0].name}</span></p>;
-  }
-  return <p className="verfuegbar status-achtung"><Icon name="wagen" groesse={16} /> Fehlt: {g.fehlt.map((f) => f.name).join(', ')}</p>;
 }

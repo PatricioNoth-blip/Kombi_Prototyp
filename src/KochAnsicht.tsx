@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { EntnahmePosten } from '../supabase/functions/_shared/kombi/aktionen.ts';
+import type { EntnahmePosten, KochZeile } from '../supabase/functions/_shared/kombi/aktionen.ts';
 import { entnahmeText, kochAnsicht, kochenBestaetigen } from '../supabase/functions/_shared/kombi/aktionen.ts';
 import type { FehlendeZutat, Gericht } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { Naehrwerte } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
@@ -11,9 +11,7 @@ import { Blatt, useScrollSperre } from './Blatt';
 import { Icon } from './Icon';
 import { euroKurz, kcalKurz, mengeText } from './format';
 import { PostenListe } from './PostenListe';
-import { Bild } from './Bild';
-import { bildKaputt, useBild } from './bildApi';
-import { bildNachweis } from '../supabase/functions/_shared/kombi/bilder.ts';
+import { GerichtBild } from './GerichtBild';
 
 type Props = {
   gericht: Gericht;
@@ -27,6 +25,8 @@ type Props = {
   planung: boolean;
   /** Migration „kosten_naehrwerte“: Kosten und kcal der Mahlzeit werden festgehalten */
   protokoll: boolean;
+  /** z. B. „Gespeichertes Rezept“ – erklärt, woher das Rezept kommt */
+  herkunft?: string | null;
   onGekocht: () => void;
   onMeldung: (text: string, rueckgaengig?: () => Promise<unknown>) => void;
   onFehlendesMerken?: (fehlt: FehlendeZutat[]) => Promise<void>;
@@ -34,23 +34,22 @@ type Props = {
 };
 
 type Gebucht = { text: string; rueck: () => Promise<unknown>; danach: { name: string; text: string }[]; wert: string | null; warnung: string | null };
+type Stufe = 'rezept' | 'bestaetigen' | 'kochen' | 'fertig';
 
 /**
- * „Heute kochen“: groß und übersichtlich. Anzeigen ändert nichts – erst „Kochen starten“ und die
- * Bestätigung entnehmen aus dem Vorrat (geöffnet → Ablauf → älteste), dann Kochmodus.
+ * Die Rezeptseite – eine eigene, ganze Seite statt einer schmalen Karte: Name, Dauer, Portionen,
+ * Zutaten mit Mengen und die Zubereitung, gut lesbar. Anschauen ändert nichts. „Kochen starten“ fragt,
+ * was aus dem Vorrat abgezogen wird (geöffnet → Ablauf → älteste), danach führt der Kochmodus
+ * Schritt für Schritt durchs Rezept: Zurück, Weiter, Fertig.
  */
-export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserviert, planung, protokoll, onGekocht, onMeldung, onFehlendesMerken, onSchliessen }: Props) {
-  const [stufe, setStufe] = useState<'ansicht' | 'bestaetigen' | 'kochen'>('ansicht');
+export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserviert, planung, protokoll, herkunft, onGekocht, onMeldung, onFehlendesMerken, onSchliessen }: Props) {
+  const [stufe, setStufe] = useState<Stufe>('rezept');
   const daten = kochAnsicht(g, bestand, reserviert);
   const [posten, setPosten] = useState<EntnahmePosten[]>(daten.posten);
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [gebucht, setGebucht] = useState<Gebucht | null>(null);
-  const [erledigt, setErledigt] = useState<Set<number>>(new Set());
   const [gemerkt, setGemerkt] = useState(false);
-  // Das große Bild: aus dem Cache oder einmalig über die Bildpipeline – sonst lokal
-  const foto = useBild(g.bild, true);
-  const nachweis = bildNachweis(foto);
 
   useScrollSperre();
   // Beim Kochen soll das Display anbleiben (wo der Browser es kann).
@@ -69,7 +68,7 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
   }, [stufe]);
   useEffect(() => {
     const beiTaste = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && stufe === 'ansicht') onSchliessen();
+      if (e.key === 'Escape' && stufe === 'rezept') onSchliessen();
     };
     window.addEventListener('keydown', beiTaste);
     return () => window.removeEventListener('keydown', beiTaste);
@@ -89,19 +88,19 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
         // eine Transaktion – und der tatsächliche Wert der entnommenen Chargen wird festgehalten
         const e = await essen(aktiv, planId, g.name, g.portionen);
         rueck = () => essenRueckgaengig(e.mahlzeit_id);
-        if (e.kosten_cent !== null) wert = `${e.kosten_unbekannt ? 'ab ' : ''}${euroText(e.kosten_cent)} aus dem Vorrat`;
+        if (e.kosten_cent !== null) wert = `Wert ${e.kosten_unbekannt ? 'ab ' : ''}${euroText(e.kosten_cent)}`;
       } else if (planung) {
         const ids = await kochen(aktiv, planId);
         rueck = () => kochenRueckgaengig(ids, planId);
       } else {
         const e = await kochenBestaetigen(aktiv, { entnehmen: api.entnehmen });
         if (e.bewegungIds.length === 0 && e.fehler.length) throw new Error(e.fehler.map((f) => `${f.name}: ${f.meldung}`).join(' '));
-        if (e.fehler.length) warnung = `Nicht entnommen: ${e.fehler.map((f) => `${f.name} (${f.meldung})`).join(', ')}`;
+        if (e.fehler.length) warnung = `Nicht abgezogen: ${e.fehler.map((f) => `${f.name} (${f.meldung})`).join(', ')}`;
         rueck = () => api.rueckgaengig(e.bewegungIds);
       }
       const danach = aktiv.map((p) => {
         const rest = Math.max(0, (sorteVon(p.block_typ_id)?.anzahl ?? 0) - p.menge);
-        return { name: p.name, text: rest === 0 ? 'aufgebraucht' : `${mengeText(rest, p.einheit)} übrig` };
+        return { name: p.name, text: rest === 0 ? 'aufgebraucht' : `noch ${mengeText(rest, p.einheit)}` };
       });
       setGebucht({ text: entnahmeText(aktiv), rueck, danach, wert, warnung });
       setStufe('kochen');
@@ -119,7 +118,7 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
     try {
       await gebucht.rueck();
       setGebucht(null);
-      setStufe('ansicht');
+      setStufe('rezept');
       onMeldung('Rückgängig gemacht – alles ist wieder im Vorrat.');
       onGekocht();
     } catch (e) {
@@ -129,8 +128,8 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
     }
   }
 
-  function fertig() {
-    if (gebucht) onMeldung(`Guten Appetit! Entnommen: ${gebucht.text}.`, gebucht.rueck);
+  function schliessenNachKochen() {
+    if (gebucht) onMeldung(`Guten Appetit! Aus dem Vorrat abgezogen: ${gebucht.text}.`, gebucht.rueck);
     onSchliessen();
   }
 
@@ -144,210 +143,283 @@ export function KochAnsicht({ gericht: g, naehrwerte: n, planId, bestand, reserv
     }
   }
 
-  const farbe = g.zutaten.find((z) => z.farbe)?.farbe ?? 'neutral';
+  function kochenStarten() {
+    setFehler(null);
+    if (daten.kann_kochen) {
+      setPosten(daten.posten);
+      setStufe('bestaetigen');
+    } else {
+      setStufe('kochen');
+    }
+  }
+
   const zeilen = daten.zeilen.filter((z) => z.quelle !== 'grundausstattung');
-  // Verwendete Komponenten und Komplettgerichte getrennt von einzelnen Zutaten – wie im Baukasten
-  const bausteine = zeilen.filter((z) => z.art === 'komponente' || z.art === 'komplettgericht');
-  const gruppen = [
-    { titel: bausteine.length ? 'Deine Komponenten' : 'Deine Zutaten', zeilen: bausteine.length ? bausteine : zeilen },
-    ...(bausteine.length ? [{ titel: 'Deine Zutaten', zeilen: zeilen.filter((z) => !bausteine.includes(z)) }] : []),
-  ];
   const grund = daten.zeilen.filter((z) => z.quelle === 'grundausstattung').map((z) => z.name);
   const UNBEKANNT = /^Zusammensetzung von (.+) unbekannt\.?$/;
   const unbekannt = daten.hinweise.map((h) => UNBEKANNT.exec(h)?.[1]).filter((x): x is string => !!x);
   const hinweise = daten.hinweise.filter((h) => !UNBEKANNT.test(h)).slice(0, 2);
-  const kochmodus = stufe === 'kochen';
+  const allesDa = g.fehlt.length === 0 && zeilen.every((z) => z.status === 'ok' || z.status === 'frei');
   const makros = [
     n.protein_g !== null ? `${n.protein_g.toLocaleString('de-DE')} g Eiweiß` : null,
     n.kohlenhydrate_g !== null ? `${n.kohlenhydrate_g.toLocaleString('de-DE')} g Kohlenhydrate` : null,
     n.fett_g !== null ? `${n.fett_g.toLocaleString('de-DE')} g Fett` : null,
   ].filter(Boolean);
-
-  const zustand = (z: (typeof zeilen)[number]) => {
-    switch (z.status) {
-      case 'zu_wenig': return <span className="status-achtung">nur {mengeText(z.verfuegbar!, z.einheit)} da</span>;
-      case 'leer': return <span className="status-kritisch">schon aufgebraucht</span>;
-      case 'unbekannt': return <span className="status-kritisch">nicht mehr im Vorrat</span>;
-      case 'frei': return <span>Kühlschrank-Rest</span>;
-      default: return null;
-    }
-  };
+  const fehltZahl = g.fehlt.length + zeilen.filter((z) => z.status !== 'ok' && z.status !== 'frei').length;
 
   return (
-    <div className={`kochen${kochmodus ? ' kochmodus' : ''}`} role="dialog" aria-modal="true" aria-label={`${g.name} kochen`}>
-      <div className="kochen-leiste">
-        <button type="button" className="icon-knopf" onClick={kochmodus ? fertig : onSchliessen} aria-label="Zurück">
-          <Icon name="zurueck" />
+    <div className="rezept" role="dialog" aria-modal="true" aria-label={`Rezept: ${g.name}`}>
+      <div className="rezept-leiste">
+        <button type="button" className="zurueck-knopf" onClick={onSchliessen} aria-label="Zurück">
+          <Icon name="zurueck" groesse={20} /> Zurück
         </button>
-        <span>{kochmodus ? 'Kochmodus' : 'Heute kochen'}</span>
-        <span className="platz" />
       </div>
 
-      <div className="kochen-inhalt">
-        <header className="kochen-kopf">
-          {!kochmodus && (
-            <div className="kochen-foto">
-              <Bild name={g.name} emoji={g.emoji} farbe={farbe === 'neutral' ? null : farbe} art="flaeche" bild={foto}
-                alt={foto ? g.bild?.alt ?? g.name : undefined} onKaputt={() => bildKaputt(g.bild?.schluessel)} />
-              {nachweis && (
-                <small className="bild-nachweis">
-                  {foto?.quelle_seite ? <a href={foto.quelle_seite} target="_blank" rel="noopener noreferrer">{nachweis}</a> : nachweis}
-                </small>
-              )}
-            </div>
-          )}
+      <div className="rezept-inhalt">
+        <div className="rezept-bild"><GerichtBild g={g} groesse="kopf" suchen nachweis /></div>
+
+        <header className="rezept-kopf">
+          {(planId || herkunft) && <p className="held-ueber">{planId ? 'Für heute geplant' : herkunft}</p>}
           <h1>{g.name}</h1>
-          <p className="meta-icons">
-            <span><Icon name="uhr" groesse={18} /> {g.zeit_min} Min</span>
-            <span><Icon name="flamme" groesse={18} className="flamme" /> {kcalKurz(n)}{n.kcal_portion !== null ? ' / Portion' : ''}</span>
-            <span><Icon name="preis" groesse={18} /> {euroKurz(g.kosten)}{g.kosten.pro_portion_cent !== null ? ' / Portion' : ''}</span>
-          </p>
-          {!kochmodus && g.beschreibung && <p className="leise klein">{g.beschreibung}</p>}
-          {!kochmodus && hinweise.map((h) => (
-            <p key={h} className="kochen-hinweis"><Icon name="info" groesse={15} /> {h}</p>
-          ))}
+          {g.beschreibung && <p className="rezept-satz">{g.beschreibung}</p>}
+          <dl className="rezept-fakten">
+            <div><dt>Dauer ca.</dt><dd><Icon name="uhr" groesse={18} /> {g.zeit_min} Min</dd></div>
+            <div><dt>Portionen</dt><dd><Icon name="personen" groesse={18} /> {g.portionen}</dd></div>
+            <div className={allesDa ? 'status-ok' : 'status-achtung'}>
+              <dt>Im Vorrat</dt>
+              <dd><Icon name={allesDa ? 'haken' : 'wagen'} groesse={18} /> {allesDa ? 'Alles da' : `${fehltZahl} ${fehltZahl === 1 ? 'fehlt' : 'fehlen'}`}</dd>
+            </div>
+          </dl>
+          {hinweise.map((h) => <p key={h} className="rezept-hinweis"><Icon name="info" groesse={16} /> {h}</p>)}
         </header>
 
-        {gebucht && (
-          <div className="erfolg abstand-oben" role="status">
-            <Icon name="haken" groesse={22} />
-            <span>
-              <strong>Aus dem Vorrat entnommen</strong>
-              <small>{gebucht.text}{gebucht.wert ? ` · ${gebucht.wert}` : ''}</small>
-              {gebucht.warnung && <small className="status-achtung">{gebucht.warnung}</small>}
-            </span>
-            <button type="button" className="link" onClick={() => void rueckgaengig()} disabled={laeuft}>Rückgängig</button>
+        <section className="rezept-abschnitt" aria-label="Zutaten">
+          <div className="abschnitt-kopf"><h2>Zutaten</h2><span className="abschnitt-zusatz">für {g.portionen} {g.portionen === 1 ? 'Portion' : 'Portionen'}</span></div>
+          <ZutatenListe zeilen={zeilen} fehlt={g.fehlt} />
+          {(grund.length > 0 || unbekannt.length > 0) && (
+            <p className="abschnitt-fuss">
+              {grund.length > 0 && `Außerdem: ${grund.join(', ')}. `}
+              {unbekannt.length > 0 && `Was in ${unbekannt.join(', ')} steckt, ist nicht hinterlegt – Kombi erfindet nichts dazu.`}
+            </p>
+          )}
+          {g.fehlt.length > 0 && planung && (planId ? (
+            <p className="abschnitt-fuss">Was fehlt, steht für diese geplante Mahlzeit schon auf der Einkaufsliste.</p>
+          ) : onFehlendesMerken && (
+            <button type="button" className="knopf breit zweit abstand-oben" onClick={() => void merken()} disabled={gemerkt}>
+              <Icon name={gemerkt ? 'haken' : 'wagen'} groesse={18} /> {gemerkt ? 'Steht auf der Einkaufsliste' : 'Fehlendes auf die Einkaufsliste'}
+            </button>
+          ))}
+        </section>
+
+        <section className="rezept-abschnitt" aria-label="Zubereitung">
+          <div className="abschnitt-kopf">
+            <h2>Zubereitung</h2>
+            {g.schritte.length > 0 && <span className="abschnitt-zusatz">{g.schritte.length} {g.schritte.length === 1 ? 'Schritt' : 'Schritte'}</span>}
           </div>
-        )}
-
-        {!kochmodus && gruppen.map((gruppe) => gruppe.zeilen.length > 0 && (
-          <section key={gruppe.titel} className="abschnitt">
-            <div className="abschnitt-kopf"><h2>{gruppe.titel}</h2></div>
-            <ul className="liste">
-              {gruppe.zeilen.map((z, i) => (
-                <li key={`${z.name}-${i}`} className={`f-${z.farbe ?? 'kuehlschrank'}`}>
-                  <div className="zeile">
-                    <span className="punkt" aria-hidden="true" />
-                    <span className="zeile-haupt">
-                      <span className="zeile-titel">{z.name}</span>
-                      {zustand(z) && <span className="zeile-meta">{zustand(z)}</span>}
-                    </span>
-                    {z.menge !== null && <span className="menge-rechts">{mengeText(z.menge, z.einheit)}</span>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
-        {!kochmodus && (grund.length > 0 || unbekannt.length > 0) && (
-          <p className="abschnitt-fuss">
-            {grund.length > 0 && `Außerdem: ${grund.join(', ')}. `}
-            {unbekannt.length > 0 && `Zusammensetzung unbekannt: ${unbekannt.join(', ')} – Kombi erfindet nichts dazu.`}
-          </p>
-        )}
-
-        {!kochmodus && g.fehlt.length > 0 && (
-          <section className="abschnitt">
-            <div className="abschnitt-kopf"><h2>Fehlt</h2></div>
-            <ul className="liste">
-              {g.fehlt.map((f) => (
-                <li key={f.name}>
-                  <div className="zeile">
-                    <span className="zeile-haupt"><span className="zeile-titel">{f.name}</span></span>
-                    {f.menge !== null && f.einheit && <span className="menge-rechts">{mengeText(f.menge, f.einheit)}</span>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {planung && (planId ? (
-              <p className="abschnitt-fuss">Steht für diese geplante Mahlzeit schon auf der Einkaufsliste.</p>
-            ) : onFehlendesMerken && (
-              <button type="button" className="knopf breit abstand-oben" onClick={() => void merken()} disabled={gemerkt}>
-                <Icon name={gemerkt ? 'haken' : 'wagen'} groesse={18} /> {gemerkt ? 'Steht auf der Einkaufsliste' : 'Auf die Einkaufsliste'}
-              </button>
-            ))}
-          </section>
-        )}
-
-        {g.schritte.length > 0 && (
-          <section className="abschnitt">
-            <div className="abschnitt-kopf"><h2>Zubereitung</h2></div>
-            <ol className="schritte">
+          {g.schritte.length > 0 ? (
+            <ol className="schritt-liste">
               {g.schritte.map((s, i) => (
-                <li key={i} className={erledigt.has(i) ? 'erledigt' : ''}>
-                  <button
-                    type="button"
-                    aria-pressed={erledigt.has(i)}
-                    onClick={() => setErledigt((alt) => {
-                      const neu = new Set(alt);
-                      if (neu.has(i)) neu.delete(i);
-                      else neu.add(i);
-                      return neu;
-                    })}
-                  >
-                    <span className="schritt-nr">{erledigt.has(i) ? <Icon name="haken" groesse={15} /> : i + 1}</span>
-                    <span>{s}</span>
-                  </button>
-                </li>
+                <li key={i}><span className="schritt-nr" aria-hidden="true">{i + 1}</span><p>{s}</p></li>
               ))}
             </ol>
-          </section>
-        )}
+          ) : (
+            <p className="leise">Für dieses Gericht sind keine Schritte hinterlegt.</p>
+          )}
+        </section>
 
-        {gebucht && gebucht.danach.length > 0 && (
-          <section className="abschnitt">
-            <div className="abschnitt-kopf"><h2>Im Vorrat bleibt</h2></div>
-            <ul className="liste">
-              {gebucht.danach.map((d) => (
-                <li key={d.name}><div className="zeile"><span className="zeile-haupt"><span className="zeile-titel">{d.name}</span></span><span className="zeile-wert">{d.text}</span></div></li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {!kochmodus && (
-          <details className="mehr abstand-oben">
-            <summary>Nährwerte und Kosten</summary>
-            <div className="info-zeilen">
-              <div className="info-zeile"><span>Kalorien je Portion</span><span>{n.kcal_portion === null ? 'unbekannt' : kcalKurz(n)}</span></div>
-              {makros.length > 0 && <div className="info-zeile"><span>je Portion</span><span>{makros.join(' · ')}</span></div>}
-              <div className="info-zeile"><span>Wert aus dem Vorrat</span><span>{g.kosten.gesamt_cent === null ? 'unbekannt' : `${g.kosten.status === 'teilweise' ? 'ab ' : ''}${euroText(g.kosten.gesamt_cent)}`}</span></div>
-            </div>
-            <p className="meta-text">
-              Nur aus hinterlegten Nährwerten und Preisen – nichts geschätzt.
-              {n.unbekannt.length > 0 && ` Ohne Nährwerte: ${n.unbekannt.join(', ')}.`}
-              {g.kosten.unbekannt.length > 0 && ` Ohne Preis: ${g.kosten.unbekannt.join(', ')}.`}
-            </p>
-          </details>
-        )}
-        {fehler && stufe !== 'bestaetigen' && <p className="fehlerbox abstand-oben">{fehler}</p>}
+        <details className="mehr abstand-oben">
+          <summary>Preis und Nährwerte</summary>
+          <div className="info-zeilen">
+            <div className="info-zeile"><span>Preis je Portion</span><span>{euroKurz(g.kosten)}</span></div>
+            <div className="info-zeile"><span>Kalorien je Portion</span><span>{kcalKurz(n)}</span></div>
+            {makros.length > 0 && <div className="info-zeile"><span>je Portion</span><span>{makros.join(' · ')}</span></div>}
+            <div className="info-zeile"><span>Wert aus dem Vorrat</span><span>{g.kosten.gesamt_cent === null ? 'Preis unbekannt' : `${g.kosten.status === 'teilweise' ? 'ab ' : ''}${euroText(g.kosten.gesamt_cent)}`}</span></div>
+          </div>
+          <p className="meta-text">
+            Nur aus hinterlegten Preisen und Nährwerten – Kombi schätzt nichts. „ab …“ heißt: mindestens, einiges fehlt.
+            {g.kosten.unbekannt.length > 0 && ` Ohne Preis: ${g.kosten.unbekannt.join(', ')}.`}
+            {n.unbekannt.length > 0 && ` Ohne Nährwerte: ${n.unbekannt.join(', ')}.`}
+            {herkunft && ' Beim Kochen zählt der aktuelle Vorrat.'}
+          </p>
+        </details>
+        {fehler && stufe === 'rezept' && <p className="fehlerbox abstand-oben">{fehler}</p>}
       </div>
 
-      <div className="kochen-unten">
-        {kochmodus ? (
-          <button type="button" className="knopf haupt" onClick={fertig}><Icon name="haken" /> Fertig</button>
-        ) : daten.kann_kochen ? (
-          <button type="button" className="knopf haupt" onClick={() => { setFehler(null); setPosten(daten.posten); setStufe('bestaetigen'); }}>
-            <Icon name="pfanne" /> Kochen starten
-          </button>
-        ) : (
-          <button type="button" className="knopf haupt" onClick={() => setStufe('kochen')}>
-            <Icon name="pfanne" /> Ohne Entnahme kochen
-          </button>
-        )}
+      <div className="rezept-unten">
+        <button type="button" className="knopf haupt" onClick={kochenStarten}>
+          <Icon name="pfanne" /> {daten.kann_kochen ? 'Kochen starten' : 'Schritt für Schritt kochen'}
+        </button>
+        <p className="rezept-unten-text">
+          {daten.kann_kochen ? 'Kombi fragt vorher, was aus dem Vorrat abgezogen wird.' : 'Nichts davon liegt im Vorrat – am Vorrat ändert sich nichts.'}
+        </p>
       </div>
 
       {stufe === 'bestaetigen' && (
-        <Blatt titel="Aus dem Vorrat entnehmen?" untertitel={entnahmeText(aktiv)} onSchliessen={() => setStufe('ansicht')}>
+        <Blatt titel="Zutaten aus dem Vorrat nehmen?" untertitel="Damit dein Vorrat stimmt, zieht Kombi diese Mengen ab. Du kannst sie anpassen." onSchliessen={() => setStufe('rezept')}>
           <PostenListe posten={posten} bestand={bestand} onAendern={setPosten} />
-          <p className="abschnitt-fuss">Zuerst Geöffnetes, dann was am frühesten abläuft.{planung ? ' Klappt etwas nicht, wird nichts gebucht.' : ''}</p>
+          <p className="abschnitt-fuss">Zuerst Geöffnetes, dann was am frühesten abläuft.{planung ? ' Klappt etwas nicht, wird gar nichts abgezogen.' : ''}</p>
           {fehler && <p className="fehlertext">{fehler}</p>}
           <div className="abschnitt">
             <button type="button" className="knopf haupt" disabled={laeuft || aktiv.length === 0} onClick={() => void buchen()}>
-              {laeuft ? 'Entnehme …' : 'Entnehmen & loslegen'}
+              {laeuft ? 'Wird abgezogen …' : 'Abziehen & loslegen'}
             </button>
-            <button type="button" className="link breit" onClick={() => setStufe('ansicht')}>Abbrechen</button>
+            <button type="button" className="link breit" onClick={() => setStufe('rezept')}>Abbrechen</button>
           </div>
+        </Blatt>
+      )}
+
+      {(stufe === 'kochen' || stufe === 'fertig') && (
+        <Kochmodus
+          g={g}
+          zeilen={zeilen}
+          fehlt={g.fehlt}
+          gebucht={gebucht}
+          fertig={stufe === 'fertig'}
+          laeuft={laeuft}
+          onFertig={() => setStufe('fertig')}
+          onWeiterKochen={() => setStufe('kochen')}
+          onRueckgaengig={() => void rueckgaengig()}
+          onVerlassen={() => (gebucht ? schliessenNachKochen() : setStufe('rezept'))}
+          onSchliessen={schliessenNachKochen}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Zutaten mit Menge rechts – und klar markiert, was fehlt oder nicht reicht. */
+function ZutatenListe({ zeilen, fehlt }: { zeilen: KochZeile[]; fehlt: FehlendeZutat[] }) {
+  const zustand = (z: KochZeile) => {
+    switch (z.status) {
+      case 'zu_wenig': return <span className="status-achtung">nur {mengeText(z.verfuegbar!, z.einheit)} da</span>;
+      case 'leer': return <span className="status-kritisch">aufgebraucht</span>;
+      case 'unbekannt': return <span className="status-kritisch">nicht mehr im Vorrat</span>;
+      case 'frei': return <span>Rest aus dem Kühlschrank</span>;
+      default: return null;
+    }
+  };
+  return (
+    <ul className="liste zutaten-liste">
+      {zeilen.map((z, i) => (
+        <li key={`${z.name}-${i}`} className={`f-${z.farbe ?? 'kuehlschrank'}`}>
+          <div className="zeile">
+            <span className="punkt" aria-hidden="true" />
+            <span className="zeile-haupt">
+              <span className="zeile-titel">{z.name}</span>
+              {zustand(z) && <span className="zeile-meta">{zustand(z)}</span>}
+            </span>
+            {z.menge !== null && <span className="menge-rechts">{mengeText(z.menge, z.einheit)}</span>}
+          </div>
+        </li>
+      ))}
+      {fehlt.map((f) => (
+        <li key={`fehlt-${f.name}`} className="fehlt">
+          <div className="zeile">
+            <span className="punkt" aria-hidden="true" />
+            <span className="zeile-haupt">
+              <span className="zeile-titel">{f.name}</span>
+              <span className="zeile-meta status-achtung">fehlt – nicht im Vorrat</span>
+            </span>
+            {f.menge !== null && f.einheit && <span className="menge-rechts">{mengeText(f.menge, f.einheit)}</span>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Kochmodus: ein Schritt pro Bildschirm, große Schrift, Zurück / Weiter / Fertig unten in Daumennähe.
+ * Die Zutaten bleiben über „Zutaten“ erreichbar. Nach dem letzten Schritt: „Guten Appetit“ mit dem,
+ * was abgezogen wurde und was im Vorrat bleibt – Rückgängig ist noch möglich.
+ */
+function Kochmodus({ g, zeilen, fehlt, gebucht, fertig, laeuft, onFertig, onWeiterKochen, onRueckgaengig, onVerlassen, onSchliessen }: {
+  g: Gericht; zeilen: KochZeile[]; fehlt: FehlendeZutat[]; gebucht: Gebucht | null; fertig: boolean; laeuft: boolean;
+  onFertig: () => void; onWeiterKochen: () => void; onRueckgaengig: () => void; onVerlassen: () => void; onSchliessen: () => void;
+}) {
+  const schritte = g.schritte.length ? g.schritte : ['Für dieses Gericht sind keine Schritte hinterlegt – einfach wie gewohnt zubereiten.'];
+  const [i, setI] = useState(0);
+  const [zutatenOffen, setZutatenOffen] = useState(false);
+  const letzter = i === schritte.length - 1;
+
+  useEffect(() => {
+    const beiTaste = (e: KeyboardEvent) => {
+      if (fertig || zutatenOffen) return;
+      if (e.key === 'ArrowRight') setI((x) => Math.min(schritte.length - 1, x + 1));
+      if (e.key === 'ArrowLeft') setI((x) => Math.max(0, x - 1));
+    };
+    window.addEventListener('keydown', beiTaste);
+    return () => window.removeEventListener('keydown', beiTaste);
+  }, [fertig, zutatenOffen, schritte.length]);
+
+  if (fertig) {
+    return (
+      <div className="kochmodus" role="dialog" aria-modal="true" aria-label={`${g.name}: fertig`}>
+        <div className="km-fertig">
+          <span className="km-fertig-icon" aria-hidden="true"><Icon name="haken" groesse={34} /></span>
+          <h2>Guten Appetit!</h2>
+          <p className="leise">{gebucht ? `Aus dem Vorrat abgezogen: ${gebucht.text}${gebucht.wert ? ` · ${gebucht.wert}` : ''}.` : 'Am Vorrat wurde nichts geändert.'}</p>
+          {gebucht?.warnung && <p className="status-achtung klein">{gebucht.warnung}</p>}
+          {gebucht && gebucht.danach.length > 0 && (
+            <section className="abschnitt">
+              <h3 className="unterkopf">Im Vorrat bleibt</h3>
+              <ul className="liste">
+                {gebucht.danach.map((d) => (
+                  <li key={d.name}><div className="zeile"><span className="zeile-haupt"><span className="zeile-titel">{d.name}</span></span><span className={`zeile-wert${d.text === 'aufgebraucht' ? ' status-achtung' : ''}`}>{d.text}</span></div></li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+        <div className="km-unten">
+          <button type="button" className="knopf zweit" onClick={onWeiterKochen}><Icon name="zurueck" groesse={18} /> Schritte</button>
+          <button type="button" className="knopf haupt" onClick={onSchliessen}><Icon name="haken" /> Fertig</button>
+        </div>
+        {gebucht && (
+          <button type="button" className="link breit km-rueck" disabled={laeuft} onClick={onRueckgaengig}>Doch nicht gekocht? Rückgängig machen</button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="kochmodus" role="dialog" aria-modal="true" aria-label={`${g.name} – Schritt ${i + 1} von ${schritte.length}`}>
+      <div className="km-leiste">
+        <button type="button" className="icon-knopf" onClick={onVerlassen} aria-label={gebucht ? 'Kochmodus beenden' : 'Zurück zum Rezept'}>
+          <Icon name="schliessen" groesse={20} />
+        </button>
+        <span className="km-titel">{g.name}</span>
+        <button type="button" className="knopf klein zweit" onClick={() => setZutatenOffen(true)}>Zutaten</button>
+      </div>
+      <div className="km-fortschritt" role="progressbar" aria-label="Fortschritt" aria-valuemin={1} aria-valuemax={schritte.length} aria-valuenow={i + 1}>
+        {schritte.map((_, j) => <span key={j} className={j <= i ? 'an' : ''} />)}
+      </div>
+
+      <div className="km-inhalt">
+        {gebucht && i === 0 && (
+          <div className="erfolg" role="status">
+            <Icon name="haken" groesse={20} />
+            <span><strong>Aus dem Vorrat abgezogen</strong><small>{gebucht.text}</small></span>
+            <button type="button" className="link" onClick={onRueckgaengig} disabled={laeuft}>Rückgängig</button>
+          </div>
+        )}
+        <p className="km-nummer">Schritt {i + 1} von {schritte.length}</p>
+        <p className="km-text" aria-live="polite">{schritte[i]}</p>
+      </div>
+
+      <div className="km-unten">
+        <button type="button" className="knopf zweit" disabled={i === 0} onClick={() => setI(i - 1)}>
+          <Icon name="zurueck" groesse={18} /> Zurück
+        </button>
+        {letzter ? (
+          <button type="button" className="knopf haupt" onClick={onFertig}><Icon name="haken" /> Fertig</button>
+        ) : (
+          <button type="button" className="knopf haupt" onClick={() => setI(i + 1)}>Weiter <Icon name="weiter" groesse={18} /></button>
+        )}
+      </div>
+
+      {zutatenOffen && (
+        <Blatt titel="Zutaten" untertitel={`für ${g.portionen} ${g.portionen === 1 ? 'Portion' : 'Portionen'}`} onSchliessen={() => setZutatenOffen(false)}>
+          <ZutatenListe zeilen={zeilen} fehlt={fehlt} />
         </Blatt>
       )}
     </div>

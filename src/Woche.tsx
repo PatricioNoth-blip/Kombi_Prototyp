@@ -9,10 +9,10 @@ import { baueSnapshotAus, holeVorschlaege, holeWoche, type Quelle } from './esse
 import { aenderePlan, alsVorratSorte, entfernePlan, naehrwerteGericht, planeGericht, type Plan } from './haushalt';
 import { Blatt } from './Blatt';
 import { GerichtKarte } from './GerichtKarte';
+import { GerichtBild } from './GerichtBild';
 import { Icon } from './Icon';
 import { kcalKurz } from './format';
 import { freieTage, plusTageIso, tagName } from './dashboard';
-import { Bild } from './Bild';
 
 type Props = {
   bestand: Sorte[];
@@ -191,7 +191,7 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
               return (
                 <li key={p.id}>
                   <div className="zeile">
-                    <Bild name={g.name} emoji={g.emoji} art="kachel" />
+                    <span className="mini-teller"><GerichtBild g={g} groesse="klein" /></span>
                     <span className="zeile-haupt">
                       <span className={`zeile-meta${vorbei ? ' status-achtung' : ''}`}>{p.datum ? tagName(heute, p.datum) : 'Flexibel'}</span>
                       <span className="zeile-titel">{p.titel}</span>
@@ -243,13 +243,13 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
             <button type="button" className="link" onClick={() => setVorschau(null)}>Verwerfen</button>
           </div>
           {vorschau.gerichte.length === 0 ? (
-            <p className="leise">{vorschau.hinweis ?? 'Mit dem freien Vorrat passt gerade keine Mahlzeit.'}</p>
+            <p className="leise">{vorschau.hinweis ?? 'Mit dem freien Vorrat passt gerade keine Mahlzeit.'} Tipp: weniger Mahlzeiten wählen oder einkaufen – unter „Heute“ zeigt Kombi auch Ideen mit einer fehlenden Zutat.</p>
           ) : (
             <ul className="liste mit-icon">
               {vorschau.gerichte.map((g, i) => (
                 <li key={g.id}>
                   <div className="zeile">
-                    <Bild name={g.name} emoji={g.emoji} art="kachel" />
+                    <span className="mini-teller"><GerichtBild g={g} groesse="klein" /></span>
                     <span className="zeile-haupt">
                       <span className="zeile-meta">{vorschau.tage[i] ? tagName(heute, vorschau.tage[i]) : 'Flexibel'}</span>
                       <span className="zeile-titel">{g.name}</span>
@@ -289,7 +289,7 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
           {tausch.alternativen === null ? (
             <p className="leise">Kombi sucht Alternativen …</p>
           ) : tausch.alternativen.length === 0 ? (
-            <p className="leise">Gerade keine passende Alternative.</p>
+            <p className="leise">Gerade keine passende Alternative aus dem freien Vorrat. Du kannst das Gericht behalten oder unter „Heute“ neue Ideen suchen.</p>
           ) : (
             <div className="essen">
               {tausch.alternativen.map((g) => (

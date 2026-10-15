@@ -20,11 +20,12 @@ import { PostenListe } from './PostenListe';
 import { Icon } from './Icon';
 import { lagerort } from './farben';
 import { artVon, einheitVon, euroKurz, heuteIso, kcalKurz, mengeText, portionMengeVon, portionenVon } from './format';
-import { plusTageIso, produktionsGruende, zustand } from './dashboard';
+import { istDringend, nachzukochen, plusTageIso, produktionsGruende, zustand } from './dashboard';
+import { normalisiere } from '../supabase/functions/_shared/kombi/text.ts';
 import { Bild, type BildArt } from './Bild';
 import { bildKaputt, useBild } from './bildApi';
 import { bildAnfrageFuerVorschlag } from '../supabase/functions/_shared/kombi/bilder.ts';
-import { Box } from './Karten';
+import { Box, tonVon, zustandKurz } from './Karten';
 
 type Props = {
   bestand: Sorte[];
@@ -68,7 +69,7 @@ function dringendsterGrund(k: KomponentenVorschlag, bestand: Sorte[], heute: str
   for (const name of k.verwertet) {
     const s = bestand.find((b) => b.name === name);
     const z = s ? zustand(s, heute) : null;
-    if (s && z && z.art !== 'niedrig') {
+    if (s && z && istDringend(z)) {
       return z.art === 'bald'
         ? { text: `Läuft bald ab: ${s.name}`, klein: `(${z.text})` }
         : { text: `${s.name}: ${z.titel.toLocaleLowerCase('de-DE')}`, klein: z.text };
@@ -153,7 +154,12 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
   const gruende = jetzt ? produktionsGruende(jetzt.k, bestand, heute) : null;
   const weitereVorgemerkt = vorgemerkt.filter((p) => p.id !== jetzt?.planId);
   const tage = Array.from({ length: 7 }, (_, i) => plusTageIso(heute, i));
-  const flexibel = plaene.filter((p) => p.datum === null).length;
+  // Wochenplan: nur Mahlzeiten – dieselbe Zählung wie unter Essen → Woche
+  const mahlzeiten = plaene.filter((p) => p.art === 'mahlzeit');
+  const flexibel = mahlzeiten.filter((p) => p.datum === null).length;
+  // Selbstgemachtes unter dem Mindestbestand – dieselben Sorten, die der Vorrat als „wird knapp“/„aufgebraucht“ zeigt
+  const knapp = nachzukochen(bestand, heute);
+  const ideeFuer = (name: string) => vorschlaege.find((k) => normalisiere(k.name) === normalisiere(name)) ?? null;
 
   const empfKarte = (k: KomponentenVorschlag) => {
     const fehlt = fehltNamen(k);
@@ -200,8 +206,34 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
             </div>
           </article>
         </Box>
-      ) : (
-        <p className="hinweisbox">Gerade muss nichts produziert werden. Unten gibt es Ideen, falls du trotzdem vorkochen möchtest.</p>
+      ) : knapp.length === 0 && (
+        <p className="hinweisbox">Gerade muss nichts vorgekocht werden – nichts ist knapp und nichts muss dringend weg. Unten stehen Ideen, falls du trotzdem vorkochen möchtest.</p>
+      )}
+
+      {knapp.length > 0 && (
+        <Box titel="Nachkochen" icon="topf">
+          <ul className="liste mit-bild">
+            {knapp.map((w) => {
+              const idee = ideeFuer(w.sorte.name);
+              return (
+                <li key={w.sorte.id}>
+                  <div className="zeile">
+                    <button type="button" className="zeile-knopf" onClick={() => onOeffnen(w.sorte)}>
+                      <Bild name={w.sorte.name} farbe={w.sorte.farbe} art="klein" />
+                      <span className="zeile-haupt">
+                        <span className="zeile-titel">{w.sorte.name}</span>
+                        <span className="zeile-meta">{w.art === 'leer' ? 'nichts mehr da' : w.text.replace(/ · nachkochen$/, '')} · gewünscht: mind. {mengeText(w.sorte.mindestbestand, einheitVon(w.sorte))}</span>
+                      </span>
+                      <span className={`pille ${tonVon(w)}`}>{zustandKurz(w)}</span>
+                    </button>
+                    {idee && <button type="button" className="knopf klein akzent" onClick={() => setAuftrag({ k: idee, planId: null })}>Vorkochen</button>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="abschnitt-fuss">Selbstgemachtes, von dem du mehr zu Hause haben möchtest. Zutaten, die knapp werden, stehen im Einkauf.</p>
+        </Box>
       )}
 
       <Box titel="Empfohlen" icon="birne" link={{ text: laedt ? 'Sucht …' : 'Neue Ideen', onClick: () => void mitKi() }}>
@@ -209,14 +241,14 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
         {ideen === null && !kiIdeen ? (
           <p className="leise">Kombi rechnet …</p>
         ) : empfohlen.length === 0 ? (
-          <p className="leise">{quelle?.hinweis ?? 'Gerade keine weitere sinnvolle Komponente.'}</p>
+          <p className="leise">{quelle?.hinweis ?? 'Aus dem Vorrat ergibt sich gerade keine weitere Komponente.'} {!laedt && <button type="button" className="link inline" onClick={() => void mitKi()}>Neue Ideen suchen</button>}</p>
         ) : (
           <div className="empfohlen">{empfohlen.map(empfKarte)}</div>
         )}
         <p className="abschnitt-fuss">
           {quelle?.art === 'ki'
             ? `Ideen von der KI (${quelle.anbieter}) – Mengen, Kosten und Nutzbarkeit rechnet Kombi selbst.`
-            : 'Aus deinem Vorrat nach Kombi-Regeln. „Neue Ideen“ fragt die KI. Gespeichert wird nichts ohne Bestätigung.'}
+            : 'Aus deinem Vorrat nach Kombi-Regeln. „Neue Ideen“ fragt die KI. Angelegt wird nichts, bevor du es bestätigst.'}
         </p>
       </Box>
 
@@ -246,10 +278,10 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
         </Box>
       )}
 
-      <Box titel="Geplant" icon="kalender" link={{ text: 'Diese Woche', onClick: onWoche, grau: true }}>
+      <Box titel="Essen diese Woche" icon="kalender" link={{ text: 'Wochenplan', onClick: onWoche, grau: true }}>
         <div className="woche-streifen">
           {tage.map((t, i) => {
-            const n = plaene.filter((p) => p.datum === t).length;
+            const n = mahlzeiten.filter((p) => p.datum === t).length;
             return (
               <button key={t} type="button" className={`tag${i === 0 ? ' heute' : ''}`} onClick={onWoche} aria-label={`${i === 0 ? 'Heute' : t}: ${n} geplant`}>
                 <strong>{i === 0 ? 'Heute' : WOCHENTAGE[new Date(`${t}T12:00:00Z`).getUTCDay()]}</strong>
@@ -259,7 +291,7 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
           })}
         </div>
         <p className="abschnitt-fuss">
-          {plaene.filter((p) => p.datum !== null && p.datum >= tage[0] && p.datum <= tage[6]).length} geplant in den nächsten 7 Tagen{flexibel > 0 ? ` · ${flexibel} flexibel ohne Tag` : ''}
+          {mahlzeiten.filter((p) => p.datum !== null && p.datum >= tage[0] && p.datum <= tage[6]).length} Mahlzeiten geplant in den nächsten 7 Tagen{flexibel > 0 ? ` · ${flexibel} flexibel ohne Tag` : ''}. Was dafür vorgekocht werden muss, steht unter „Vorgemerkt“.
         </p>
       </Box>
 
@@ -276,7 +308,7 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
                       <span className="zeile-meta">{tagName(heute, v.datum)} · +{mengeText(v.menge ?? 0, s ? einheitVon(s) : 'portion')}</span>
                     </span>
                     <span className="zeile-wert">
-                      {v.kosten_cent === null ? 'Kosten unbekannt' : `${v.kosten_unbekannt ? 'ab ' : ''}${euroText(v.kosten_cent)}`}
+                      {v.kosten_cent === null ? 'Preis unbekannt' : `${v.kosten_unbekannt ? 'ab ' : ''}${euroText(v.kosten_cent)}`}
                     </span>
                   </div>
                 </li>
@@ -298,7 +330,7 @@ export function Produktion({ bestand, sorten, planung, protokoll, plaene, proPla
                     <span className="zeile-titel">{s.name}</span>
                     <span className="zeile-meta">{ROLLEN[s.farbe].name} · {lagerort(s.lagerort).name}</span>
                   </span>
-                  <span className="zeile-wert"><strong>{portionenVon(s)}</strong> {portionenVon(s) === 1 ? 'Portion' : 'Port.'}</span>
+                  <span className="zeile-wert">{s.anzahl <= 0 ? 'aufgebraucht' : <><strong>{portionenVon(s)}</strong> {portionenVon(s) === 1 ? 'Portion' : 'Port.'}</>}</span>
                 </button>
               </li>
             ))}
@@ -533,7 +565,7 @@ function ProduktionBlatt({ auftrag, plan, bestand, sorten, protokoll, onMeldung,
         const r = await produzieren(aktiv, id, menge, ablauf || null, plan?.id ?? null, vorbereitet.nicht_erfasst.length);
         const kosten = r.kosten_cent !== null
           ? ` · ${euroText(r.kosten_cent)} (${euroText(Math.round(r.kosten_cent / Math.max(1, tatsaechlich)))} / Portion)`
-          : r.kosten_bekannt_cent ? ` · ab ${euroText(r.kosten_bekannt_cent)}, nicht alle Preise bekannt` : ' · Kosten unbekannt';
+          : r.kosten_bekannt_cent ? ` · ab ${euroText(r.kosten_bekannt_cent)} (einige ohne Preis)` : ' · Preis unbekannt';
         // Nährwerte der Komponente aus den tatsächlich entnommenen Zutaten – nur vollständig bekannt,
         // und nur, wenn die Sorte noch keine hat (Werte von der Packung werden nie überschrieben)
         let kcalText = '';
