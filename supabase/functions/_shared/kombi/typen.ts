@@ -39,9 +39,6 @@ export type SnapshotZutat = {
   /** Einheiten pro Portion (bei „portion“ immer 1) */
   portion_menge: number;
   groesse_g: number | null;
-  /** Gespeicherter Preis für `kosten_menge` Einheiten; null = Preis unbekannt */
-  kosten_cent: number | null;
-  kosten_menge: number;
   /** Bekannte Bestandteile; null = unbekannt (dann darf nichts über den Inhalt behauptet werden) */
   zusammensetzung: string[] | null;
   notiz: string | null;
@@ -62,21 +59,10 @@ export type SnapshotZutat = {
   naehrwert: Naehrwert | null;
 };
 
-/** Bekannter Preis einer Sorte (auch wenn sie gerade leer ist) – Grundlage für Einkaufspreise. */
-export type PreisInfo = {
-  name: string;
-  kosten_cent: number;
-  kosten_menge: number;
-  einheit: Einheit;
-  portion_menge: number;
-};
-
 export type Snapshot = {
   datum: string;
   /** Nur, was wirklich da ist. */
   zutaten: SnapshotZutat[];
-  /** Bekannte Preise, auch von gerade leeren Sorten – für Einkaufsvorschläge. */
-  preise: PreisInfo[];
   /** Mengen, die wegen abgelaufenem Datum nicht eingeplant werden */
   abgelaufen: { name: string; menge: number; einheit: Einheit }[];
 };
@@ -84,7 +70,6 @@ export type Snapshot = {
 export type Optionen = {
   personen: number;
   max_minuten: number | null;
-  guenstig: boolean;
 };
 
 // ───────── Eigenschaften eines Gerichts (Grundlage fürs Lernen) ─────────
@@ -202,8 +187,6 @@ export type GerichtZutat = {
   menge: number | null;
   /** dieselbe Menge in Portionen (zur Anzeige) */
   portionen: number | null;
-  /** Wert dieser Menge, von der Software berechnet; null = Preis unbekannt */
-  kosten_cent: number | null;
   bald_verbrauchen: boolean;
   geoeffnet: boolean;
   zusammensetzung: string[] | null;
@@ -216,30 +199,6 @@ export type FehlendeZutat = {
   /** fehlende Menge in `einheit`, falls bekannt */
   menge: number | null;
   einheit: Einheit | null;
-  /** Nur ein bekannter Preis aus dem Bestand – niemals geschätzt. */
-  preis_cent: number | null;
-  /** worauf sich preis_cent bezieht, z. B. „für 500 g“ */
-  preis_bezug: string | null;
-};
-
-/**
- * berechnet – alle Preise bekannt
- * teilweise – einige Preise unbekannt: Summe der bekannten, `unbekannt` nennt den Rest
- * unbekannt – kein einziger Preis bekannt
- */
-export type PreisStatus = 'berechnet' | 'teilweise' | 'unbekannt';
-
-export type Kosten = {
-  status: PreisStatus;
-  /** Wert der verwendeten Bestandsmengen; null, wenn unbekannt */
-  gesamt_cent: number | null;
-  pro_portion_cent: number | null;
-  personen: number;
-  /** Zutaten ohne bekannten Preis */
-  unbekannt: string[];
-  /** Summe der bekannten Preise fehlender Zutaten; null, wenn keiner bekannt */
-  einkauf_cent: number | null;
-  einkauf_unbekannt: string[];
 };
 
 /**
@@ -269,21 +228,19 @@ export type Gericht = {
   /** Was die Software nicht weiß, z. B. „Zusammensetzung von Pizza unbekannt“ */
   hinweise: string[];
   eigenschaften: Eigenschaften;
-  kosten: Kosten;
   /** Kalorien/Nährwerte aus hinterlegten Daten – berechnet, teilweise oder unbekannt */
   naehrwerte: Naehrwerte;
   bewertung: number;
   /** welches Bild gebraucht wird – aus den Rezeptdaten gebaut (ältere Gerichte: fehlt) */
   bild?: BildAnfrage | null;
+  /** festes Grundrezept (id aus grundrezepte.ts) – fehlt bei Ideen der KI bzw. der Kombi-Regeln */
+  grundrezept?: string;
 };
 
 export type Einkaufsvorschlag = {
   art: 'einkauf';
   id: string;
   name: string;
-  /** bekannter Preis aus dem Bestand; null = unbekannt (wird nie geschätzt) */
-  preis_cent: number | null;
-  preis_bezug: string | null;
   ermoeglicht: string[];
   /** konkrete Kombination mit dem, was schon da ist */
   heute: string | null;
@@ -303,8 +260,6 @@ export type BausteinIdee = {
   portion_g: number | null;
   zutaten: string[];
   verwendbar_fuer: string[];
-  /** Kosten pro Portion, nur wenn aus bekannten Preisen berechenbar */
-  kosten: Kosten;
   begruendung: string;
 };
 
@@ -394,8 +349,6 @@ export type KomponentenZutat = {
   einheit: Einheit | null;
   /** bestand = aus dem Vorrat, grund = immer da, kuehlschrank = Rest, einkauf = fehlt noch */
   quelle: 'bestand' | 'grundausstattung' | 'kuehlschrank' | 'einkauf';
-  /** anteiliger Wert (Herstellungskosten), von der Software berechnet; null = unbekannt */
-  kosten_cent: number | null;
   /** geöffnet, bald ablaufend, Rest – wird damit verwertet */
   dringend: boolean;
 };
@@ -428,10 +381,6 @@ export type KomponentenVorschlag = {
   nutzbarkeit: Nutzbarkeit;
   /** Kalorien/Nährwerte je Portion der Komponente – nur aus hinterlegten Daten */
   naehrwerte: Naehrwerte;
-  /** Herstellungskosten gesamt; pro_portion_cent = je Portion der Komponente */
-  kosten: Kosten;
-  /** Einkauf fehlender Zutaten (Packungspreise, nur bekannte) */
-  einkauf: Kosten;
   verwertet: string[];
   partner: string[];
   /** A = verwertet vorhandene Lebensmittel, B = neu (mit Einkauf) */

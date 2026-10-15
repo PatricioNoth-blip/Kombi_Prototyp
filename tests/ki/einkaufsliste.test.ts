@@ -1,14 +1,14 @@
-// Einkaufsliste: Zusammenführen, Vorrat einmal anrechnen, Reservierungen, Packungspreise, Einkauf → Vorrat.
+// Einkaufsliste: Zusammenführen, Vorrat einmal anrechnen, Reservierungen, Zeilenstatus, Einkauf → Vorrat.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  berechneEinkaufsliste, mangelVorschlaege, packungspreis, produktSchluessel, verteile,
+  berechneEinkaufsliste, mangelVorschlaege, produktSchluessel, verteile,
   type ListenEintrag, type PlanBedarf, type VorratSorte,
 } from '../../supabase/functions/_shared/kombi/einkaufsliste.ts';
 
 const sorte = (id: number, name: string, teil: Partial<VorratSorte> = {}): VorratSorte => ({
   id, name, farbe: 'gruen', art: 'zutat', einheit: 'g', portion_menge: 100, groesse_g: 100, anzahl: 0, abgelaufen: 0,
-  kosten_cent: null, kosten_menge: 1, mindestbestand: 0, lagerort: 'vorrat', ...teil,
+  mindestbestand: 0, lagerort: 'vorrat', ...teil,
 });
 const plan = (id: string, titel: string, bedarf: PlanBedarf['bedarf'], teil: Partial<PlanBedarf> = {}): PlanBedarf => ({
   id, art: 'mahlzeit', titel, datum: null, erstellt_am: `2026-09-28T10:0${id.length}:00Z`, bedarf, ...teil,
@@ -59,7 +59,6 @@ describe('Zusammenführen und Vorrat verrechnen', () => {
       eintraege: [], status: [],
     });
     assert.deepEqual(l.zeilen.map((z) => [z.name, z.menge, z.menge_offen]), [['Basilikum', null, true]]);
-    assert.equal(l.kosten.status, 'unbekannt');
   });
 });
 
@@ -121,28 +120,12 @@ describe('Eigene Einträge, Zustand, Einkauf → Vorrat', () => {
   });
 });
 
-describe('Einkaufskosten – nur aus echten Preisen, in ganzen Packungen', () => {
-  test('450 g Zwiebeln bei „0,99 € für 1 kg“ → eine Packung 0,99 € (kein Fantasiepreis für 450 g)', () => {
-    const s = sorte(1, 'Zwiebeln', { kosten_cent: 99, kosten_menge: 1000 });
-    assert.deepEqual(packungspreis(450, s), { packungen: 1, cent: 99, text: '1 × 1 kg' });
-    assert.deepEqual(packungspreis(1200, s), { packungen: 2, cent: 198, text: '2 × 1 kg' });
-    assert.equal(packungspreis(450, sorte(2, 'Paprika')), null, 'Preis unbekannt');
-  });
-
-  test('teilweise bekannt: bekannte Summe + Anzahl unbekannter Positionen', () => {
-    const sorten = [sorte(1, 'Zwiebeln', { kosten_cent: 99, kosten_menge: 1000 }), sorte(2, 'Pasta', { kosten_cent: 129, kosten_menge: 500, farbe: 'gelb' })];
-    const l = berechneEinkaufsliste({
-      sorten,
-      plaene: [plan('a', 'A', [zwiebeln(450), { name: 'Pasta', block_typ_id: 2, menge: 750, einheit: 'g' }, { name: 'Paprika', block_typ_id: null, menge: 2, einheit: 'stueck' }])],
-      eintraege: [], status: [],
-    });
-    assert.deepEqual(l.kosten, { bekannt_cent: 99 + 2 * 129, unbekannt: 1, status: 'teilweise' });
-  });
-
-  test('zurückgestellte Zeilen zählen nicht zur Summe', () => {
-    const sorten = [sorte(1, 'Zwiebeln', { kosten_cent: 99, kosten_menge: 1000 })];
+describe('Zeilenstatus', () => {
+  test('zurückgestellte Zeilen bleiben sichtbar, aber nicht offen', () => {
+    const sorten = [sorte(1, 'Zwiebeln')];
     const l = berechneEinkaufsliste({ sorten, plaene: [plan('a', 'A', [zwiebeln(450)])], eintraege: [], status: [{ schluessel: 'zwiebel', einheit: 'g', status: 'zurueckgestellt' }] });
-    assert.equal(l.kosten.status, 'leer');
+    assert.deepEqual(l.zeilen.map((z) => [z.name, z.menge, z.status]), [['Zwiebeln', 450, 'zurueckgestellt']]);
+    assert.equal('kosten' in l, false, 'keine Einkaufskosten');
   });
 });
 

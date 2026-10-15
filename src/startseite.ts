@@ -1,108 +1,26 @@
-// Startseite: Was wurde heute gegessen (kcal, Kosten), was kostet der Haushalt – nur aus echten Daten.
-// „Heute wichtig“ steht nicht mehr als große Liste auf dem Start; Ablauf und Reste steuern im Hintergrund
-// die Vorschläge (Engine) und erscheinen hier höchstens als eine dezente Zeile.
-//
-// Geld wird nie doppelt gezählt:
-//   • Ausgegeben  = was beim Einkauf tatsächlich bezahlt wurde (Einkaufsbuchungen mit Preis).
-//   • Produktion  = Wert der verarbeiteten Zutaten – kein zusätzliches Geld, sie sind schon eingekauft.
-//   • Gekocht     = Wert der entnommenen Mengen (aus den Kosten der entnommenen Chargen).
-//   • Sonstiges   = von Hand eingetragene Ausgaben ohne Bezug zum Vorrat (Kaffee, bestellt …).
-// Nur Einkäufe und Sonstiges sind Geld, das den Haushalt verlassen hat; Produktion und Gekocht sind Warenwert.
+// Startseite: Vorschläge, was heute gegessen wurde (kcal) und der Überblick – nur aus echten Daten.
+// Ablauf und Reste steuern im Hintergrund die Vorschläge (Engine) und erscheinen hier höchstens als eine Zeile.
 import type { Gericht, KomponentenVorschlag } from '../supabase/functions/_shared/kombi/typen.ts';
 import type { Sorte } from './api';
 import { istDringend, tageBis, zustand, type Wichtig } from './dashboard.ts';
 
-export type EinkaufsBuchung = { erstellt_am: string; preis_cent: number | null; rueckgaengig: boolean };
 export type HerstellungsZeile = {
-  datum: string; kosten_cent: number | null; kosten_unbekannt: number; rueckgaengig: boolean;
+  datum: string; rueckgaengig: boolean;
   /** für den Verlauf in „Produktion“ (fehlt bei älteren Abfragen) */
   block_typ_id?: number; menge?: number; erstellt_am?: string;
 };
-export type SonstigeAusgabe = { id?: number; datum: string; betrag_cent: number; notiz?: string | null; entfernt: boolean };
 export type MahlzeitZeile = {
   datum: string; titel: string; portionen: number;
-  kosten_cent: number | null; kosten_unbekannt: number; kcal: number | null; kcal_unbekannt: number; rueckgaengig: boolean;
+  kcal: number | null; kcal_unbekannt: number; rueckgaengig: boolean;
   /** Zeitpunkt der Buchung – für Frühstück/Mittag/Abend (fehlt bei älteren Daten) */
   erstellt_am?: string;
 };
 
-export type Monatsbilanz = {
-  monat: string;
-  /** Einkäufe + Sonstiges – nur echtes Geld, kein Warenwert */
-  gesamt_cent: number;
-  /** tatsächlich bezahlt; ohne_preis = Einkäufe, bei denen kein Preis angegeben wurde */
-  ausgegeben: { cent: number; anzahl: number; ohne_preis: number };
-  sonstiges: { cent: number; anzahl: number };
-  /** Vormonat bis zum gleichen Tag – null, wenn es dort keine Ausgaben gab (dann kein Vergleich) */
-  vormonat: { cent: number; bis_tag: number; aenderung_prozent: number } | null;
-  /** Warenwert der verarbeiteten Zutaten; vollstaendig = alle Preise bekannt */
-  produktion: { cent: number; anzahl: number; vollstaendig: boolean };
-  /** Warenwert der gekochten Mahlzeiten; Ø nur, wenn für jede Mahlzeit alles bekannt ist */
-  gekocht: { cent: number; anzahl: number; vollstaendig: boolean; pro_mahlzeit_cent: number | null };
-  leer: boolean;
-};
-
-const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-
-/** Zeitstempel → Kalendertag in der Zeitzone des Geräts */
-export function lokalesDatum(zeitstempel: string): string {
-  const d = new Date(zeitstempel);
-  if (Number.isNaN(d.getTime())) return zeitstempel.slice(0, 10);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** Erster Tag des Vormonats (YYYY-MM-DD) */
+/** Erster Tag des Vormonats (YYYY-MM-DD) – ab hier lädt die App Verlauf und Mahlzeiten */
 export function vormonatsanfang(heute: string): string {
   const j = Number(heute.slice(0, 4));
   const m = Number(heute.slice(5, 7));
   return m === 1 ? `${j - 1}-12-01` : `${j}-${String(m - 1).padStart(2, '0')}-01`;
-}
-
-export function monatsbilanz(
-  d: { einkaeufe: EinkaufsBuchung[]; herstellungen: HerstellungsZeile[]; mahlzeiten: MahlzeitZeile[]; sonstige?: SonstigeAusgabe[] },
-  heute: string,
-): Monatsbilanz {
-  const monat = heute.slice(0, 7);
-  const imMonat = (datum: string) => datum.slice(0, 7) === monat;
-  const einkaeufe = d.einkaeufe.filter((e) => !e.rueckgaengig && imMonat(lokalesDatum(e.erstellt_am)));
-  const sonstige = (d.sonstige ?? []).filter((a) => !a.entfernt && imMonat(a.datum));
-
-  // Vergleich fair: Vormonat nur bis zum gleichen Tag (am 28. also 1.–28. des Vormonats)
-  const vm = vormonatsanfang(heute).slice(0, 7);
-  const tag = Number(heute.slice(8, 10));
-  const imVormonat = (datum: string) => datum.slice(0, 7) === vm && Number(datum.slice(8, 10)) <= tag;
-  const vorEinkauf = d.einkaeufe.filter((e) => !e.rueckgaengig && e.preis_cent !== null && imVormonat(lokalesDatum(e.erstellt_am)));
-  const vorSonst = (d.sonstige ?? []).filter((a) => !a.entfernt && imVormonat(a.datum));
-  const vorCent = vorEinkauf.reduce((s, e) => s + (e.preis_cent ?? 0), 0) + vorSonst.reduce((s, a) => s + a.betrag_cent, 0);
-  const herst = d.herstellungen.filter((h) => !h.rueckgaengig && imMonat(h.datum));
-  const mahl = d.mahlzeiten.filter((m) => !m.rueckgaengig && imMonat(m.datum));
-  const summe = (xs: { kosten_cent: number | null }[]) => xs.reduce((s, x) => s + (x.kosten_cent ?? 0), 0);
-  const vollstaendig = (xs: { kosten_cent: number | null; kosten_unbekannt: number }[]) =>
-    xs.every((x) => x.kosten_cent !== null && x.kosten_unbekannt === 0);
-  const gekochtCent = summe(mahl);
-  const gekochtVoll = vollstaendig(mahl);
-  const einkaufCent = einkaeufe.reduce((s, e) => s + (e.preis_cent ?? 0), 0);
-  const sonstCent = sonstige.reduce((s, a) => s + a.betrag_cent, 0);
-  const gesamt = einkaufCent + sonstCent;
-  return {
-    monat: MONATE[Number(monat.slice(5, 7)) - 1] ?? '',
-    gesamt_cent: gesamt,
-    ausgegeben: {
-      cent: einkaufCent,
-      anzahl: einkaeufe.length,
-      ohne_preis: einkaeufe.filter((e) => e.preis_cent === null).length,
-    },
-    sonstiges: { cent: sonstCent, anzahl: sonstige.length },
-    vormonat: vorCent > 0 ? { cent: vorCent, bis_tag: tag, aenderung_prozent: Math.round(((gesamt - vorCent) / vorCent) * 100) } : null,
-    produktion: { cent: summe(herst), anzahl: herst.length, vollstaendig: vollstaendig(herst) },
-    gekocht: {
-      cent: gekochtCent,
-      anzahl: mahl.length,
-      vollstaendig: gekochtVoll,
-      pro_mahlzeit_cent: mahl.length && gekochtVoll ? Math.round(gekochtCent / mahl.length) : null,
-    },
-    leer: einkaeufe.length + herst.length + mahl.length + sonstige.length === 0,
-  };
 }
 
 /** Heute Gekochtes – kcal nur, wenn sie für alles bekannt sind. */
@@ -128,7 +46,7 @@ export type StartAbschnitt = 'essen' | 'auftauen' | 'willkommen' | 'ueberblick';
 /**
  * Reihenfolge der Startseite: erst der Nutzen („Was möchtest du heute kochen?“ mit einem großen
  * Vorschlag und „Jetzt kochen“), dann – nur wenn heute fällig – Auftauen, für neue Nutzer eine kurze
- * Erklärung, und ganz unten der Überblick (Vorrat, Einkauf, Produktion, Heute, Geld) als ruhige Liste.
+ * Erklärung, und ganz unten der Überblick (Vorrat, Einkauf, Produktion, Heute gegessen) als ruhige Liste.
  * Kennzahlen stehen nie über dem Vorschlag.
  */
 export function startAbschnitte(k: { auftauen: boolean; willkommen: boolean }): StartAbschnitt[] {
@@ -171,9 +89,6 @@ export type Tagesuebersicht = {
   /** kcal pro Person (Mahlzeit ÷ Portionen), Summe der bekannten; null = keine bekannt */
   kcal: number | null;
   kcal_status: Status;
-  /** Essenskosten heute: Warenwert der gekochten Mahlzeiten + sonstige Ausgaben von heute */
-  kosten_cent: number | null;
-  kosten_status: Status;
   mahlzeit_arten: { fruehstueck: boolean; mittag: boolean; abend: boolean };
   /** persönliches Tagesziel (optional) und Anteil 0…1 – nur, wenn die kcal vollständig bekannt sind */
   ziel: number | null;
@@ -190,32 +105,23 @@ export function mahlzeitArt(zeitstempel: string | undefined): 'fruehstueck' | 'm
 }
 
 /**
- * Der Tag in Zahlen – nur aus protokollierten Mahlzeiten und eingetragenen Ausgaben.
+ * Der Tag in Zahlen – nur aus protokollierten Mahlzeiten.
  * Kalorien kommen aus hinterlegten Nährwerten der TATSÄCHLICH entnommenen Mengen (essen() in der DB):
  * Eine gegessene Portion Tomaten-Basis zählt mit ihren eigenen kcal – die Tomaten darin nicht noch einmal.
  * Unbekannt bleibt unbekannt: „teilweise“ heißt „mindestens“, nie geschätzt.
  */
-export function tagesuebersicht(
-  mahlzeiten: MahlzeitZeile[], sonstige: SonstigeAusgabe[], heute: string, ziel: number | null = null,
-): Tagesuebersicht {
+export function tagesuebersicht(mahlzeiten: MahlzeitZeile[], heute: string, ziel: number | null = null): Tagesuebersicht {
   const m = mahlzeiten.filter((x) => !x.rueckgaengig && x.datum === heute);
-  const s = sonstige.filter((a) => !a.entfernt && a.datum === heute);
   const kcalBekannt = m.filter((x) => x.kcal !== null);
   const kcal = kcalBekannt.length ? Math.round(kcalBekannt.reduce((sum, x) => sum + (x.kcal as number) / Math.max(1, x.portionen), 0)) : null;
   const kcalVoll = m.length > 0 && m.every((x) => x.kcal !== null && x.kcal_unbekannt === 0);
   const kcal_status: Status = m.length === 0 ? 'leer' : kcalVoll ? 'berechnet' : kcal !== null ? 'teilweise' : 'unbekannt';
-  const kostenBekannt = m.filter((x) => x.kosten_cent !== null);
-  const kostenVoll = m.every((x) => x.kosten_cent !== null && x.kosten_unbekannt === 0);
-  const kosten = kostenBekannt.reduce((sum, x) => sum + (x.kosten_cent as number), 0) + s.reduce((sum, a) => sum + a.betrag_cent, 0);
-  const kosten_status: Status = m.length + s.length === 0 ? 'leer' : kostenVoll ? 'berechnet' : kostenBekannt.length || s.length ? 'teilweise' : 'unbekannt';
   const arten = new Set(m.map((x) => mahlzeitArt(x.erstellt_am)));
   const zielOk = ziel !== null && Number.isFinite(ziel) && ziel >= 500 && ziel <= 8000 ? Math.round(ziel) : null;
   return {
     mahlzeiten: m.length,
     kcal,
     kcal_status,
-    kosten_cent: kosten_status === 'leer' || kosten_status === 'unbekannt' ? null : kosten,
-    kosten_status,
     mahlzeit_arten: { fruehstueck: arten.has('fruehstueck'), mittag: arten.has('mittag'), abend: arten.has('abend') },
     ziel: zielOk,
     anteil: zielOk !== null && kcal !== null && kcal_status === 'berechnet' ? Math.min(1.5, kcal / zielOk) : null,

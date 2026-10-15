@@ -184,8 +184,6 @@ export type RezeptDatensatz = {
   schritte: string[];
   bestandsarten: Art[];
   tags: string[];
-  kosten_pro_portion_cent: number | null;
-  kosten_status: Gericht['kosten']['status'];
   feedback: Aktion[];
 };
 
@@ -194,7 +192,7 @@ const RICHTUNG: Record<string, string> = {
   orientalisch: 'orientalisch', deutsch: 'deutsch',
 };
 
-/** Datensatz für „Rezept speichern“ (Tabelle rezept) – strukturiert, Kosten von der Software. */
+/** Datensatz für „Rezept speichern“ (Tabelle rezept) – strukturiert. */
 export function rezeptDatensatz(g: Gericht, feedback: Aktion[] = []): RezeptDatensatz {
   const tags: string[] = [];
   if (g.zeit_min <= 15) tags.push('schnell');
@@ -209,7 +207,7 @@ export function rezeptDatensatz(g: Gericht, feedback: Aktion[] = []): RezeptDate
     name: g.name,
     daten: g,
     gerichtstyp: g.eigenschaften.gerichtstyp,
-    portionen: g.portionen ?? g.kosten.personen,
+    portionen: g.portionen ?? 2,
     zutaten: [
       ...g.zutaten
         .filter((z) => z.quelle !== 'grundausstattung')
@@ -219,8 +217,6 @@ export function rezeptDatensatz(g: Gericht, feedback: Aktion[] = []): RezeptDate
     schritte: g.schritte.slice(0, 20),
     bestandsarten: arten,
     tags,
-    kosten_pro_portion_cent: g.kosten.pro_portion_cent,
-    kosten_status: g.kosten.status,
     feedback: [...new Set(feedback)].slice(0, 10),
   };
 }

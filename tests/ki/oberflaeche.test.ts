@@ -3,13 +3,13 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BEREICHE, hashVon, ladeNav, navigiere, neuerEintrag, routeAus, speichereNav, START, type NavZustand } from '../../src/navigation.ts';
 import {
-  dringendHeute, gruss, heuteGekocht, mahlzeitArt, monatsbilanz, produktionsZeile, sinnvolleProduktion, startAbschnitte, startHinweis, startVorschlaege, tagesuebersicht,
+  dringendHeute, gruss, heuteGekocht, mahlzeitArt, produktionsZeile, sinnvolleProduktion, startAbschnitte, startHinweis, startVorschlaege, tagesuebersicht,
 } from '../../src/startseite.ts';
 import { ohneDoppelte, rezeptSchluessel, schonGespeichert } from '../../src/rezepte.ts';
 import type { Gericht } from '../../supabase/functions/_shared/kombi/typen.ts';
 import type { KomponentenVorschlag } from '../../supabase/functions/_shared/kombi/typen.ts';
 import {
-  freieTage, fuellstand, heuteWichtig, istDringend, nachzukochen, ortKacheln, produktionsGruende, sortenFuer, tagName, vorratsLage, vorratsLageText, vorratswert, zustand,
+  freieTage, fuellstand, heuteWichtig, istDringend, nachzukochen, ortKacheln, produktionsGruende, sortenFuer, tagName, vorratsLage, vorratsLageText, zustand,
 } from '../../src/dashboard.ts';
 import type { Sorte } from '../../src/api.ts';
 import { leseEingabe } from '../../supabase/functions/_shared/kombi/einkaufsliste.ts';
@@ -20,8 +20,8 @@ const HEUTE = '2026-09-27';
 function sorte(id: number, name: string, teil: Partial<Sorte> = {}): Sorte {
   return {
     id, name, farbe: 'rot', anzahl: 4, mindestbestand: 0, nachkochen: false, aelteste: null, bald_ablaufen: false,
-    haltbar_tage: 90, groesse_g: 150, kosten_cent: null, lagerort: 'gefrierfach', art: 'komponente', einheit: 'portion',
-    portion_menge: 1, kosten_menge: 1, abgelaufen: 0, geoeffnet: 0, ...teil,
+    haltbar_tage: 90, groesse_g: 150, lagerort: 'gefrierfach', art: 'komponente', einheit: 'portion',
+    portion_menge: 1, abgelaufen: 0, geoeffnet: 0, ...teil,
   };
 }
 
@@ -90,68 +90,13 @@ describe('Navigation: fünf Bereiche, Zustand, Adressen, Zurück', () => {
 
 describe('Startseite', () => {
   const HEUTE_S = '2026-09-28';
-  const e = (erstellt_am: string, preis_cent: number | null, rueckgaengig = false) => ({ erstellt_am, preis_cent, rueckgaengig });
-  const m = (datum: string, kosten_cent: number | null, kosten_unbekannt = 0, kcal: number | null = null, kcal_unbekannt = 1) =>
-    ({ datum, titel: 'x', portionen: 2, kosten_cent, kosten_unbekannt, kcal, kcal_unbekannt, rueckgaengig: false });
-
-  test('Ausgaben diesen Monat: nur tatsächlich Bezahltes; Rückgängiges und Vormonat zählen nicht', () => {
-    const b = monatsbilanz({
-      einkaeufe: [e('2026-09-03T10:00:00Z', 2980), e('2026-09-20T10:00:00Z', 2300), e('2026-09-21T10:00:00Z', null),
-        e('2026-09-22T10:00:00Z', 999, true), e('2026-08-30T10:00:00Z', 5000)],
-      herstellungen: [], mahlzeiten: [],
-    }, HEUTE_S);
-    assert.deepEqual(b.ausgegeben, { cent: 5280, anzahl: 3, ohne_preis: 1 });
-    assert.equal(b.monat, 'September');
-  });
-
-  test('keine Doppelzählung: Produktion und Gekochtes sind Warenwert, nicht Teil der Ausgaben', () => {
-    // 3,00 € Tomaten gekauft → 1,44 € davon zu Tomaten-Basis verarbeitet → 2 Portionen (0,48 €) gegessen
-    const b = monatsbilanz({
-      einkaeufe: [e('2026-09-10T10:00:00Z', 300)],
-      herstellungen: [{ datum: '2026-09-10', kosten_cent: 144, kosten_unbekannt: 0, rueckgaengig: false }],
-      mahlzeiten: [m('2026-09-11', 48)],
-    }, HEUTE_S);
-    assert.equal(b.ausgegeben.cent, 300, 'Ausgaben bleiben 3,00 € – nicht 3,00 + 1,44 + 0,48');
-    assert.deepEqual(b.produktion, { cent: 144, anzahl: 1, vollstaendig: true });
-    assert.deepEqual([b.gekocht.cent, b.gekocht.pro_mahlzeit_cent], [48, 48]);
-  });
-
-  test('Ø pro Mahlzeit nur, wenn für jede Mahlzeit alle Preise bekannt sind', () => {
-    const voll = monatsbilanz({ einkaeufe: [], herstellungen: [], mahlzeiten: [m('2026-09-11', 120), m('2026-09-12', 86)] }, HEUTE_S);
-    assert.equal(voll.gekocht.pro_mahlzeit_cent, 103);
-    const teil = monatsbilanz({ einkaeufe: [], herstellungen: [], mahlzeiten: [m('2026-09-11', 120), m('2026-09-12', 40, 1)] }, HEUTE_S);
-    assert.deepEqual([teil.gekocht.cent, teil.gekocht.vollstaendig, teil.gekocht.pro_mahlzeit_cent], [160, false, null]);
-    assert.equal(monatsbilanz({ einkaeufe: [], herstellungen: [], mahlzeiten: [] }, HEUTE_S).leer, true);
-  });
-
-  test('Sonstiges zählt zu den Ausgaben, aber getrennt und nie mit dem Warenwert verrechnet; Entferntes zählt nicht', () => {
-    const b = monatsbilanz({
-      einkaeufe: [e('2026-09-10T10:00:00Z', 5280)],
-      herstellungen: [{ datum: '2026-09-10', kosten_cent: 842, kosten_unbekannt: 0, rueckgaengig: false }],
-      mahlzeiten: [],
-      sonstige: [{ datum: '2026-09-12', betrag_cent: 620, entfernt: false }, { datum: '2026-09-13', betrag_cent: 999, entfernt: true },
-        { datum: '2026-08-12', betrag_cent: 500, entfernt: false }],
-    }, HEUTE_S);
-    assert.deepEqual(b.sonstiges, { cent: 620, anzahl: 1 });
-    assert.equal(b.gesamt_cent, 5900, '52,80 € + 6,20 € – die 8,42 € Produktion sind schon in den Einkäufen');
-  });
-
-  test('Vormonat: nur bis zum gleichen Tag verglichen; ohne Ausgaben im Vormonat kein Vergleich', () => {
-    const d = {
-      einkaeufe: [e('2026-09-05T10:00:00Z', 4100), e('2026-08-05T10:00:00Z', 5000), e('2026-08-30T10:00:00Z', 9000), e('2026-08-06T10:00:00Z', null)],
-      herstellungen: [], mahlzeiten: [],
-    };
-    const b = monatsbilanz(d, HEUTE_S);
-    assert.deepEqual(b.vormonat, { cent: 5000, bis_tag: 28, aenderung_prozent: -18 }, 'der 30.08. liegt nach dem 28. und zählt nicht');
-    assert.equal(monatsbilanz({ ...d, einkaeufe: [e('2026-09-05T10:00:00Z', 4100)] }, HEUTE_S).vormonat, null);
-    assert.equal(monatsbilanz({ einkaeufe: [e('2025-12-03T10:00:00Z', 1000), e('2026-01-02T10:00:00Z', 1500)], herstellungen: [], mahlzeiten: [] },
-      '2026-01-10').vormonat?.aenderung_prozent, 50, 'Jahreswechsel');
-  });
+  const m = (datum: string, kcal: number | null = null, kcal_unbekannt = 1) =>
+    ({ datum, titel: 'x', portionen: 2, kcal, kcal_unbekannt, rueckgaengig: false });
 
   test('„Heute gekocht“: kcal nur, wenn sie erfasst und vollständig bekannt sind', () => {
-    assert.deepEqual(heuteGekocht([m(HEUTE_S, 48, 0, 1240, 0)], HEUTE_S), { titel: ['x'], kcal: 1240, vollstaendig: true });
-    assert.equal(heuteGekocht([m(HEUTE_S, 48, 0, 600, 1)], HEUTE_S).kcal, null);
-    assert.equal(heuteGekocht([m('2026-09-27', 48, 0, 600, 0)], HEUTE_S).titel.length, 0, 'nur heute');
+    assert.deepEqual(heuteGekocht([m(HEUTE_S, 1240, 0)], HEUTE_S), { titel: ['x'], kcal: 1240, vollstaendig: true });
+    assert.equal(heuteGekocht([m(HEUTE_S, 600, 1)], HEUTE_S).kcal, null);
+    assert.equal(heuteGekocht([m('2026-09-27', 600, 0)], HEUTE_S).titel.length, 0, 'nur heute');
   });
 
   test('erst der Nutzen: Vorschlag zuerst, Kennzahlen nur im Überblick ganz unten', () => {
@@ -199,34 +144,34 @@ describe('Startseite', () => {
     assert.equal(dringendHeute([], HEUTE_S, 1), true);
   });
 
-  test('Heute: kcal pro Person aus echten Mahlzeiten, Essenskosten, Ziel – unbekannt ≠ 0', () => {
-    const mz = (kcal: number | null, kcal_unbekannt: number, portionen: number, kosten: number | null, stunde: number, datum = HEUTE_S) => ({
-      datum, titel: 'x', portionen, kosten_cent: kosten, kosten_unbekannt: kosten === null ? 1 : 0, kcal, kcal_unbekannt, rueckgaengig: false,
+  test('Heute: kcal pro Person aus echten Mahlzeiten, Ziel – unbekannt ≠ 0', () => {
+    const mz = (kcal: number | null, kcal_unbekannt: number, portionen: number, stunde: number, datum = HEUTE_S) => ({
+      datum, titel: 'x', portionen, kcal, kcal_unbekannt, rueckgaengig: false,
       erstellt_am: new Date(2026, 8, 28, stunde, 0).toISOString(),
     });
     // Frühstück 900 kcal für 2 Personen = 450; Abend 2780 kcal für 2 = 1390 → 1840 pro Person
-    const t = tagesuebersicht([mz(900, 0, 2, 120, 8), mz(2780, 0, 2, 362, 19)], [{ datum: HEUTE_S, betrag_cent: 0, entfernt: false }].slice(0, 0), HEUTE_S, 2200);
-    assert.deepEqual([t.mahlzeiten, t.kcal, t.kcal_status, t.kosten_cent, t.kosten_status], [2, 1840, 'berechnet', 482, 'berechnet']);
+    const t = tagesuebersicht([mz(900, 0, 2, 8), mz(2780, 0, 2, 19)], HEUTE_S, 2200);
+    assert.deepEqual([t.mahlzeiten, t.kcal, t.kcal_status], [2, 1840, 'berechnet']);
+    assert.equal('kosten_cent' in t, false, 'keine Essenskosten');
     assert.deepEqual(t.mahlzeit_arten, { fruehstueck: true, mittag: false, abend: true });
     assert.equal(t.ziel, 2200);
     assert.equal(Math.round(t.anteil! * 100), 84);
     // eine Mahlzeit ohne bekannte Nährwerte → „ab“, Ziel-Balken nur bei vollständigen Werten
-    const teil = tagesuebersicht([mz(900, 0, 2, 120, 8), mz(null, 1, 1, null, 13)], [], HEUTE_S, 2200);
-    assert.deepEqual([teil.kcal, teil.kcal_status, teil.anteil, teil.kosten_status], [450, 'teilweise', null, 'teilweise']);
-    const nix = tagesuebersicht([mz(null, 2, 1, null, 13)], [], HEUTE_S);
-    assert.deepEqual([nix.kcal, nix.kcal_status, nix.kosten_cent, nix.kosten_status], [null, 'unbekannt', null, 'unbekannt'], 'unbekannt, nicht 0');
-    const leer = tagesuebersicht([mz(500, 0, 1, 100, 13, '2026-09-27')], [], HEUTE_S);
-    assert.deepEqual([leer.mahlzeiten, leer.kcal_status, leer.kosten_status], [0, 'leer', 'leer'], 'nur heute');
-    // Sonstiges von heute zählt zu den Essenskosten (Kantine), rückgängig Gemachtes nicht
-    const mitKantine = tagesuebersicht([{ ...mz(600, 0, 1, 200, 12), rueckgaengig: true }], [{ id: 1, datum: HEUTE_S, betrag_cent: 650, entfernt: false }], HEUTE_S);
-    assert.deepEqual([mitKantine.mahlzeiten, mitKantine.kosten_cent, mitKantine.kosten_status], [0, 650, 'berechnet']);
-    assert.equal(tagesuebersicht([], [], HEUTE_S, 50).ziel, null, 'unplausibles Ziel ignoriert');
+    const teil = tagesuebersicht([mz(900, 0, 2, 8), mz(null, 1, 1, 13)], HEUTE_S, 2200);
+    assert.deepEqual([teil.kcal, teil.kcal_status, teil.anteil], [450, 'teilweise', null]);
+    const nix = tagesuebersicht([mz(null, 2, 1, 13)], HEUTE_S);
+    assert.deepEqual([nix.kcal, nix.kcal_status], [null, 'unbekannt'], 'unbekannt, nicht 0');
+    const leer = tagesuebersicht([mz(500, 0, 1, 13, '2026-09-27')], HEUTE_S);
+    assert.deepEqual([leer.mahlzeiten, leer.kcal_status], [0, 'leer'], 'nur heute');
+    // rückgängig Gemachtes zählt nicht
+    assert.equal(tagesuebersicht([{ ...mz(600, 0, 1, 12), rueckgaengig: true }], HEUTE_S).mahlzeiten, 0);
+    assert.equal(tagesuebersicht([], HEUTE_S, 50).ziel, null, 'unplausibles Ziel ignoriert');
     assert.equal(mahlzeitArt(undefined), null);
   });
 
   test('Komponente: eine gegessene Portion zählt mit ihren eigenen kcal – die Zutaten nicht noch einmal', () => {
     // essen() protokolliert die kcal der ENTNOMMENEN Sorte (Tomaten-Basis 45 kcal/Portion), nicht die Tomaten darin
-    const t = tagesuebersicht([{ datum: HEUTE_S, titel: 'Pasta', portionen: 1, kosten_cent: 24, kosten_unbekannt: 0, kcal: 45, kcal_unbekannt: 0, rueckgaengig: false }], [], HEUTE_S);
+    const t = tagesuebersicht([{ datum: HEUTE_S, titel: 'Pasta', portionen: 1, kcal: 45, kcal_unbekannt: 0, rueckgaengig: false }], HEUTE_S);
     assert.equal(t.kcal, 45);
   });
 
@@ -247,9 +192,9 @@ describe('Produktion: Begründung aus strukturierten Daten', () => {
     const tomaten = sorte(7, 'Gehackte Tomaten', { einheit: 'g', portion_menge: 100, anzahl: 800, bald_ablaufen: true, naechster_ablauf: '2026-09-30', art: 'zutat' });
     const k = {
       zutaten: [
-        { name: 'Gehackte Tomaten', block_typ_id: 7, menge: 700, einheit: 'g' as const, quelle: 'bestand' as const, kosten_cent: null, dringend: true },
-        { name: 'Zwiebeln', block_typ_id: null, menge: 150, einheit: 'g' as const, quelle: 'einkauf' as const, kosten_cent: null, dringend: false },
-        { name: 'Salz', block_typ_id: null, menge: null, einheit: null, quelle: 'grundausstattung' as const, kosten_cent: null, dringend: false },
+        { name: 'Gehackte Tomaten', block_typ_id: 7, menge: 700, einheit: 'g' as const, quelle: 'bestand' as const, dringend: true },
+        { name: 'Zwiebeln', block_typ_id: null, menge: 150, einheit: 'g' as const, quelle: 'einkauf' as const, dringend: false },
+        { name: 'Salz', block_typ_id: null, menge: null, einheit: null, quelle: 'grundausstattung' as const, dringend: false },
       ],
       partner: ['a', 'b', 'c', 'd', 'e', 'f'],
       gerichtstypen: ['pasta', 'pizza', 'suppe', 'auflauf', 'eintopf'] as never,
@@ -329,16 +274,6 @@ describe('Vorrat als Übersicht', () => {
     assert.equal(fuellstand(sorte(2, 'B', { einheit: 'g', anzahl: 375, start_menge: 500 }))!.text, '375 / 500 g');
     assert.equal(fuellstand(sorte(3, 'C', { anzahl: 1, mindestbestand: 2 }))!.anteil, 0.25);
     assert.equal(fuellstand(sorte(4, 'D', { anzahl: 3 })), null);
-  });
-
-  test('Vorratswert nur aus bekannten Preisen; Abgelaufenes zählt nicht', () => {
-    const w = vorratswert([
-      sorte(1, 'Pizza', { anzahl: 4, kosten_cent: 200, kosten_menge: 4 }),
-      sorte(2, 'Spaghetti', { einheit: 'g', anzahl: 250, kosten_cent: 129, kosten_menge: 500 }),
-      sorte(3, 'Joghurt', { anzahl: 2, abgelaufen: 2, kosten_cent: 45 }),
-      sorte(4, 'Linsen', { anzahl: 3 }),
-    ]);
-    assert.deepEqual(w, { cent: 265, ohne_preis: 1 }); // 200 + 64,5 → 265
   });
 
   test('Lagerort-Ansicht: Filter nach Art und Suche (auch in der Zusammensetzung), Vorhandenes zuerst', () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   Aktion, BausteinIdee, Einkaufsvorschlag, FeedbackEintrag, Gericht, GerichtKurz, Modus, Optionen, Snapshot,
 } from '../supabase/functions/_shared/kombi/typen.ts';
@@ -6,14 +6,14 @@ import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
 import { aehnlichkeit } from '../supabase/functions/_shared/kombi/aehnlichkeit.ts';
 import { berechneLeitplanken, verletztAusschluss } from '../supabase/functions/_shared/kombi/praeferenz.ts';
 import { GRUNDAUSSTATTUNG, kuehlschrankEintraege } from '../supabase/functions/_shared/kombi/snapshot.ts';
-import { kostenText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { uuid } from '../supabase/functions/_shared/kombi/id.ts';
 import { kategorieFuer, type PlanStand } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
 import { restSnapshot, type AuftauEintrag } from '../supabase/functions/_shared/kombi/planung.ts';
+import { grundrezepteFuer } from '../supabase/functions/_shared/kombi/grundrezepte.ts';
 import { fehlerText, type Sorte } from './api';
 import {
-  favoritenAus, holeVorschlaege, ladeRezepte, ladeSnapshot, protokolliereFeedback, protokolliereVorschlaege,
-  speichereRezept, starteSession, type Quelle, type Rezept,
+  baueSnapshotAus, favoritenAus, gespeicherteOptionen, grundrezeptVorschlaege, holeVorschlaege, ladeRezepte, ladeSnapshot,
+  protokolliereFeedback, protokolliereVorschlaege, speichereRezept, starteSession, type Quelle, type Rezept,
 } from './essenApi';
 import { GerichtKarte } from './GerichtKarte';
 import { GerichtBild } from './GerichtBild';
@@ -23,7 +23,7 @@ import { eintragHinzufuegen, naehrwerteGericht, planeGericht, type Plan } from '
 import { SorteFormular } from './Sorten';
 import { Icon, type IconName } from './Icon';
 import { ARTEN_INFO, farbe as farbInfo } from './farben';
-import { kcalKurz } from './format';
+import { kcalKurz, mengeText } from './format';
 import { tagName } from './dashboard';
 import type { NavZustand } from './navigation';
 import { KiStatus } from './KiStatus';
@@ -63,13 +63,15 @@ type Session = {
   warteschlange: Promise<void>;
   /** normal oder Resteverwertung – gilt für alle weiteren Vorschläge der Session */
   grundmodus: Modus;
+  /** erst feste Grundrezepte, danach improvisiert die KI (bzw. die Kombi-Regeln) */
+  phase: 'grundrezepte' | 'improvisieren';
 };
 
 type Entscheidung = 'dislike' | 'similar' | 'skip';
 
 const SPEICHER = 'kombi-essen';
 const MINUTEN: (number | null)[] = [10, 15, 20, 30, null];
-const START_OPTIONEN: Optionen = { personen: 2, max_minuten: 15, guenstig: true };
+const START_OPTIONEN: Optionen = { personen: 2, max_minuten: 15 };
 /** Wohin die Karte bei welcher Entscheidung verschwindet */
 const ABGANG: Record<Entscheidung, string> = { dislike: 'links', skip: 'oben', similar: 'klein' };
 /** Passt nicht? Drei klare Wege zum nächsten Vorschlag – „Anderer Vorschlag“ lernt nichts, „Nicht meins“ schon. */
@@ -82,13 +84,35 @@ const ENTSCHEIDUNGEN: { aktion: Entscheidung; icon: IconName; text: string; labe
 function ladeVorlieben(): { optionen: Optionen; kuehlschrank: string } {
   try {
     const d = JSON.parse(localStorage.getItem(SPEICHER) ?? '{}');
-    return { optionen: { ...START_OPTIONEN, ...(d.optionen ?? {}) }, kuehlschrank: typeof d.kuehlschrank === 'string' ? d.kuehlschrank : '' };
+    return { optionen: gespeicherteOptionen(d.optionen), kuehlschrank: typeof d.kuehlschrank === 'string' ? d.kuehlschrank : '' };
   } catch {
     return { optionen: START_OPTIONEN, kuehlschrank: '' };
   }
 }
 
 const wenigBewegung = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const KEIN_GRUNDREZEPT = 'Gerade ist kein Grundrezept direkt kochbar – Kombi improvisiert mit dem, was da ist.';
+const KEIN_RESTE_GRUNDREZEPT = 'Kein Grundrezept verwertet gerade deine Reste – Kombi improvisiert damit.';
+const ALLE_GEZEIGT = 'Alle passenden Grundrezepte gezeigt – jetzt improvisiert Kombi mit dem, was da ist.';
+
+/** „Ähnliches“ unter den Grundrezepten: erkennbare Gemeinsamkeit, aber ein anderes Gericht (Nähe um 0,5). */
+function aehnlichstes(puffer: Gericht[], zu: Gericht): number {
+  let beste = -1;
+  let besterWert = -1;
+  puffer.forEach((p, i) => {
+    const a = aehnlichkeit(kurz(p), kurz(zu));
+    if (a < 0.25) return;
+    const wert = 1 - Math.abs(a - 0.5) * 2;
+    if (wert > besterWert) {
+      besterWert = wert;
+      beste = i;
+    }
+  });
+  return beste;
+}
+
+const fehltText = (g: Gericht) => g.fehlt.map((f) => (f.menge !== null && f.einheit ? `${mengeText(f.menge, f.einheit)} ${f.name}` : f.name)).join(', ');
 
 export function Essen({
   bestand, baukasten, planung, heute, plaene, proPlan, reserviert, auftauEintraege, auftauen, nav, onNav, onKochen, onMeldung, onGeaendert,
@@ -112,6 +136,7 @@ export function Essen({
   const [bausteinFormular, setBausteinFormular] = useState<BausteinIdee | null>(null);
   const [rezepte, setRezepte] = useState<Rezept[]>([]);
   const [optionenOffen, setOptionenOffen] = useState(false);
+  const [rezeptListe, setRezeptListe] = useState<'kochbar' | 'fehlt'>('kochbar');
 
   useEffect(() => {
     try {
@@ -135,7 +160,27 @@ export function Essen({
     return g !== null;
   }
 
-  async function anfordern(s: Session, modus: Modus) {
+  /** Grundrezepte zeigen – lokal, ohne Wartezeit. */
+  function zeigeGrundrezepte(s: Session, fest: Gericht[]) {
+    setQuelle({ art: 'grundrezepte', anbieter: 'grundrezepte', hinweis: null });
+    setMuster([]);
+    setEinkauf(null);
+    setNotfall(false);
+    setBaustein(null);
+    setErgebnisHinweis(null);
+    s.puffer = [...fest];
+    if (s.gespeichert) {
+      s.warteschlange = s.warteschlange
+        .then(() => protokolliereVorschlaege(s.id, fest, 'grundrezepte'))
+        .then((ids) => ids.forEach((id) => s.protokolliert.add(id)))
+        .catch(() => undefined);
+    }
+    zeigeNaechstes(s);
+  }
+
+  /** Improvisieren: KI (bzw. Kombi-Regeln) – erst, wenn die Grundrezepte nicht (mehr) passen. */
+  async function anfordern(s: Session, modus: Modus, wechsel: string | null = null) {
+    s.phase = 'improvisieren';
     setLaedt(true);
     setFehler(null);
     setAktuell(null);
@@ -155,7 +200,7 @@ export function Essen({
       setEinkauf(e.einkauf);
       setNotfall(e.notfall);
       setBaustein(e.baustein_idee);
-      setErgebnisHinweis(e.hinweis ?? null);
+      setErgebnisHinweis([wechsel, e.hinweis].filter(Boolean).join(' ') || null);
       s.puffer = [...e.gerichte];
       if (s.gespeichert) {
         const alle = [...e.gerichte, ...(e.einkauf ? [e.einkauf] : []), ...(e.baustein_idee ? [e.baustein_idee] : [])];
@@ -177,16 +222,25 @@ export function Essen({
     setFehler(null);
     try {
       // Nur der freie Vorrat: was für geplante Mahlzeiten reserviert ist, wird nicht noch einmal verplant.
-      const snapshot = restSnapshot(await ladeSnapshot(kuehlschrank), reserviert);
+      const snapshot = restSnapshot(await ladeSnapshot(kuehlschrank, { alleReste: grundmodus.art === 'reste' }), reserviert);
       const id = uuid();
       const gespeichert = await starteSession(id, optionen, kuehlschrank).catch(() => false);
       const s: Session = {
-        id, gespeichert, snapshot, optionen, kuehlschrank, grundmodus,
+        id, gespeichert, snapshot, optionen, kuehlschrank, grundmodus, phase: 'grundrezepte',
         gesehen: [], feedback: [], puffer: [], protokolliert: new Set(), warteschlange: Promise.resolve(),
       };
       session.current = s;
       setOptionenOffen(false);
-      await anfordern(s, grundmodus);
+      // Erst die festen Grundrezepte, die mit dem Vorrat direkt kochbar sind – dann improvisiert die KI.
+      const fest = grundrezeptVorschlaege({
+        snapshot, optionen, gesehen: [], favoriten: favoritenAus(rezepte), feedback: [], modus: grundmodus, anzahl: 25,
+      });
+      if (fest.length) {
+        zeigeGrundrezepte(s, fest);
+        setLaedt(false);
+      } else {
+        await anfordern(s, grundmodus, grundmodus.art === 'reste' ? KEIN_RESTE_GRUNDREZEPT : KEIN_GRUNDREZEPT);
+      }
     } catch (err) {
       setFehler(fehlerText(err));
       setLaedt(false);
@@ -223,6 +277,13 @@ export function Essen({
     const weiterMachen = () => {
       setAbgang(null);
       if (aktion === 'similar') {
+        // Unter den Grundrezepten etwas Ähnliches? Sonst improvisiert die KI etwas Ähnliches.
+        const i = s.phase === 'grundrezepte' ? aehnlichstes(s.puffer, g) : -1;
+        if (i >= 0) {
+          s.puffer.unshift(...s.puffer.splice(i, 1));
+          zeigeNaechstes(s);
+          return;
+        }
         s.puffer = [];
         void anfordern(s, { art: 'aehnlich', zu: kurz(g) });
         return;
@@ -237,7 +298,7 @@ export function Essen({
         // „Gerade etwas anderes“: sehr Ähnliches aus dem Puffer zurückstellen – ohne etwas zu lernen.
         s.puffer = s.puffer.filter((p) => aehnlichkeit(kurz(p), kurz(g)) < 0.5);
       }
-      if (!zeigeNaechstes(s)) void anfordern(s, s.grundmodus);
+      if (!zeigeNaechstes(s)) void anfordern(s, s.grundmodus, s.phase === 'grundrezepte' ? ALLE_GEZEIGT : null);
     };
     if (wenigBewegung()) weiterMachen();
     else {
@@ -301,6 +362,13 @@ export function Essen({
     }
   }
 
+  // Alle Grundrezepte für den freien Vorrat (+ was zusätzlich genannt ist): direkt kochbar oder es fehlt etwas
+  const uebersicht = useMemo(
+    () => grundrezepteFuer(restSnapshot(baueSnapshotAus(bestand, kuehlschrank), reserviert), optionen),
+    [bestand, kuehlschrank, reserviert, optionen],
+  );
+  const kochbar = uebersicht.filter((x) => x.kochbar);
+  const fastKochbar = uebersicht.filter((x) => !x.kochbar);
   const reste = kuehlschrankEintraege(kuehlschrank).length;
   const heuteGeplant = plaene
     .filter((p) => p.art === 'mahlzeit' && p.daten.gericht && p.datum !== null && p.datum <= heute)
@@ -336,10 +404,6 @@ export function Essen({
           ))}
         </div>
       </div>
-      <label className="option-zeile schalter">
-        <span className="option-name"><Icon name="preis" groesse={18} /> Möglichst günstig</span>
-        <input type="checkbox" role="switch" checked={optionen.guenstig} onChange={() => optionenAendern({ guenstig: !optionen.guenstig })} />
-      </label>
       <KiStatus />
     </div>
   );
@@ -348,8 +412,7 @@ export function Essen({
     session.current?.grundmodus.art === 'reste' ? 'Reste verwerten' : null,
     `${optionen.personen} ${optionen.personen === 1 ? 'Person' : 'Personen'}`,
     optionen.max_minuten ? `${optionen.max_minuten} Min` : 'Zeit egal',
-    optionen.guenstig ? 'günstig' : null,
-    reste > 0 ? `${reste} ${reste === 1 ? 'Rest' : 'Reste'}` : null,
+    reste > 0 ? `${reste} zusätzlich` : null,
   ].filter(Boolean) as string[];
 
   const heuteAnsicht = (
@@ -376,16 +439,17 @@ export function Essen({
       {!gestartet && (
         <section className="essen-start" aria-label="Ideen aus deinem Vorrat">
           <h2>Ideen aus deinem Vorrat</h2>
-          <p className="leise klein">Kombi schlägt Gerichte vor, die du mit dem kochen kannst, was zu Hause ist – Lebensmittel, die bald weg müssen, zuerst.</p>
+          <p className="leise klein">Erst Grundrezepte, die du mit dem kochen kannst, was zu Hause ist – Lebensmittel, die bald weg müssen, zuerst. Passt keins, improvisiert Kombi.</p>
           <label className="feld">
-            <span>Liegt noch etwas Offenes im Kühlschrank? <small>(optional)</small></span>
+            <span>Was hast du sonst noch da? <small>(optional)</small></span>
             <textarea
               rows={2}
               maxLength={1000}
               value={kuehlschrank}
               onChange={(e) => setKuehlschrank(e.target.value)}
-              placeholder="z. B. eine halbe Paprika, etwas Frischkäse"
+              placeholder="z. B. Reis, Kokosmilch, eine halbe Paprika"
             />
+            <small>Zutaten, die nicht im Vorrat stehen. Kombi nutzt sie, bucht sie aber nicht ab. „Halbe …“ oder „Rest …“ kommt zuerst dran.</small>
           </label>
           <button type="button" className="knopf haupt" onClick={() => void starten()} disabled={laedt}>
             {laedt ? 'Kombi überlegt …' : 'Ideen zeigen'}
@@ -453,7 +517,9 @@ export function Essen({
         <p className="meta-text">
           {ergebnisHinweis && `${ergebnisHinweis} `}
           {muster.length > 0 && `${muster.join(' ')} `}
-          {quelle && (quelle.art === 'ki' ? `Idee von der KI (${quelle.anbieter}) – Mengen, Preise und Kalorien rechnet Kombi selbst.` : 'Vorschläge nach Kombi-Regeln (ohne KI).')}
+          {quelle && (quelle.art === 'grundrezepte'
+            ? 'Grundrezept aus deinem Grundvorrat – Mengen und Kalorien rechnet Kombi mit deinem Vorrat.'
+            : quelle.art === 'ki' ? `Improvisiert von der KI (${quelle.anbieter}) – Mengen und Kalorien rechnet Kombi selbst.` : 'Improvisiert nach Kombi-Regeln (ohne KI).')}
           {quelle?.hinweis && ` ${quelle.hinweis}`}
         </p>
       )}
@@ -514,7 +580,7 @@ export function Essen({
                   <span className="zeile-meta">Idee zum Vorkochen</span>
                   <span className="zeile-titel">{baustein.name}</span>
                   <span className="zeile-meta">
-                    {ARTEN_INFO.find((a) => a.id === baustein.bestandsart)!.name} · {farbInfo(baustein.farbe).bedeutung} · {baustein.portionen} Portionen · {kostenText(baustein.kosten)}
+                    {ARTEN_INFO.find((a) => a.id === baustein.bestandsart)!.name} · {farbInfo(baustein.farbe).bedeutung} · {baustein.portionen} Portionen
                   </span>
                 </span>
                 <button type="button" className="knopf klein" onClick={() => setBausteinFormular(baustein)}>Übernehmen</button>
@@ -524,6 +590,47 @@ export function Essen({
               </div>
             </li>
           </ul>
+        </section>
+      )}
+
+      {uebersicht.length > 0 && (!gestartet || !aktuell) && (
+        <section className="abschnitt" aria-label="Grundrezepte">
+          <div className="abschnitt-kopf">
+            <h2>Grundrezepte</h2>
+            <span className="abschnitt-zusatz">{kochbar.length} direkt kochbar</span>
+          </div>
+          <div className="segment klein" role="tablist" aria-label="Grundrezepte">
+            <button type="button" role="tab" aria-selected={rezeptListe === 'kochbar'} className={rezeptListe === 'kochbar' ? 'gewaehlt' : ''} onClick={() => setRezeptListe('kochbar')}>
+              Direkt kochbar · {kochbar.length}
+            </button>
+            <button type="button" role="tab" aria-selected={rezeptListe === 'fehlt'} className={rezeptListe === 'fehlt' ? 'gewaehlt' : ''} onClick={() => setRezeptListe('fehlt')}>
+              Es fehlt etwas · {fastKochbar.length}
+            </button>
+          </div>
+          {(rezeptListe === 'kochbar' ? kochbar : fastKochbar).length === 0 ? (
+            <p className="leise klein abstand-oben">
+              {rezeptListe === 'kochbar'
+                ? 'Mit deinem Vorrat ist gerade kein Grundrezept vollständig – unter „Es fehlt etwas“ steht, was dir fehlt.'
+                : 'Für jedes passende Grundrezept ist alles da.'}
+            </p>
+          ) : (
+            <ul className="liste mit-icon abstand-oben">
+              {(rezeptListe === 'kochbar' ? kochbar : fastKochbar).map(({ rezept, gericht }) => (
+                <li key={rezept.id}>
+                  <button type="button" className="zeile" onClick={() => kochen(gericht, null, 'Grundrezept')}>
+                    <span className="mini-teller"><GerichtBild g={gericht} groesse="klein" /></span>
+                    <span className="zeile-haupt">
+                      <span className="zeile-titel">{gericht.name}</span>
+                      {gericht.fehlt.length === 0
+                        ? <span className="zeile-meta">Alles da · {gericht.zeit_min} Min</span>
+                        : <span className="zeile-meta status-achtung">Fehlt: {fehltText(gericht)}</span>}
+                    </span>
+                    <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
@@ -597,9 +704,6 @@ export function Essen({
             groesse_g: bausteinFormular.portion_g ?? 100,
             herkunft: 'selbstgemacht',
             zusammensetzung: bausteinFormular.zutaten.length ? bausteinFormular.zutaten : null,
-            // Preis nur, wenn er vollständig aus bekannten Preisen berechnet wurde
-            kosten_cent: bausteinFormular.kosten.status === 'berechnet' ? bausteinFormular.kosten.pro_portion_cent : null,
-            kosten_menge: 1,
           }}
           onFertig={(text) => {
             setBausteinFormular(null);

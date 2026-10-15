@@ -3,9 +3,8 @@ import type { Gericht, GerichtKurz, Optionen } from '../supabase/functions/_shar
 import type { PlanStand } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
 import { mussAuftauen, reserviertAusser, restSnapshot, type AuftauEintrag } from '../supabase/functions/_shared/kombi/planung.ts';
 import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
-import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { fehlerText, ladeBestand, type Sorte } from './api';
-import { baueSnapshotAus, holeVorschlaege, holeWoche, type Quelle } from './essenApi';
+import { baueSnapshotAus, holeIdeen, holeWoche, type Quelle } from './essenApi';
 import { aenderePlan, alsVorratSorte, entfernePlan, naehrwerteGericht, planeGericht, type Plan } from './haushalt';
 import { Blatt } from './Blatt';
 import { GerichtKarte } from './GerichtKarte';
@@ -133,7 +132,7 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
   async function tauschen(p: Plan) {
     setTausch({ plan: p, alternativen: null, hinweis: null });
     try {
-      const a = await holeVorschlaege({
+      const a = await holeIdeen({
         snapshot: await freierSnapshot(p.id), optionen, gesehen, favoriten, feedback: [], modus: { art: 'normal' }, anzahl: 3,
       });
       setTausch({ plan: p, alternativen: a.ergebnis.gerichte, hinweis: a.quelle === 'demo' ? a.hinweis : null });
@@ -166,9 +165,6 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
   }
 
   const fehltGesamt = vorschau ? [...new Set(vorschau.gerichte.flatMap((g) => g.fehlt.map((f) => f.name)))] : [];
-  const kostenVorschau = vorschau
-    ? vorschau.gerichte.reduce((s, g) => s + (g.kosten.gesamt_cent ?? 0), 0)
-    : 0;
 
   return (
     <div className="woche">
@@ -269,8 +265,9 @@ export function Woche({ bestand, plaene, proPlan, reserviert, auftauEintraege, a
           {vorschau.gerichte.length > 0 && (
             <p className="abschnitt-fuss">
               {fehltGesamt.length ? `Einkaufen: ${fehltGesamt.join(', ')}. ` : 'Kein Einkauf nötig. '}
-              {kostenVorschau > 0 && `Aus dem Vorrat ≈ ${euroText(kostenVorschau)} (bekannte Preise). `}
-              {vorschau.quelle === 'ki' ? 'Ideen von der KI, geprüft und verteilt von Kombi.' : 'Nach Kombi-Regeln.'}
+              {vorschau.quelle === 'grundrezepte'
+                ? (vorschau.gerichte.every((g) => g.grundrezept) ? 'Grundrezepte aus deinem Vorrat, verteilt von Kombi.' : 'Erst Grundrezepte, den Rest hat Kombi improvisiert.')
+                : vorschau.quelle === 'ki' ? 'Ideen von der KI, geprüft und verteilt von Kombi.' : 'Nach Kombi-Regeln.'}
               {vorschau.hinweis && ` ${vorschau.hinweis}`}
             </p>
           )}

@@ -24,7 +24,6 @@ export type Sorte = {
   bald_ablaufen: boolean;
   haltbar_tage: number;
   groesse_g: number;
-  kosten_cent: number | null;
   /** fehlt, solange die Migration „was_essen“ nicht eingespielt ist → Gefrierfach */
   lagerort?: Lagerort;
   // ab Migration „baukasten“:
@@ -32,7 +31,6 @@ export type Sorte = {
   herkunft?: Herkunft | null;
   einheit?: Einheit;
   portion_menge?: number;
-  kosten_menge?: number;
   zusammensetzung?: string[] | null;
   notiz?: string | null;
   naechster_ablauf?: string | null;
@@ -65,8 +63,8 @@ export type Sorte = {
 
 export type SorteDaten = Pick<
   Sorte,
-  | 'name' | 'farbe' | 'groesse_g' | 'mindestbestand' | 'haltbar_tage' | 'kosten_cent' | 'lagerort'
-  | 'art' | 'herkunft' | 'einheit' | 'portion_menge' | 'kosten_menge' | 'zusammensetzung' | 'notiz'
+  | 'name' | 'farbe' | 'groesse_g' | 'mindestbestand' | 'haltbar_tage' | 'lagerort'
+  | 'art' | 'herkunft' | 'einheit' | 'portion_menge' | 'zusammensetzung' | 'notiz'
   | 'gerichtstypen' | 'richtung'
   | 'kcal' | 'protein_g' | 'kohlenhydrate_g' | 'fett_g' | 'naehrwert_menge'
   | 'image_url' | 'image_source' | 'image_status' | 'image_alt' | 'image_updated_at' | 'zutat'

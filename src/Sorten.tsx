@@ -9,7 +9,7 @@ import {
 import { Blatt } from './Blatt';
 import { ARTEN_INFO, EINHEITEN_INFO, FARBEN, LAGERORTE, type Farbe } from './farben';
 import { Icon } from './Icon';
-import { artVon, portionspreisText, euroZuCent } from './format';
+import { artVon } from './format';
 import { GERICHTSTYPEN, GEWUERZRICHTUNGEN } from '../supabase/functions/_shared/kombi/typen.ts';
 import { GERICHT_EMOJI, GERICHT_NAME, TYPISCHE_GERICHTE } from '../supabase/functions/_shared/kombi/rollen.ts';
 
@@ -19,7 +19,6 @@ function ganzeZahl(text: string, min: number): number | null {
   return text.trim() !== '' && Number.isInteger(n) && n >= min ? n : null;
 }
 
-const centText = (c: number | null | undefined) => (c != null ? (c / 100).toFixed(2).replace('.', ',') : '');
 const zahlText = (n: number | string | null | undefined) => (n === null || n === undefined || n === '' ? '' : String(n).replace('.', ','));
 
 /** „12,5“ → 12.5 (auf 0,1 gerundet); leer → null (= unbekannt, nicht 0); ungültig → NaN */
@@ -65,8 +64,6 @@ export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = 
   const [einheit, setEinheit] = useState<Einheit>(start.einheit ?? 'portion');
   const [portionMenge, setPortionMenge] = useState(String(start.portion_menge ?? 1));
   const [groesse, setGroesse] = useState(String(start.groesse_g ?? 100));
-  const [kosten, setKosten] = useState(centText(start.kosten_cent));
-  const [kostenMenge, setKostenMenge] = useState(String(start.kosten_menge ?? 1));
   const [herkunft, setHerkunft] = useState<Herkunft | null>(start.herkunft ?? null);
   const [zusammensetzung, setZusammensetzung] = useState((start.zusammensetzung ?? []).join(', '));
   const [notiz, setNotiz] = useState(start.notiz ?? '');
@@ -88,15 +85,6 @@ export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = 
   const teile = zusammensetzung.split(/[,;\n]+/).map((t) => t.trim()).filter(Boolean);
   const mehrdeutig = art !== 'zutat' && teile.length === 0 && MEHRDEUTIG.test(name.trim());
 
-  // Live-Vorschau: was kostet eine Portion? (gleiche Rechnung wie überall)
-  const vorschau = (() => {
-    const c = euroZuCent(kosten);
-    const km = ganzeZahl(kostenMenge, 1);
-    const pm = einheit === 'portion' ? 1 : ganzeZahl(portionMenge, 1);
-    if (c === null || Number.isNaN(c) || !km || !pm) return null;
-    return portionspreisText({ kosten_cent: c, kosten_menge: km, einheit, portion_menge: pm });
-  })();
-
   function waehleArt(a: Art) {
     setArt(a);
     if (a === 'komplettgericht' && !farbe) setFarbe('blau');
@@ -117,17 +105,13 @@ export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = 
     if (mindestbestand === null) return 'Mindestbestand: bitte ganze Zahl ab 0 eingeben.';
     const haltbar_tage = ganzeZahl(haltbar, 1);
     if (haltbar_tage === null) return 'Haltbarkeit: bitte ganze Tage ab 1 eingeben.';
-    const kosten_cent = euroZuCent(kosten);
-    if (Number.isNaN(kosten_cent)) return 'Preis: z. B. 2,00 eingeben – oder leer lassen, wenn unbekannt.';
-    const daten: SorteDaten = { name: n, farbe, groesse_g, mindestbestand, haltbar_tage, kosten_cent };
+    const daten: SorteDaten = { name: n, farbe, groesse_g, mindestbestand, haltbar_tage };
     // Nur mitschicken, wenn geändert – so klappt das Speichern auch vor der Migration „was_essen“.
     if (lagerort !== lagerortVorher) daten.lagerort = lagerort;
     if (!baukasten) return daten;
 
     const portion_menge = einheit === 'portion' ? 1 : ganzeZahl(portionMenge, 1);
     if (portion_menge === null) return `Eine Portion: bitte ganze ${einheitName.name} ab 1 eingeben.`;
-    const kosten_menge = ganzeZahl(kostenMenge, 1);
-    if (kosten_menge === null) return 'Preis gilt für: bitte eine ganze Zahl ab 1 eingeben.';
     if (teile.length > 30) return 'Zusammensetzung: höchstens 30 Bestandteile.';
     if (notiz.length > 500) return 'Rezept/Notiz: höchstens 500 Zeichen.';
     // erst ab Migration „planung_einkauf“ – sonst würde das Speichern an unbekannten Spalten scheitern
@@ -161,7 +145,6 @@ export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = 
       herkunft,
       einheit,
       portion_menge,
-      kosten_menge,
       zusammensetzung: teile.length ? teile.map((t) => t.slice(0, 60)) : null,
       notiz: notiz.trim() || null,
     };
@@ -271,25 +254,6 @@ export function SorteFormular({ sorte, baukasten, planung = false, naehrwerte = 
             )}
           </fieldset>
         )}
-
-        <fieldset className="feld">
-          <legend>Preis</legend>
-          <div className="feld-inline preis-zeile">
-            <input type="text" inputMode="decimal" value={kosten} onChange={(e) => setKosten(e.target.value)}
-              placeholder="z. B. 2,00" aria-label="Preis in Euro" />
-            <span>€ für</span>
-            {baukasten ? (
-              <>
-                <input type="number" inputMode="numeric" min={1} value={kostenMenge}
-                  onChange={(e) => setKostenMenge(e.target.value)} aria-label={`Menge in ${einheitName.name}, für die der Preis gilt`} />
-                <span>{einheitName.kurz}</span>
-              </>
-            ) : (
-              <span>1 Portion</span>
-            )}
-          </div>
-          <small>{vorschau ? `= ${vorschau}` : 'Leer lassen, wenn unbekannt – dann steht dort „Preis unbekannt“.'}</small>
-        </fieldset>
 
         <details className="mehr" open={detailsOffen}>
           <summary>Mehr Details</summary>

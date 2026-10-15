@@ -155,19 +155,6 @@ export function fuellstand(s: Sorte): { anteil: number; text: string } | null {
   return null;
 }
 
-/** Wert des Vorrats aus gespeicherten Preisen (ohne Abgelaufenes); Sorten ohne Preis werden gezählt. */
-export function vorratswert(bestand: Sorte[]): { cent: number; ohne_preis: number } {
-  let cent = 0;
-  let ohne = 0;
-  for (const s of bestand) {
-    const menge = Math.max(0, s.anzahl - Math.max(0, s.abgelaufen ?? 0));
-    if (menge === 0) continue;
-    if (s.kosten_cent === null) ohne++;
-    else cent += (menge * s.kosten_cent) / Math.max(1, s.kosten_menge ?? 1);
-  }
-  return { cent: Math.round(cent), ohne_preis: ohne };
-}
-
 /** „Äpfel“ → „apfel“: Umlaute ohne Punkte (normalisiere() schreibt sie aus: „aepfel“) */
 const ohnePunkte = (t: string) => normalisiere(t.normalize('NFD').replace(/[̀-ͯ]/g, ''));
 

@@ -21,7 +21,7 @@ import { Hilfe } from './Hilfe';
 import { Icon } from './Icon';
 import { buchungsVerb } from './farben';
 import { heuteIso, mengeText } from './format';
-import { alsVorratSorte, einkaufen, einkaufRueckgaengig, eintragHinzufuegen, ladeHaushalt, LEER, naehrwerteGericht, planBedarf, type Haushaltsdaten } from './haushalt';
+import { alsVorratSorte, eintragHinzufuegen, ladeHaushalt, LEER, naehrwerteGericht, planBedarf, type Haushaltsdaten } from './haushalt';
 import { berechneEinkaufsliste, kategorieFuer } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
 import { auftauVorschlaege, heuteAuftauen, reserviertAusser } from '../supabase/functions/_shared/kombi/planung.ts';
 import { gruss } from './startseite';
@@ -207,15 +207,10 @@ export function Inventar() {
     }, `−${mengeText(menge, sorte.einheit ?? 'portion')} ${sorte.name}`);
   }
 
-  function einfrieren(sorte: Sorte, menge: number, ablaufAm: string | null, preisCent: number | null) {
+  function einfrieren(sorte: Sorte, menge: number, ablaufAm: string | null) {
     setEinfrierenDialog(null);
     const text = `+${mengeText(menge, sorte.einheit ?? 'portion')} ${sorte.name} ${buchungsVerb(sorte.lagerort).partizip}`;
     void buchen(sorte, async () => {
-      // mit Preis: zählt als Einkauf (Ausgaben) und gibt der Charge ihre echten Kosten
-      if (preisCent !== null && h.protokoll) {
-        const id = await einkaufen(sorte.id, menge, ablaufAm, preisCent);
-        return () => einkaufRueckgaengig(id);
-      }
       const ids = await api.einfrieren(sorte.id, menge, ablaufAm);
       return () => api.rueckgaengig(ids);
     }, text);
@@ -260,9 +255,8 @@ export function Inventar() {
   const fehlend = !bestand || !haushalt ? [] : [
     !baukasten && '„baukasten“ (Art, Einheit, Ablaufdatum, geöffnet)',
     !h.planung && '„planung_einkauf“ (Einkaufsliste, Woche, Auftauen, Produktion)',
-    h.planung && !h.protokoll && '„kosten_naehrwerte“ (Ausgaben, Kosten je Mahlzeit, Kalorien)',
-    h.planung && !h.ausgaben && '„ausgaben“ (sonstige Ausgaben)',
-    h.ausgaben && !bilderMigration && '„bilder_zutaten“ (eigene Bilder, Bild-Cache, Zutaten)',
+    h.planung && !h.protokoll && '„kosten_naehrwerte“ (Kalorien, Verlauf der Produktion)',
+    h.protokoll && !bilderMigration && '„bilder_zutaten“ (eigene Bilder, Bild-Cache, Zutaten)',
   ].filter((x): x is string => !!x);
 
   const datumText = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -334,8 +328,6 @@ export function Inventar() {
                 onBereich={wechsle}
                 onEinbuchen={() => (bestand.length ? setEinfrierenDialog({ sorteId: null }) : setNeueSorte(true))}
                 onHilfe={() => setHilfe(true)}
-                onMeldung={melde}
-                onGeaendert={() => void laden()}
               />
             </div>
             <div hidden={nav.bereich !== 'vorrat'}>
@@ -526,7 +518,6 @@ export function Inventar() {
           bestand={bestand}
           baukasten={baukasten}
           startSorte={finde(einfrierenDialog.sorteId)}
-          mitPreis={h.protokoll}
           onEinfrieren={einfrieren}
           onNeueSorte={() => {
             setEinfrierenDialog(null);

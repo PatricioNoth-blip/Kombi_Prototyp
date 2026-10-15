@@ -6,10 +6,7 @@
 //   • Haltbarkeit und ob sie ohne Kühlung lagerbar ist
 //   • wie gut sie zu dem passt, was schon da ist (Kombinierbarkeit)
 //   • ob sie eine Lücke füllt (z. B. gar kein Sattmacher im Bestand)
-//   • Preis – nur wenn er aus dem Bestand bekannt ist; unbekannt wird nie geschätzt
 import type { Einkaufsvorschlag, Farbe, RohEinkauf, Snapshot, SnapshotZutat } from './typen.ts';
-import { bekannterPreisBezug, bekannterPreisInfo } from './snapshot.ts';
-import { euroText } from './kosten.ts';
 import { kuerze, normalisiere } from './text.ts';
 
 type MultiUse = {
@@ -54,7 +51,7 @@ function haltbarText(tage: number): string {
   return `typischerweise etwa ${Math.round(tage / 7)} Wochen haltbar`;
 }
 
-export type MultiUseBewertung = { m: MultiUse; punkte: number; partner: SnapshotZutat[]; fuelltLuecke: boolean; preis: number | null };
+export type MultiUseBewertung = { m: MultiUse; punkte: number; partner: SnapshotZutat[]; fuelltLuecke: boolean };
 
 /** Bewertet alle Kandidaten für den aktuellen Bestand (höchste Punkte zuerst). */
 export function bewerteMultiUse(snapshot: Snapshot): MultiUseBewertung[] {
@@ -67,21 +64,19 @@ export function bewerteMultiUse(snapshot: Snapshot): MultiUseBewertung[] {
     .map((m) => {
       const partner = bestand.filter((z) => z.farbe !== null && m.kombiniert_mit.includes(z.farbe));
       const fuelltLuecke = !hatRolle(m.rolle);
-      const preis = bekannterPreisInfo(snapshot, m.name)?.kosten_cent ?? null;
       const punkte =
         2.0 * Math.min(1, m.passt_zu.length / 8) +
         1.0 * (m.haeufigkeit / 3) +
         1.0 * Math.min(1, m.haltbar_tage / 365) +
         0.8 * (m.lagerung === 'vorrat' ? 1 : m.lagerung === 'gefrierfach' ? 0.7 : 0.4) +
         1.5 * Math.min(1, partner.length / 3) +
-        1.5 * (fuelltLuecke ? 1 : 0) +
-        0.5 * (preis !== null && preis <= 150 ? 1 : 0);
-      return { m, punkte: Math.round(punkte * 1000) / 1000, partner, fuelltLuecke, preis };
+        1.5 * (fuelltLuecke ? 1 : 0);
+      return { m, punkte: Math.round(punkte * 1000) / 1000, partner, fuelltLuecke };
     })
     .sort((a, b) => b.punkte - a.punkte || a.m.name.localeCompare(b.m.name));
 }
 
-function gruendeFuer(b: MultiUseBewertung, snapshot: Snapshot): string[] {
+function gruendeFuer(b: MultiUseBewertung): string[] {
   const gruende: string[] = [];
   if (b.fuelltLuecke) gruende.push(`Füllt eine Lücke: Im Bestand fehlt gerade ${ROLLE[b.m.rolle]}.`);
   if (b.partner.length) {
@@ -91,8 +86,6 @@ function gruendeFuer(b: MultiUseBewertung, snapshot: Snapshot): string[] {
   gruende.push(`Ermöglicht ${b.m.passt_zu.length} verschiedene Gerichte.`);
   const haltbar = haltbarText(b.m.haltbar_tage);
   gruende.push(`${haltbar.charAt(0).toUpperCase()}${haltbar.slice(1)}${b.m.lagerung === 'vorrat' ? ', ohne Kühlung lagerbar' : ''}.`);
-  const bezug = bekannterPreisBezug(snapshot, b.m.name);
-  gruende.push(b.preis !== null ? `Zuletzt ${euroText(b.preis)}${bezug ? ` ${bezug}` : ''}.` : 'Preis unbekannt.');
   return gruende;
 }
 
@@ -109,16 +102,14 @@ function heuteMit(b: MultiUseBewertung): string | null {
   return [b.m.name, ...teile.map((z) => z.name)].join(' + ');
 }
 
-function vorschlagAus(b: MultiUseBewertung, snapshot: Snapshot, id: string): Einkaufsvorschlag {
+function vorschlagAus(b: MultiUseBewertung, id: string): Einkaufsvorschlag {
   return {
     art: 'einkauf',
     id,
     name: b.m.name,
-    preis_cent: b.preis,
-    preis_bezug: b.preis !== null ? bekannterPreisBezug(snapshot, b.m.name) : null,
     ermoeglicht: b.m.passt_zu,
     heute: heuteMit(b),
-    gruende: gruendeFuer(b, snapshot),
+    gruende: gruendeFuer(b),
     begruendung: 'Eine Zutat, die heute ein Essen möglich macht und danach noch viele weitere.',
   };
 }
@@ -126,13 +117,12 @@ function vorschlagAus(b: MultiUseBewertung, snapshot: Snapshot, id: string): Ein
 /** Wählt die Multi-Use-Zutat mit dem größten Nutzen für den aktuellen Bestand. */
 export function waehleMultiUse(snapshot: Snapshot, id: string): Einkaufsvorschlag {
   const beste = bewerteMultiUse(snapshot)[0];
-  if (beste) return vorschlagAus(beste, snapshot, id);
+  if (beste) return vorschlagAus(beste, id);
   // Alles schon da – dann die vielseitigste überhaupt, ohne weitere Bewertung.
-  const m = MULTI_USE[0];
-  return vorschlagAus({ m, punkte: 0, partner: [], fuelltLuecke: false, preis: bekannterPreisInfo(snapshot, m.name)?.kosten_cent ?? null }, snapshot, id);
+  return vorschlagAus({ m: MULTI_USE[0], punkte: 0, partner: [], fuelltLuecke: false }, id);
 }
 
-/** Prüft einen Einkaufsvorschlag der KI. Preise nur aus dem Bestand – nie geschätzt. */
+/** Prüft einen Einkaufsvorschlag der KI. Preisangaben der KI werden entfernt. */
 export function pruefeEinkauf(roh: RohEinkauf | null | undefined, snapshot: Snapshot, id: string): Einkaufsvorschlag | null {
   if (!roh || typeof roh.name !== 'string' || !roh.name.trim()) return null;
   const ermoeglicht = (Array.isArray(roh.ermoeglicht) ? roh.ermoeglicht : [])
@@ -143,16 +133,13 @@ export function pruefeEinkauf(roh: RohEinkauf | null | undefined, snapshot: Snap
   const name = kuerze(roh.name, 60);
   // Kennt die Software die Zutat, liefert sie die belastbaren Gründe selbst.
   const bekannt = bewerteMultiUse(snapshot).find((b) => normalisiere(name).includes(b.m.schluessel));
-  const preis = bekannterPreisInfo(snapshot, name)?.kosten_cent ?? null;
   return {
     art: 'einkauf',
     id,
     name,
-    preis_cent: preis,
-    preis_bezug: preis !== null ? bekannterPreisBezug(snapshot, name) : null,
     ermoeglicht,
     heute: bekannt ? heuteMit(bekannt) : null,
-    gruende: bekannt ? gruendeFuer(bekannt, snapshot) : [preis !== null ? `Zuletzt ${euroText(preis)}.` : 'Preis unbekannt.'],
+    gruende: bekannt ? gruendeFuer(bekannt) : [],
     begruendung: (kuerze(roh.begruendung, 240) || `Damit sind ${ermoeglicht.length} weitere Gerichte möglich.`)
       .replace(/[^.!?]*(\d+(?:[.,]\d+)?\s*(?:€|euro|cent)|€)[^.!?]*[.!?]?/gi, '')
       .trim() || `Damit sind ${ermoeglicht.length} weitere Gerichte möglich.`,

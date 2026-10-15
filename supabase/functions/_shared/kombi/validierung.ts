@@ -1,21 +1,20 @@
 // Prüft die Rohantwort einer KI gegen den Snapshot.
-// Die KI darf NICHTS als vorhanden ausgeben, was nicht im Snapshot steht, und rechnet keine Preise:
+// Die KI darf NICHTS als vorhanden ausgeben, was nicht im Snapshot steht:
 //   • Zutaten ohne gültige id/Namen im Snapshot → „fehlt“ (nie „vorhanden“)
 //   • mehr als vorhanden → Rest „fehlt“; Mengen in der Einheit der Sorte (Portion, Stück, g, ml)
-//   • Kosten, Portionen, Gerichtsart und „rettet Lebensmittel“ rechnet ausschließlich dieser Code
+//   • Mengen, Portionen, Gerichtsart und „rettet Lebensmittel“ rechnet ausschließlich dieser Code
 //   • Texte werden gegen erfundene Zutaten, Preise und Behauptungen geprüft (wahrheit.ts)
 import { naehrwerteFuerGericht } from './naehrwerte.ts';
 import { bildAnfrageFuerGericht } from './bilder.ts';
 import type {
-  BausteinIdee, Eigenschaften, FehlendeZutat, Gericht, Gerichtsart, GerichtZutat, Kosten, Optionen,
+  BausteinIdee, Eigenschaften, FehlendeZutat, Gericht, Gerichtsart, GerichtZutat, Optionen,
   RohBaustein, RohGericht, RohZutat, Snapshot, SnapshotZutat,
 } from './typen.ts';
 import {
   ARTEN, EINHEITEN, GERICHTSTYPEN, GESCHMACK, GEWUERZRICHTUNGEN, KONSISTENZ, SATTMACHER, TEMPERATUR, ZUBEREITUNG,
 } from './typen.ts';
-import { bekannterPreisInfo, GRUNDAUSSTATTUNG } from './snapshot.ts';
-import { bezugText, mengeAusPortionen, mengeText, portionenAusMenge } from './mengen.ts';
-import { type KostenPosten, rundeCent, summiereKosten, verbrauchswert } from './kosten.ts';
+import { GRUNDAUSSTATTUNG } from './snapshot.ts';
+import { mengeAusPortionen, portionenAusMenge } from './mengen.ts';
 import { bereinigeText, deckungstext, pruefeName, type Regeln, ungedeckt } from './wahrheit.ts';
 import { ausListe, kuerze, normalisiere } from './text.ts';
 
@@ -75,21 +74,20 @@ function portionenAus(rz: RohZutat | undefined, z: SnapshotZutat, personen: numb
   return Math.min(MAX_PORTIONEN, Math.max(0.25, Math.round(wert * 4) / 4));
 }
 
+/**
+ * Menge in der Einheit der Sorte: eine genaue Angabe (menge in genau dieser Einheit, ohne Portionen –
+ * so rechnen die Grundrezepte) oder aus Portionen.
+ */
+function mengeFuer(rz: RohZutat | undefined, z: SnapshotZutat, personen: number): number {
+  const genau = Number(rz?.menge);
+  if (rz?.portionen == null && rz?.bloecke == null && rz?.einheit === z.einheit && Number.isFinite(genau) && genau > 0) {
+    return z.einheit === 'g' || z.einheit === 'ml' ? Math.min(100_000, Math.round(genau)) || 1 : Math.min(500, Math.ceil(genau - 1e-9));
+  }
+  return mengeAusPortionen(portionenAus(rz, z, personen), z.einheit, z.portion_menge);
+}
+
 const aufzaehlung = (namen: string[]) =>
   namen.length <= 1 ? namen.join('') : `${namen.slice(0, -1).join(', ')} und ${namen[namen.length - 1]}`;
-
-/** Kosten des Gerichts – ausschließlich über die zentrale Kostenfunktion. */
-export function berechneKosten(zutaten: GerichtZutat[], fehlt: FehlendeZutat[], personen: number): Kosten {
-  const posten: KostenPosten[] = zutaten
-    .filter((z) => z.quelle !== 'grundausstattung')
-    .map((z) => ({ name: z.name, cent: z.kosten_cent }));
-  // Einkauf: nur, wenn Menge UND Preis bekannt sind (fehlende Teilmenge einer vorhandenen Sorte).
-  const einkauf: KostenPosten[] = fehlt.map((f) => ({
-    name: f.name,
-    cent: f.grund === 'zu_wenig' ? f.preis_cent : null,
-  }));
-  return summiereKosten(posten, personen, einkauf);
-}
 
 export function gerichtsartVon(zutaten: GerichtZutat[]): Gerichtsart {
   const echte = zutaten.filter((z) => z.quelle !== 'grundausstattung');
@@ -102,9 +100,9 @@ export function gerichtsartVon(zutaten: GerichtZutat[]): Gerichtsart {
 export function rettetVon(zutaten: GerichtZutat[], snapshot: Snapshot): string[] {
   return zutaten
     .filter((z) => {
-      if (z.quelle === 'kuehlschrank') return true;
-      if (z.quelle !== 'bestand') return false;
       const s = snapshot.zutaten.find((x) => x.id === z.id);
+      if (z.quelle === 'kuehlschrank') return !!s?.rest;
+      if (z.quelle !== 'bestand') return false;
       return z.geoeffnet || z.bald_verbrauchen || !!s?.rest || !!s?.aufgetaut;
     })
     .map((z) => z.name);
@@ -129,8 +127,13 @@ export function warumJetzt(zutaten: GerichtZutat[], fehlt: FehlendeZutat[], snap
     const tage = snapshot?.zutaten.find((s) => s.id === z.id)?.tage_bis_ablauf ?? null;
     gruende.push(`${z.name} ${ablaufText(tage)}.`);
   }
-  const reste = zutaten.filter((z) => z.quelle === 'kuehlschrank').map((z) => z.name);
+  const genannt = zutaten.filter((z) => z.quelle === 'kuehlschrank');
+  // ohne Snapshot (ältere Aufrufe) gelten genannte Zutaten als Reste
+  const istRest = (z: GerichtZutat) => !snapshot || !!snapshot.zutaten.find((s) => s.id === z.id)?.rest;
+  const reste = genannt.filter(istRest).map((z) => z.name);
+  const extra = genannt.filter((z) => !istRest(z)).map((z) => z.name);
   if (reste.length) gruende.push(`Verwertet deine Reste: ${reste.join(', ')}.`);
+  if (extra.length) gruende.push(`Nutzt, was du zusätzlich da hast: ${extra.join(', ')}.`);
   if (fehlt.length === 0) gruende.push('Du hast alles zuhause.');
   else if (fehlt.length === 1) gruende.push('Du hast fast alles zuhause.');
   return gruende;
@@ -171,22 +174,12 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
     if (!n) return;
     if (fehlt.some((f) => normalisiere(f.name) === normalisiere(n))) return;
     if (grund === 'zu_wenig' && z && menge !== null) {
-      const wert = verbrauchswert(menge, z);
-      fehlt.push({
-        name: n, grund, menge, einheit: z.einheit,
-        preis_cent: wert === null ? null : rundeCent(wert),
-        preis_bezug: wert === null ? null : `für ${mengeText(menge, z.einheit)}`,
-      });
+      fehlt.push({ name: n, grund, menge, einheit: z.einheit });
       return;
     }
-    const preis = bekannterPreisInfo(snapshot, n);
     // Menge nur übernehmen, wenn die KI eine gültige Einheit nennt – sonst „Menge offen“.
     const einheit = EINHEITEN.find((e) => e === einheitRoh) ?? null;
-    fehlt.push({
-      name: n, grund, menge: einheit ? menge : null, einheit,
-      preis_cent: preis?.kosten_cent ?? null,
-      preis_bezug: preis ? bezugText(preis.kosten_menge, preis.einheit) : null,
-    });
+    fehlt.push({ name: n, grund, menge: einheit ? menge : null, einheit });
   };
 
   for (const rz of Array.isArray(roh.zutaten) ? roh.zutaten : []) {
@@ -196,7 +189,7 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
       fehltName(kuerze(rz?.name ?? rz?.id, 60), 'nicht_im_bestand', null);
       continue;
     }
-    const menge = z.quelle === 'bestand' ? mengeAusPortionen(portionenAus(rz, z, personen), z.einheit, z.portion_menge) : null;
+    const menge = z.quelle === 'bestand' ? mengeFuer(rz, z, personen) : null;
     const schon = zutaten.find((x) => x.id === z.id);
     if (schon) {
       if (schon.menge !== null && menge !== null) schon.menge += menge;
@@ -211,7 +204,6 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
       einheit: z.einheit,
       menge,
       portionen: null,
-      kosten_cent: null,
       bald_verbrauchen: z.bald_verbrauchen,
       geoeffnet: z.geoeffnet,
       zusammensetzung: z.zusammensetzung,
@@ -219,7 +211,7 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
     });
   }
 
-  // Nie mehr einplanen als vorhanden – der Rest fehlt. Danach Portionen und Wert je Zutat.
+  // Nie mehr einplanen als vorhanden – der Rest fehlt. Danach Portionen je Zutat.
   for (const z of zutaten) {
     const s = snapshot.zutaten.find((x) => x.id === z.id);
     if (!s || z.menge === null) continue;
@@ -228,7 +220,6 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
       z.menge = s.anzahl;
     }
     z.portionen = portionenAusMenge(z.menge, s.portion_menge);
-    z.kosten_cent = verbrauchswert(z.menge, s);
   }
 
   for (const f of Array.isArray(roh.fehlt) ? roh.fehlt : []) {
@@ -290,7 +281,6 @@ export function pruefeGericht(roh: RohGericht, snapshot: Snapshot, optionen: Opt
       rettet: rettetVon(zutaten, snapshot),
       hinweise: hinweiseVon(zutaten),
       eigenschaften,
-      kosten: berechneKosten(zutaten, fehlt, personen),
       naehrwerte: naehrwerteFuerGericht({ zutaten, fehlt, portionen: personen },
         (id) => snapshot.zutaten.find((s) => s.block_typ_id !== null && s.block_typ_id === id)?.naehrwert ?? null),
       bewertung: 0,
@@ -315,19 +305,11 @@ export function pruefeBaustein(roh: RohBaustein | null | undefined, snapshot: Sn
 
   // Zutaten: vorhandene mit Menge und Preis, der Rest wird eingekauft (Preis unbekannt).
   const zutaten: string[] = [];
-  const posten: KostenPosten[] = [];
   for (const rz of (Array.isArray(roh.zutaten) ? roh.zutaten : []).slice(0, 12)) {
     const z = findeImSnapshot(snapshot, rz?.id, rz?.name);
     const name = z?.name ?? kuerze(rz?.name, 40);
     if (!name || zutaten.includes(name)) continue;
     zutaten.push(name);
-    if (z?.quelle === 'grundausstattung') continue;
-    if (z?.quelle === 'bestand') {
-      const menge = mengeAusPortionen(portionenAus(rz, z, 1), z.einheit, z.portion_menge);
-      posten.push({ name, cent: verbrauchswert(menge, z) });
-    } else {
-      posten.push({ name, cent: null });
-    }
   }
 
   const regeln: Regeln = { hausgemacht_erlaubt: true }; // wird ja selbst gekocht
@@ -347,7 +329,6 @@ export function pruefeBaustein(roh: RohBaustein | null | undefined, snapshot: Sn
     portion_g: Number.isFinite(pg) && pg >= 20 && pg <= 1000 ? Math.round(pg) : null,
     zutaten,
     verwendbar_fuer: verwendbar,
-    kosten: summiereKosten(posten.length ? posten : [{ name: rohName, cent: null }], portionen),
     begruendung: kuerze(bereinigeText(kuerze(roh.begruendung, 300), deckung, regeln).text, 240),
   };
 }

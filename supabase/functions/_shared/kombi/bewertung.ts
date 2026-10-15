@@ -1,4 +1,4 @@
-// Rangfolge der Vorschläge. Nicht einfach „das Billigste“, sondern eine Abwägung.
+// Rangfolge der Vorschläge – eine Abwägung aus mehreren Faktoren.
 // Die Gewichte sind bewusst an einer Stelle gebündelt und später konfigurierbar.
 //
 // Dringlichkeit („was sollte weg?“) folgt der Reihenfolge
@@ -14,7 +14,6 @@ import { namensQualitaet } from './wahrheit.ts';
 export type Gewichte = {
   vorhanden: number; // vorhandene Lebensmittel statt Einkauf
   dringlichkeit: number; // Geöffnetes, bald Ablaufendes und Reste zuerst
-  kosten: number; // niedrige Kosten (nur aus bekannten Preisen)
   einfach: number; // einfache/schnelle Zubereitung
   saettigung: number; // gute Sättigung
   abwechslung: number; // anders als die letzten Vorschläge
@@ -25,7 +24,6 @@ export type Gewichte = {
 export const STANDARD_GEWICHTE: Gewichte = {
   vorhanden: 3,
   dringlichkeit: 2.2,
-  kosten: 1.5,
   einfach: 1,
   saettigung: 1,
   abwechslung: 1.4,
@@ -36,9 +34,10 @@ export const STANDARD_GEWICHTE: Gewichte = {
 /** Wie dringend sollte diese Zutat verbraucht werden? 0 … 1 */
 export function dringlichkeitVon(z: GerichtZutat, snapshot?: Snapshot): number {
   if (z.quelle === 'grundausstattung') return 0;
-  if (z.quelle === 'kuehlschrank') return 0.7; // spontan genannte Reste
-  if (z.geoeffnet) return 1;
   const s = snapshot?.zutaten.find((x) => x.id === z.id);
+  // vom Nutzer genannt: Reste zählen, anderes nur leicht (ohne Snapshot wie bisher als Rest)
+  if (z.quelle === 'kuehlschrank') return !s || s.rest ? 0.7 : 0.15;
+  if (z.geoeffnet) return 1;
   if (s?.aufgetaut) return 0.95;
   if (z.bald_verbrauchen) return 0.85;
   if (s?.rest) return 0.7;
@@ -53,16 +52,6 @@ export function dringlichkeit(g: Gericht, snapshot?: Snapshot): number {
   if (werte.length === 0) return 0;
   const rest = werte.slice(1).reduce((s, w) => s + w, 0);
   return Math.min(1, werte[0] + 0.15 * rest);
-}
-
-/** Kostenstufen statt linear: 0,70 € ist nicht automatisch „doppelt so gut“ wie 1,40 €. */
-function kostenWert(g: Gericht, guenstig: boolean): number {
-  const c = g.kosten.pro_portion_cent;
-  // Unbekannter Preis: weder belohnen noch bestrafen.
-  if (g.kosten.status === 'unbekannt' || c === null) return 0.5;
-  const wert = c <= 100 ? 1 : c <= 150 ? 0.8 : c <= 250 ? 0.4 : 0.1;
-  const sicher = g.kosten.status === 'berechnet' ? wert : wert * 0.85;
-  return guenstig ? sicher : 0.5 + sicher / 2;
 }
 
 export const kurz = (g: Gericht): GerichtKurz => ({
@@ -105,7 +94,6 @@ export function bewerte(
   const summe =
     gewichte.vorhanden * vorhanden +
     gewichte.dringlichkeit * dringlichkeit(g, kontext.snapshot) +
-    gewichte.kosten * kostenWert(g, optionen.guenstig) +
     gewichte.einfach * einfach +
     gewichte.saettigung * saettigung +
     gewichte.abwechslung * abwechslung +

@@ -3,8 +3,8 @@ import type { NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts'
 import type { Sorte } from './api';
 import { ARTEN_INFO, farbe as farbInfo, lagerort, LAGERORTE } from './farben';
 import { Icon, type IconName } from './Icon';
-import { artVon, einheitVon, euro, mengeKurz, mengeText, portionMengeVon } from './format';
-import { heuteWichtig, istDringend, ortKacheln, sortenFuer, vorratsLage, vorratsLageText, vorratswert, zustand, type Wichtig } from './dashboard';
+import { artVon, einheitVon, mengeKurz, mengeText, portionMengeVon } from './format';
+import { heuteWichtig, istDringend, ortKacheln, sortenFuer, vorratsLage, vorratsLageText, zustand, type Wichtig } from './dashboard';
 import { Bild, DEKO, ORT_FOTO } from './Bild';
 import { sortenBild } from './bildApi';
 import { Box, tonVon, WarnIcon, WichtigKacheln, zustandKurz } from './Karten';
@@ -180,7 +180,6 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
 
   const wichtig = heuteWichtig(bestand, heute);
   const kacheln = ortKacheln(bestand, heute);
-  const wert = vorratswert(bestand);
   const lage = vorratsLage(bestand, heute);
   const lageText = vorratsLageText(lage);
   const da = bestand.filter((s) => s.anzahl > 0);
@@ -198,9 +197,6 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
     .slice(0, 6);
   const ICON: Record<string, IconName> = Object.fromEntries(LAGERORTE.map((l) => [l.id, l.icon]));
   const TON: Record<string, string> = { kuehlschrank: 'ton-gruen', gefrierfach: 'ton-blau', vorrat: 'ton-gelb' };
-  const wertText = wert.cent > 0
-    ? `Wert ${wert.ohne_preis ? 'ab' : '≈'} ${euro(wert.cent)}${wert.ohne_preis ? ` · ${wert.ohne_preis} ohne Preis` : ''}`
-    : 'Wert unbekannt – keine Preise hinterlegt';
 
   return (
     <>
@@ -209,12 +205,11 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
       <section className="vorrat-held" aria-label="Dein Vorrat">
         <img src={DEKO.heldGemuese} alt="" aria-hidden="true" />
         <div className="vorrat-held-kopf">
-          <p className="geld-titel">Dein Vorrat</p>
-          <span className="geld-zahl">{lage.artikel} Artikel</span>
+          <p className="vorrat-held-titel">Dein Vorrat</p>
+          <span className="vorrat-held-zahl">{lage.artikel} Artikel</span>
           <p className={`vorrat-lage${lageText ? ' status-achtung' : ' status-ok'}`}>
             <Icon name={lageText ? 'info' : 'haken'} groesse={16} /> {lageText ?? 'Alles in Ordnung'}
           </p>
-          <p className="meta-text">{wertText}</p>
         </div>
       </section>
 

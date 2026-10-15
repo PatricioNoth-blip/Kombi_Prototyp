@@ -4,7 +4,7 @@
 //   B) neu       – besonders nützlich, aber es fehlt noch etwas („Dafür fehlen noch: …“)
 //
 // Die KI (oder der Katalog im Demo-Modus) liefert Idee, Zutaten, Mengen und Verwendungen.
-// Die Software prüft alles gegen den Vorrat, rechnet Kosten und bewertet die Nutzbarkeit –
+// Die Software prüft alles gegen den Vorrat, rechnet Mengen und bewertet die Nutzbarkeit –
 // die Sterne sind KEINE Zahl der KI. Gespeichert wird erst nach „Komponente übernehmen“.
 import { bildAnfrageFuerKomponente } from './bilder.ts';
 import type {
@@ -12,12 +12,12 @@ import type {
   SnapshotZutat,
 } from './typen.ts';
 import { EINHEITEN, GERICHTSTYPEN, GEWUERZRICHTUNGEN } from './typen.ts';
-import { GRUNDAUSSTATTUNG, bekannterPreisInfo } from './snapshot.ts';
+import { GRUNDAUSSTATTUNG } from './snapshot.ts';
 import { mengeAusPortionen } from './mengen.ts';
-import { type KostenPosten, summiereKosten, verbrauchswert } from './kosten.ts';
 import { bereinigeText, deckungstext, pruefeName } from './wahrheit.ts';
 import { fehlendeRollen, GERICHT_NAME, partnerVon, ROLLEN, TYPISCHE_GERICHTE } from './rollen.ts';
 import { findeSorte, inSorteneinheit, produktSchluessel, verwendbar, type VorratSorte } from './einkaufsliste.ts';
+import { bausteineFuerName, bausteineVon } from './grundbausteine.ts';
 import { summiereNaehrwerte } from './naehrwerte.ts';
 import { ausListe, kuerze, normalisiere } from './text.ts';
 
@@ -109,19 +109,16 @@ export function pruefeKomponente(roh: RohKomponente | null | undefined, snapshot
   const pg = Number(roh.portion_g);
 
   const zutaten: KomponentenZutat[] = [];
-  const posten: KostenPosten[] = [];
-  const einkauf: KostenPosten[] = [];
   const bestand = snapshot.zutaten;
 
   for (const rz of (Array.isArray(roh.zutaten) ? roh.zutaten : []).slice(0, 15)) {
     const z = findeImSnapshot(snapshot, rz?.id, rz?.name);
     if (z?.quelle === 'grundausstattung') {
-      zutaten.push({ name: z.name, block_typ_id: null, menge: null, einheit: null, quelle: 'grundausstattung', kosten_cent: null, dringend: false });
+      zutaten.push({ name: z.name, block_typ_id: null, menge: null, einheit: null, quelle: 'grundausstattung', dringend: false });
       continue;
     }
     if (z?.quelle === 'kuehlschrank') {
-      zutaten.push({ name: z.name, block_typ_id: null, menge: null, einheit: null, quelle: 'kuehlschrank', kosten_cent: null, dringend: true });
-      posten.push({ name: z.name, cent: null });
+      zutaten.push({ name: z.name, block_typ_id: null, menge: null, einheit: null, quelle: 'kuehlschrank', dringend: true });
       continue;
     }
     if (z?.quelle === 'bestand' && z.anzahl !== null) {
@@ -132,32 +129,18 @@ export function pruefeKomponente(roh: RohKomponente | null | undefined, snapshot
           ? (zahl(rz?.menge) as number)
           : mengeAusPortionen(1, z.einheit, z.portion_menge);
       const nimm = Math.min(gewuenscht, z.anzahl);
-      const wert = verbrauchswert(nimm, z);
-      zutaten.push({ name: z.name, block_typ_id: z.block_typ_id, menge: nimm, einheit: z.einheit, quelle: 'bestand', kosten_cent: wert, dringend: dringend(z) });
-      posten.push({ name: z.name, cent: wert });
+      zutaten.push({ name: z.name, block_typ_id: z.block_typ_id, menge: nimm, einheit: z.einheit, quelle: 'bestand', dringend: dringend(z) });
       const rest = gewuenscht - nimm;
       if (rest > 0) {
         // Teilweise da: Rest muss eingekauft werden.
-        const w = verbrauchswert(rest, z);
-        zutaten.push({ name: z.name, block_typ_id: z.block_typ_id, menge: rest, einheit: z.einheit, quelle: 'einkauf', kosten_cent: w, dringend: false });
-        posten.push({ name: z.name, cent: w });
-        einkauf.push({ name: z.name, cent: z.kosten_cent === null ? null : Math.ceil(rest / Math.max(1, z.kosten_menge)) * z.kosten_cent });
+        zutaten.push({ name: z.name, block_typ_id: z.block_typ_id, menge: rest, einheit: z.einheit, quelle: 'einkauf', dringend: false });
       }
       continue;
     }
-    // Nicht im Vorrat → Einkauf. Menge und Einheit laut Vorschlag, Preis nur, wenn bekannt.
+    // Nicht im Vorrat → Einkauf. Menge und Einheit laut Vorschlag.
     const name = kuerze(rz?.name, 40);
     if (!name) continue;
-    const menge = zahl(rz?.menge);
-    const einheit = EINHEITEN.find((e) => e === rz?.einheit) ?? null;
-    const preis = bekannterPreisInfo(snapshot, name);
-    const passend = preis && menge !== null && einheit === preis.einheit;
-    zutaten.push({
-      name, block_typ_id: null, menge: menge, einheit, quelle: 'einkauf',
-      kosten_cent: passend ? verbrauchswert(menge as number, preis) : null, dringend: false,
-    });
-    posten.push({ name, cent: passend ? verbrauchswert(menge as number, preis) : null });
-    einkauf.push({ name, cent: passend ? Math.ceil((menge as number) / Math.max(1, preis.kosten_menge)) * preis.kosten_cent : null });
+    zutaten.push({ name, block_typ_id: null, menge: zahl(rz?.menge), einheit: EINHEITEN.find((e) => e === rz?.einheit) ?? null, quelle: 'einkauf', dringend: false });
   }
   if (zutaten.filter((z) => z.quelle !== 'grundausstattung').length === 0) return null;
 
@@ -206,13 +189,11 @@ export function pruefeKomponente(roh: RohKomponente | null | undefined, snapshot
       .filter(Boolean)
       .slice(0, 10),
     nutzbarkeit,
-    kosten: summiereKosten(posten, portionen),
     naehrwerte: summiereNaehrwerte(zutaten.map((z) => ({
       name: z.name,
       menge: z.quelle === 'bestand' || (z.quelle === 'einkauf' && z.block_typ_id !== null) ? z.menge : null,
       naehrwert: z.block_typ_id !== null ? bestand.find((b) => b.block_typ_id === z.block_typ_id)?.naehrwert ?? null : null,
     })), portionen),
-    einkauf: summiereKosten(einkauf, 1),
     verwertet,
     partner,
     typ: fehlend.length ? 'neu' : 'verwerten',
@@ -235,9 +216,6 @@ export function komponenteAlsSorte(k: KomponentenVorschlag) {
     zusammensetzung: [...new Set(k.zutaten.filter((z) => z.quelle !== 'grundausstattung').map((z) => z.name))],
     gerichtstypen: k.gerichtstypen,
     richtung: k.richtung,
-    // Herstellungskosten nur, wenn vollständig berechnet: „X € für N Portionen“
-    kosten_cent: k.kosten.status === 'berechnet' ? k.kosten.gesamt_cent : null,
-    kosten_menge: k.portionen,
   };
 }
 
@@ -250,23 +228,58 @@ type Katalog = {
   beschreibung: string; schritte: string[];
 };
 
-/** Klassische vorkochbare Kombi-Komponenten (Mengen für eine Charge). */
+/**
+ * Vorkochbare Komponenten (Mengen für eine Charge): zuerst die vorbereiteten Basen und gekochten
+ * Hülsenfrüchte aus dem Grundvorrat des Food-Baukastens, dann weitere klassische Kombi-Komponenten.
+ */
 export const KATALOG: Katalog[] = [
   {
-    name: 'Tomaten-Basis', rolle: 'rot', richtung: 'italienisch', gerichtstypen: ['pasta', 'pizza', 'wrap', 'suppe', 'auflauf', 'eintopf'],
-    verwendung: ['Pasta', 'Pizza', 'Wraps', 'Shakshuka', 'Suppe', 'Auflauf'],
-    zutaten: [{ name: 'Gehackte Tomaten (Dose)', menge: 800, einheit: 'g' }, { name: 'Zwiebeln', menge: 150, einheit: 'g' }, { name: 'Knoblauch', menge: 10, einheit: 'g' }],
-    portionen: 6, portion_g: 150, lagerort: 'gefrierfach', zeit_min: 30,
-    beschreibung: 'Tomaten mit Zwiebeln und Knoblauch langsam eingekocht – die Grundlage für viele Gerichte.',
-    schritte: ['Zwiebeln und Knoblauch fein würfeln und in Öl glasig dünsten.', 'Tomaten dazugeben und 20 Minuten einkochen.', 'Mit Salz und Pfeffer abschmecken, portionsweise einfrieren.'],
+    name: 'Tomaten-Gemüse-Basis', rolle: 'rot', richtung: 'italienisch', gerichtstypen: ['pasta', 'reisgericht', 'eintopf', 'auflauf', 'suppe'],
+    verwendung: ['Nudeln mit Tomatensoße', 'Tomatenreis', 'Linsen-Tomaten-Reis', 'Eintopf'],
+    zutaten: [{ name: 'Passierte Tomaten', menge: 1000, einheit: 'g' }, { name: 'Zwiebeln', menge: 150, einheit: 'g' }, { name: 'Möhren', menge: 200, einheit: 'g' }, { name: 'Knoblauch', menge: 10, einheit: 'g' }],
+    portionen: 5, portion_g: 250, lagerort: 'gefrierfach', zeit_min: 35,
+    beschreibung: 'Passierte Tomaten mit Zwiebeln, Möhren und Knoblauch eingekocht – die Grundlage für viele Gerichte.',
+    schritte: ['Zwiebeln, Möhren und Knoblauch fein würfeln und in etwas Öl weich dünsten.', 'Tomaten dazugeben und 20 Minuten einkochen.', 'Abschmecken, rasch abkühlen, portionsweise einfrieren und mit Inhalt und Datum beschriften.'],
   },
   {
-    name: 'Linsen-Bolognese', rolle: 'rot', richtung: 'italienisch', gerichtstypen: ['pasta', 'auflauf', 'wrap', 'reisgericht'],
-    verwendung: ['Pasta', 'Lasagne', 'Gefüllte Wraps', 'Reis-Pfanne'],
-    zutaten: [{ name: 'Rote Linsen', menge: 250, einheit: 'g' }, { name: 'Gehackte Tomaten (Dose)', menge: 400, einheit: 'g' }, { name: 'Zwiebeln', menge: 100, einheit: 'g' }, { name: 'Karotten', menge: 150, einheit: 'g' }],
-    portionen: 6, portion_g: 180, lagerort: 'gefrierfach', zeit_min: 35,
-    beschreibung: 'Herzhafte Soße aus roten Linsen, Tomaten, Zwiebeln und Karotten.',
-    schritte: ['Zwiebeln und Karotten klein schneiden und anbraten.', 'Linsen und Tomaten mit etwas Wasser dazugeben.', '20 Minuten köcheln, abschmecken, portionieren.'],
+    name: 'Linsen-Bolognese-Basis', rolle: 'rot', richtung: 'italienisch', gerichtstypen: ['pasta', 'auflauf', 'reisgericht', 'eintopf'],
+    verwendung: ['Linsen-Bolognese mit Nudeln', 'Linsen-Lasagne', 'Reis-Pfanne'],
+    zutaten: [{ name: 'Rote Linsen', menge: 250, einheit: 'g' }, { name: 'Passierte Tomaten', menge: 1000, einheit: 'g' }, { name: 'Zwiebeln', menge: 150, einheit: 'g' }, { name: 'Möhren', menge: 200, einheit: 'g' }],
+    portionen: 6, portion_g: 250, lagerort: 'gefrierfach', zeit_min: 35,
+    beschreibung: 'Herzhafte Soße aus roten Linsen, Tomaten, Zwiebeln und Möhren.',
+    schritte: ['Zwiebeln und Möhren klein schneiden und kurz dünsten.', 'Linsen abspülen, mit den Tomaten und etwa 500 ml Wasser dazugeben.', '20 Minuten köcheln, bis die Linsen weich sind; abschmecken.', 'Rasch abkühlen, portionsweise einfrieren und beschriften.'],
+  },
+  {
+    name: 'Neutrale Gemüse-Basis', rolle: 'gruen', richtung: 'neutral', gerichtstypen: ['pasta', 'eintopf', 'curry', 'reisgericht', 'pfanne'],
+    verwendung: ['Gemüse-Nudel-Pfanne', 'Linsen-Gemüse-Eintopf', 'Gemüse-Kokos-Curry'],
+    zutaten: [{ name: 'Möhren', menge: 300, einheit: 'g' }, { name: 'Zwiebeln', menge: 150, einheit: 'g' }, { name: 'Paprika', menge: 2, einheit: 'stueck' }, { name: 'Zucchini', menge: 1, einheit: 'stueck' }],
+    portionen: 4, portion_g: 200, lagerort: 'gefrierfach', zeit_min: 25,
+    beschreibung: 'Vorbereitetes Gemüse ohne starke Würze – passt in Pfannen, Eintöpfe und Currys.',
+    schritte: ['Gemüse waschen und in mundgerechte Stücke schneiden.', 'In etwas Öl 5 Minuten anbraten oder 2 Minuten blanchieren – es soll noch Biss haben.', 'Rasch abkühlen, portionsweise einfrieren und beschriften.'],
+  },
+  {
+    name: 'Gekochte Kichererbsen', rolle: 'braun', richtung: 'neutral', gerichtstypen: ['curry', 'pasta', 'eintopf', 'reisgericht', 'pfanne'],
+    verwendung: ['Reis mit Kichererbsen und Tomate', 'Nudeln mit Kichererbsen-Tomatensoße', 'Kartoffel-Kichererbsen-Topf'],
+    zutaten: [{ name: 'Kichererbsen, trocken', menge: 500, einheit: 'g' }],
+    portionen: 5, portion_g: 240, lagerort: 'gefrierfach', zeit_min: 100,
+    beschreibung: 'Kichererbsen aus dem Vorrat eingeweicht und weich gekocht – Protein für viele Gerichte.',
+    schritte: ['Kichererbsen mindestens 12 Stunden in reichlich Wasser einweichen.', 'Einweichwasser weggießen, in frischem Wasser 60–90 Minuten vollständig weich kochen.', 'Abgießen, rasch abkühlen, portionsweise einfrieren und beschriften.'],
+  },
+  {
+    name: 'Gekochte Kidneybohnen', rolle: 'braun', richtung: 'mexikanisch', gerichtstypen: ['eintopf', 'reisgericht', 'wrap', 'bowl'],
+    verwendung: ['Chili sin Carne', 'Kidneybohnen-Tomaten-Topf', 'Bowl'],
+    zutaten: [{ name: 'Kidneybohnen, trocken', menge: 500, einheit: 'g' }],
+    portionen: 5, portion_g: 250, lagerort: 'gefrierfach', zeit_min: 100,
+    beschreibung: 'Kidneybohnen aus dem Vorrat eingeweicht und vollständig gekocht – roh sind sie giftig.',
+    schritte: ['Bohnen mindestens 12 Stunden in reichlich Wasser einweichen.', 'Einweichwasser weggießen. In frischem Wasser 10 Minuten sprudelnd kochen, dann 60–90 Minuten vollständig weich garen.', 'Abgießen, rasch abkühlen, portionsweise einfrieren und beschriften.'],
+  },
+  {
+    name: 'Gekochte Linsen', rolle: 'braun', richtung: 'neutral', gerichtstypen: ['eintopf', 'reisgericht', 'pasta', 'salat', 'bowl'],
+    verwendung: ['Linsen-Gemüse-Eintopf', 'Linsen-Tomaten-Reis', 'Linsen-Bolognese'],
+    zutaten: [{ name: 'Braune Linsen', menge: 250, einheit: 'g' }],
+    portionen: 4, portion_g: 250, lagerort: 'gefrierfach', zeit_min: 30,
+    beschreibung: 'Braune oder grüne Linsen bissfest gegart – Protein für Eintopf, Reis und Soßen.',
+    schritte: ['Linsen abspülen und in reichlich Wasser 20–25 Minuten bissfest kochen.', 'Abgießen, rasch abkühlen.', 'Portionsweise einfrieren und beschriften.'],
   },
   {
     name: 'Falafel-Masse', rolle: 'braun', richtung: 'orientalisch', gerichtstypen: ['wrap', 'bowl', 'salat', 'burger', 'snack'],
@@ -293,14 +306,6 @@ export const KATALOG: Katalog[] = [
     schritte: ['Zwiebeln fein würfeln und anschwitzen.', 'Currypaste und Tomatenmark kurz mitrösten.', 'Mit Kokosmilch aufkochen, portionieren.'],
   },
   {
-    name: 'Ofengemüse', rolle: 'gruen', richtung: 'neutral', gerichtstypen: ['bowl', 'pasta', 'wrap', 'salat', 'auflauf'],
-    verwendung: ['Bowl', 'Ofengemüse-Pasta', 'Wrap', 'Auflauf'],
-    zutaten: [{ name: 'Paprika', menge: 3, einheit: 'stueck' }, { name: 'Zucchini', menge: 2, einheit: 'stueck' }, { name: 'Zwiebeln', menge: 150, einheit: 'g' }],
-    portionen: 4, portion_g: 150, lagerort: 'gefrierfach', zeit_min: 35,
-    beschreibung: 'Paprika, Zucchini und Zwiebeln im Ofen geröstet.',
-    schritte: ['Gemüse in Stücke schneiden, mit Öl und Salz mischen.', 'Bei 200 °C etwa 25 Minuten rösten.', 'Abkühlen lassen und portionsweise einfrieren.'],
-  },
-  {
     name: 'Portionsreis', rolle: 'gelb', richtung: 'neutral', gerichtstypen: ['reisgericht', 'curry', 'bowl', 'pfanne', 'wrap'],
     verwendung: ['Curry mit Reis', 'Bowl', 'Gebratener Reis', 'Burrito'],
     zutaten: [{ name: 'Reis', menge: 500, einheit: 'g' }],
@@ -308,15 +313,14 @@ export const KATALOG: Katalog[] = [
     beschreibung: 'Reis vorgekocht und portioniert – in 3 Minuten aufgewärmt.',
     schritte: ['Reis nach Packung kochen.', 'Schnell abkühlen lassen.', 'Portionsweise einfrieren.'],
   },
-  {
-    name: 'Linsen gekocht', rolle: 'braun', richtung: 'neutral', gerichtstypen: ['bowl', 'salat', 'curry', 'suppe', 'wrap', 'pasta'],
-    verwendung: ['Linsen-Bowl', 'Salat', 'Dal', 'Suppe'],
-    zutaten: [{ name: 'Rote Linsen', menge: 500, einheit: 'g' }],
-    portionen: 8, portion_g: 100, lagerort: 'gefrierfach', zeit_min: 20,
-    beschreibung: 'Rote Linsen vorgekocht – Protein für viele Gerichte.',
-    schritte: ['Linsen waschen und in Salzwasser 12 Minuten kochen.', 'Abgießen und abkühlen lassen.', 'Portionsweise einfrieren.'],
-  },
 ];
+
+/** Sorte, die derselbe Grundbaustein ist („Rote Linsen“ ↔ „Rote Linsen, trocken“). */
+function gleicherGrundbaustein(snapshot: Snapshot, name: string): SnapshotZutat | null {
+  const ids = bausteineFuerName(name).map((b) => b.id);
+  if (!ids.length) return null;
+  return snapshot.zutaten.find((x) => x.quelle === 'bestand' && bausteineVon(x).some((b) => ids.includes(b.id))) ?? null;
+}
 
 /** Katalog als Rohvorschläge – bevorzugt, was der Vorrat schon hergibt. */
 export function katalogVorschlaege(snapshot: Snapshot, max = 6): RohKomponente[] {
@@ -325,7 +329,7 @@ export function katalogVorschlaege(snapshot: Snapshot, max = 6): RohKomponente[]
     .filter((k) => !vorhanden.has(produktSchluessel(k.name)))
     .map((k) => {
       const zutaten = k.zutaten.map((z) => {
-        const s = findeImSnapshot(snapshot, null, z.name);
+        const s = findeImSnapshot(snapshot, null, z.name) ?? gleicherGrundbaustein(snapshot, z.name);
         return s && s.quelle !== 'grundausstattung' ? { id: s.id, menge: z.menge, einheit: z.einheit } : { name: z.name, menge: z.menge, einheit: z.einheit };
       });
       const treffer = zutaten.filter((z) => 'id' in z).length;
@@ -365,7 +369,7 @@ export type Produktion = {
   zeilen: ProduktionsZeile[];
   /** wird beim Bestätigen entnommen (höchstens, was da ist) */
   posten: { block_typ_id: number; name: string; menge: number; einheit: Einheit; art: VorratSorte['art'] }[];
-  /** Zutaten, die nicht als Sorte geführt werden – ihre Kosten sind unbekannt */
+  /** Zutaten, die nicht als Sorte geführt werden – sie werden nicht gebucht */
   nicht_erfasst: string[];
   fehlt: { name: string; menge: number | null; einheit: Einheit | null }[];
 };

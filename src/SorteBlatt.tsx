@@ -5,7 +5,7 @@ import { Blatt, AnzahlWahl } from './Blatt';
 import { ARTEN_INFO, buchungsVerb, farbe as farbInfo, lagerort } from './farben';
 import { Icon } from './Icon';
 import {
-  ablaufText, artVon, datum, einheitVon, mengeText, plusTage, portionMengeVon, portionspreisText, preisMitBezug, tageSeit,
+  ablaufText, artVon, datum, einheitVon, mengeText, plusTage, portionMengeVon, tageSeit,
 } from './format';
 import { GERICHT_EMOJI, GERICHT_NAME, gerichtstypenVon, partnerVon } from '../supabase/functions/_shared/kombi/rollen.ts';
 import { batchEmpfehlungen, type NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts';
@@ -49,7 +49,7 @@ function inEntnahmeReihenfolge(chargen: Charge[], haltbarTage: number): Charge[]
   );
 }
 
-/** Details einer Sorte: Funktion im Baukasten, Bestand, Kosten, wofür sie taugt, was dazu passt, Chargen. */
+/** Details einer Sorte: Funktion im Baukasten, Bestand, wofür sie taugt, was dazu passt, Chargen. */
 export function SorteBlatt({
   sorte, bestand, baukasten, planung, heute, laeuft, reserviert, nutzung,
   onEntnehmen, onEinfrieren, onBearbeiten, onOeffnen, onGeaendert, onFehler, onSchliessen,
@@ -79,7 +79,6 @@ export function SorteBlatt({
   const lager = lagerort(sorte.lagerort);
   const rolle = art.id === 'komplettgericht' ? 'Komplettgericht' : farbInfo(sorte.farbe).bedeutung;
   const warnAb = sorte.haltbar_tage - 14;
-  const preis = preisMitBezug(sorte);
   const fuell = fuellstand(sorte);
   const gerichte = gerichtstypenVon(sorte);
   const partner = useMemo(
@@ -219,7 +218,6 @@ export function SorteBlatt({
         <summary>Details</summary>
         <div className="info-zeilen">
           <div className="info-zeile"><span>Portion</span><span>{einheit === 'portion' ? `${sorte.groesse_g} g` : mengeText(pm, einheit)}</span></div>
-          <div className="info-zeile"><span>Preis</span><span>{portionspreisText(sorte)}{preis ? ` (${preis})` : ''}</span></div>
           <div className="info-zeile">
             <span>Haltbar</span>
             <span>{sorte.naechster_ablauf ? `${datum(sorte.naechster_ablauf)} · ${ablaufText(sorte.naechster_ablauf)}` : sorte.aelteste ? `bis ca. ${plusTage(sorte.aelteste, sorte.haltbar_tage)}` : `${sorte.haltbar_tage} Tage ab Einbuchen`}</span>

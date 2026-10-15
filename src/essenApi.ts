@@ -1,6 +1,7 @@
 // Datenzugriffe für „Was essen wir?“.
-// Die KI läuft in der Edge Function „was-essen“ (dort liegt der API-Key). Ist sie nicht eingerichtet
-// oder gerade nicht verfügbar, rechnet die App selbst mit dem regelbasierten Anbieter (Demo-Modus).
+// Zuerst kommen die festen Grundrezepte – lokal, ohne KI, nur was mit dem Vorrat direkt kochbar ist.
+// Erst danach improvisiert die KI in der Edge Function „was-essen“ (dort liegt der API-Key). Ist sie nicht
+// eingerichtet oder gerade nicht verfügbar, rechnet die App selbst mit dem regelbasierten Anbieter (Demo-Modus).
 // Protokollieren ist „best effort“: Klappt es nicht (z. B. Migration fehlt), läuft alles trotzdem.
 import { supabase, SUPABASE_KEY, SUPABASE_URL } from './supabase';
 import { ENGINE_VERSION, type Gesundheit, type KiProbe } from '../supabase/functions/_shared/kombi/gesundheit.ts';
@@ -8,6 +9,10 @@ import { fehltMigration, ladeBestand, type Sorte } from './api';
 import { baueSnapshot, type BestandZeile } from '../supabase/functions/_shared/kombi/snapshot.ts';
 import { erzeugeKomponenten, erzeugeVorschlaege, erzeugeWoche } from '../supabase/functions/_shared/kombi/engine.ts';
 import { regelbasiert } from '../supabase/functions/_shared/kombi/anbieter/regelbasiert.ts';
+import { grundrezeptAnbieter, kochbareGrundrezepte } from '../supabase/functions/_shared/kombi/grundrezepte.ts';
+import { reservierungVon, restSnapshot } from '../supabase/functions/_shared/kombi/planung.ts';
+import { normalisiere } from '../supabase/functions/_shared/kombi/text.ts';
+import { berechneLeitplanken } from '../supabase/functions/_shared/kombi/praeferenz.ts';
 import { rezeptDatensatz } from '../supabase/functions/_shared/kombi/aktionen.ts';
 import { UNBEKANNTE_NAEHRWERTE } from '../supabase/functions/_shared/kombi/naehrwerte.ts';
 import { kurz } from '../supabase/functions/_shared/kombi/bewertung.ts';
@@ -15,7 +20,8 @@ import type {
   Aktion, Ergebnis, Gericht, GerichtKurz, KiAnfrage, KomponentenErgebnis, Optionen, Snapshot, Vorschlag,
 } from '../supabase/functions/_shared/kombi/typen.ts';
 
-export type Quelle = 'ki' | 'demo';
+/** grundrezepte = feste Rezepte aus dem Grundvorrat; ki = Edge Function; demo = Kombi-Regeln ohne KI */
+export type Quelle = 'grundrezepte' | 'ki' | 'demo';
 export type Antwort = { ergebnis: Ergebnis; quelle: Quelle; hinweis: string | null };
 export type Rezept = { id: string; name: string; daten: Gericht; erstellt_am: string };
 
@@ -24,8 +30,20 @@ function heute(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Kontrollierter Snapshot: aktueller Bestand + Kühlschrank-Freitext + Grundausstattung. */
-export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string): Snapshot {
+/** Gespeicherte Vorlieben – nur bekannte Felder (ältere Stände hatten z. B. noch „günstig“). */
+export function gespeicherteOptionen(roh: unknown): Optionen {
+  const o = (roh ?? {}) as Partial<Optionen>;
+  return {
+    personen: typeof o.personen === 'number' && o.personen >= 1 && o.personen <= 12 ? o.personen : 2,
+    max_minuten: o.max_minuten === null || typeof o.max_minuten === 'number' ? o.max_minuten : 15,
+  };
+}
+
+/**
+ * Kontrollierter Snapshot: aktueller Bestand + was der Nutzer zusätzlich da hat (Freitext) + Grundausstattung.
+ * alleReste: alles Genannte soll bald weg („Nur Reste verwerten“).
+ */
+export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string, optionen: { alleReste?: boolean } = {}): Snapshot {
   const zeilen: BestandZeile[] = bestand.map((s) => ({
     id: s.id,
     name: s.name,
@@ -33,13 +51,11 @@ export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string): Snapsho
     anzahl: s.anzahl,
     bald_ablaufen: s.bald_ablaufen,
     groesse_g: s.groesse_g,
-    kosten_cent: s.kosten_cent,
     lagerort: s.lagerort ?? 'gefrierfach',
     art: s.art ?? null,
     herkunft: s.herkunft ?? null,
     einheit: s.einheit ?? null,
     portion_menge: s.portion_menge ?? null,
-    kosten_menge: s.kosten_menge ?? null,
     zusammensetzung: s.zusammensetzung ?? null,
     notiz: s.notiz ?? null,
     naechster_ablauf: s.naechster_ablauf ?? null,
@@ -54,12 +70,12 @@ export function baueSnapshotAus(bestand: Sorte[], kuehlschrank: string): Snapsho
     fett_g: s.fett_g ?? null,
     naehrwert_menge: s.naehrwert_menge ?? null,
   }));
-  return baueSnapshot(zeilen, kuehlschrank, heute());
+  return baueSnapshot(zeilen, kuehlschrank, heute(), optionen);
 }
 
 /** Frisch aus der Datenbank – damit die KI den aktuellen Stand bekommt. */
-export async function ladeSnapshot(kuehlschrank: string): Promise<Snapshot> {
-  return baueSnapshotAus(await ladeBestand(), kuehlschrank);
+export async function ladeSnapshot(kuehlschrank: string, optionen: { alleReste?: boolean } = {}): Promise<Snapshot> {
+  return baueSnapshotAus(await ladeBestand(), kuehlschrank, optionen);
 }
 
 async function hinweisAus(error: unknown): Promise<string> {
@@ -78,18 +94,14 @@ async function hinweisAus(error: unknown): Promise<string> {
 }
 
 /**
- * Antworten einer noch nicht neu deployten Edge Function haben das alte Format
- * (ohne Beschreibung, Gerichtsart, Kostenstatus …). Sie werden ins neue Format gebracht,
- * damit nichts abstürzt – und die App bittet um ein Update.
+ * Antworten einer noch nicht neu deployten Edge Function haben ein älteres Format
+ * (ohne Beschreibung, Gerichtsart …). Sie werden ins neue Format gebracht,
+ * damit nichts abstürzt – und die App bittet um ein Update. Kostenangaben älterer Versionen fallen weg.
  */
 export function normalisiereErgebnis(e: Ergebnis): { ergebnis: Ergebnis; veraltet: boolean } {
   const veraltet = e.gerichte.some((g) => !('gerichtsart' in g)) ||
-    (!!e.einkauf && !('gruende' in e.einkauf)) || (!!e.baustein_idee && !('kosten' in e.baustein_idee));
-  if (!veraltet) return { ergebnis: e, veraltet };
-  const unbekannt: Gericht['kosten'] = {
-    status: 'unbekannt', gesamt_cent: null, pro_portion_cent: null, personen: 1,
-    unbekannt: [], einkauf_cent: null, einkauf_unbekannt: [],
-  };
+    (!!e.einkauf && !('gruende' in e.einkauf)) || (!!e.baustein_idee && !('bestandsart' in e.baustein_idee));
+  if (!veraltet) return { ergebnis: { ...e, gerichte: e.gerichte.map(gespeichertesGericht) }, veraltet };
   const b = e.baustein_idee as (Partial<NonNullable<Ergebnis['baustein_idee']>> & { name: string; id: string; farbe: NonNullable<Ergebnis['baustein_idee']>['farbe'] }) | null;
   return {
     veraltet,
@@ -97,14 +109,14 @@ export function normalisiereErgebnis(e: Ergebnis): { ergebnis: Ergebnis; veralte
       ...e,
       gerichte: e.gerichte.map(gespeichertesGericht),
       einkauf: e.einkauf
-        ? { ...e.einkauf, preis_bezug: e.einkauf.preis_bezug ?? null, heute: e.einkauf.heute ?? null, gruende: e.einkauf.gruende ?? [] }
+        ? { art: 'einkauf', id: e.einkauf.id, name: e.einkauf.name, ermoeglicht: e.einkauf.ermoeglicht ?? [], heute: e.einkauf.heute ?? null, gruende: e.einkauf.gruende ?? [], begruendung: e.einkauf.begruendung ?? '' }
         : null,
       baustein_idee: b
         ? {
             art: 'baustein', id: b.id, name: b.name, farbe: b.farbe,
             bestandsart: b.bestandsart ?? (b.farbe === 'blau' ? 'komplettgericht' : 'komponente'),
             lagerort: b.lagerort ?? 'gefrierfach', portionen: b.portionen ?? 6, portion_g: b.portion_g ?? null,
-            zutaten: b.zutaten ?? [], verwendbar_fuer: b.verwendbar_fuer ?? [], kosten: b.kosten ?? unbekannt,
+            zutaten: b.zutaten ?? [], verwendbar_fuer: b.verwendbar_fuer ?? [],
             begruendung: b.begruendung ?? '',
           }
         : null,
@@ -183,17 +195,62 @@ export async function holeVorschlaege(anfrage: KiAnfrage): Promise<Antwort> {
   return { ergebnis: await erzeugeVorschlaege(regelbasiert(), anfrage), quelle: 'demo', hinweis };
 }
 
+/** Feste Grundrezepte, die mit dem Vorrat direkt kochbar sind – lokal, in Vorschlags-Reihenfolge. */
+export function grundrezeptVorschlaege(anfrage: KiAnfrage): Gericht[] {
+  return kochbareGrundrezepte(anfrage);
+}
+
+/**
+ * Erst Grundrezepte, dann (falls es zu wenige sind) improvisierte Ideen der KI bzw. der Kombi-Regeln –
+ * z. B. als Alternativen beim Tauschen im Wochenplan.
+ */
+export async function holeIdeen(anfrage: KiAnfrage): Promise<Antwort> {
+  const fest = grundrezeptVorschlaege(anfrage).slice(0, anfrage.anzahl);
+  if (fest.length >= anfrage.anzahl) {
+    const leitplanken = berechneLeitplanken(anfrage.feedback, anfrage.modus, anfrage.gesehen);
+    return {
+      ergebnis: { anbieter: 'grundrezepte', gerichte: fest, einkauf: null, baustein_idee: null, notfall: false, leitplanken, verworfen: [], hinweis: null },
+      quelle: 'grundrezepte',
+      hinweis: null,
+    };
+  }
+  const rest = await holeVorschlaege({ ...anfrage, anzahl: anfrage.anzahl - fest.length, gesehen: [...anfrage.gesehen, ...fest.map(kurz)] });
+  return { ...rest, ergebnis: { ...rest.ergebnis, gerichte: [...fest, ...rest.ergebnis.gerichte] }, quelle: fest.length ? 'grundrezepte' : rest.quelle };
+}
+
 /**
  * Mahlzeiten für mehrere Tage – gegen den FREIEN Vorrat, ohne eine Portion doppelt zu verplanen.
- * Kennt die Edge Function die Wochenplanung noch nicht, plant Kombi lokal nach Regeln.
+ * Zuerst Grundrezepte; nur wenn sie nicht reichen, plant die KI (bzw. Kombi lokal nach Regeln) den Rest –
+ * gegen den Vorrat, der danach noch frei ist.
  */
 export async function holeWoche(anfrage: KiAnfrage): Promise<Antwort> {
-  const r = await rufeKi({ ...anfrage, aufgabe: 'woche' });
+  const ziel = Math.max(1, Math.min(7, anfrage.anzahl));
+  const anbieter = grundrezeptAnbieter();
+  const fest = await erzeugeWoche(anbieter, { ...anfrage, anzahl: ziel, aufgabe: 'woche' });
+  for (const g of fest.gerichte) g.grundrezept = anbieter.herkunft.get(normalisiere(g.name));
+  if (fest.gerichte.length >= ziel) return { ergebnis: { ...fest, hinweis: null }, quelle: 'grundrezepte', hinweis: null };
+
+  // Rest improvisieren – gegen den Vorrat, der nach den Grundrezepten noch frei ist
+  let snapshot = anfrage.snapshot;
+  for (const g of fest.gerichte) snapshot = restSnapshot(snapshot, reservierungVon(g));
+  const rest = { ...anfrage, snapshot, anzahl: ziel - fest.gerichte.length, gesehen: [...anfrage.gesehen, ...fest.gerichte.map(kurz)], aufgabe: 'woche' as const };
+  const r = await rufeKi(rest);
+  let weitere: Ergebnis;
+  let quelle: Quelle;
+  let hinweis: string | null = null;
   if ('daten' in r && r.daten.aufgabe === 'woche' && Array.isArray(r.daten.gerichte)) {
-    return { ergebnis: r.daten as unknown as Ergebnis, quelle: 'ki', hinweis: null };
+    weitere = r.daten as unknown as Ergebnis;
+    quelle = 'ki';
+  } else {
+    hinweis = 'daten' in r ? ALTE_VERSION : r.hinweis;
+    weitere = await erzeugeWoche(regelbasiert(), rest);
+    quelle = 'demo';
   }
-  const hinweis = 'daten' in r ? ALTE_VERSION : r.hinweis;
-  return { ergebnis: await erzeugeWoche(regelbasiert(), { ...anfrage, aufgabe: 'woche' }), quelle: 'demo', hinweis };
+  return {
+    ergebnis: { ...weitere, gerichte: [...fest.gerichte, ...weitere.gerichte] },
+    quelle: fest.gerichte.length ? 'grundrezepte' : quelle,
+    hinweis,
+  };
 }
 
 export type KomponentenAntwort = { ergebnis: KomponentenErgebnis; quelle: Quelle; hinweis: string | null };
@@ -213,7 +270,6 @@ export async function starteSession(id: string, optionen: Optionen, kuehlschrank
     id,
     personen: optionen.personen,
     max_minuten: optionen.max_minuten,
-    guenstig: optionen.guenstig,
     kuehlschrank: kuehlschrank.trim() ? kuehlschrank.trim().slice(0, 1000) : null,
   });
   return !error;
@@ -244,8 +300,6 @@ export async function speichereRezept(g: Gericht, protokolliert: boolean, feedba
     schritte: r.schritte,
     bestandsarten: r.bestandsarten,
     tags: r.tags,
-    kosten_pro_portion_cent: r.kosten_pro_portion_cent,
-    kosten_status: r.kosten_status,
     feedback: r.feedback,
   });
   if (fehltMigration(error)) ({ error } = await supabase.from('rezept').insert(basis));
@@ -267,52 +321,45 @@ export async function ladeRezepte(): Promise<Rezept[]> {
   return (data as Rezept[]).map((r) => ({ ...r, daten: gespeichertesGericht(r.daten) }));
 }
 
+/** Kopie ohne die genannten Felder (z. B. Kostenangaben älterer Versionen). */
+function ohne<T extends object>(x: T, ...felder: string[]): T {
+  const kopie = { ...x } as Record<string, unknown>;
+  for (const f of felder) delete kopie[f];
+  return kopie as T;
+}
+
 /**
- * Ältere gespeicherte Rezepte (vor dem Baukasten) haben „bloecke“ statt Mengen und eine
- * einfachere Kostenangabe. Sie werden hier ins aktuelle Format gebracht – ohne etwas zu erfinden:
- * Unbekanntes bleibt unbekannt.
+ * Ältere gespeicherte Rezepte (vor dem Baukasten) haben „bloecke“ statt Mengen; ältere Versionen
+ * hatten außerdem Kostenangaben. Sie werden hier ins aktuelle Format gebracht – ohne etwas zu
+ * erfinden: Unbekanntes bleibt unbekannt, Kostenangaben fallen weg.
  */
 export function gespeichertesGericht(roh: Gericht): Gericht {
-  const alt = roh;
+  const alt = ohne(roh, 'kosten');
   const zutaten = (alt.zutaten ?? []).map((z) => {
     const a = z as Partial<typeof z> & { bloecke?: number | null };
     const menge = z.menge ?? a.bloecke ?? null;
     return {
-      ...z,
+      ...ohne(z, 'kosten_cent'),
       art: z.art ?? null,
       einheit: z.einheit ?? 'portion',
       menge,
       portionen: z.portionen ?? menge,
-      // Alte Rezepte: kosten_cent war der Preis pro Block → Wert = Blöcke × Preis (wie damals gerechnet).
-      kosten_cent: a.einheit !== undefined ? z.kosten_cent : a.kosten_cent != null && menge != null ? a.kosten_cent * menge : null,
       geoeffnet: z.geoeffnet ?? false,
       zusammensetzung: z.zusammensetzung ?? null,
     };
   });
-  const k = (alt.kosten ?? {}) as Partial<Gericht['kosten']> & { vollstaendig?: boolean };
-  const kosten: Gericht['kosten'] = k.status
-    ? (k as Gericht['kosten'])
-    : {
-        status: k.vollstaendig ? 'berechnet' : 'teilweise',
-        gesamt_cent: k.gesamt_cent ?? null,
-        pro_portion_cent: k.pro_portion_cent ?? null,
-        personen: k.personen ?? 2,
-        unbekannt: [],
-        einkauf_cent: null,
-        einkauf_unbekannt: [],
-      };
+  const altePersonen = (roh as Gericht & { kosten?: { personen?: number } }).kosten?.personen;
   return {
     ...alt,
     beschreibung: alt.beschreibung ?? '',
     gerichtsart: alt.gerichtsart ?? 'rezept',
     zutaten,
-    fehlt: (alt.fehlt ?? []).map((f) => ({ ...f, einheit: f.einheit ?? null, preis_bezug: f.preis_bezug ?? null })),
-    portionen: alt.portionen ?? kosten.personen,
+    fehlt: (alt.fehlt ?? []).map((f) => ({ ...ohne(f, 'preis_cent', 'preis_bezug'), einheit: f.einheit ?? null })),
+    portionen: alt.portionen ?? altePersonen ?? 2,
     rettet: alt.rettet ?? [],
     hinweise: alt.hinweise ?? [],
     warum_jetzt: alt.warum_jetzt ?? [],
     schritte: alt.schritte ?? [],
-    kosten,
     // ältere Vorschläge kennen keine Nährwerte – die App rechnet sie aus dem aktuellen Vorrat nach
     naehrwerte: alt.naehrwerte ?? UNBEKANNTE_NAEHRWERTE,
   };

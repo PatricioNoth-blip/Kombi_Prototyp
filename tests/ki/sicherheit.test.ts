@@ -76,7 +76,7 @@ describe('Rezept speichern', () => {
     const r = rezeptDatensatz(e.gerichte[0]);
     assert.equal(r.name, e.gerichte[0].name);
     assert.deepEqual(r.daten.zutaten, e.gerichte[0].zutaten);
-    assert.equal(typeof r.daten.kosten.pro_portion_cent, 'number');
+    assert.equal('kosten' in r.daten, false, 'keine Kosten im Rezept');
   });
 });
 

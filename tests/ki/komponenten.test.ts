@@ -1,4 +1,4 @@
-// Komponenten entdecken: Rolle, Zusammensetzung, Nutzbarkeit (Software), Kosten, fehlende Zutaten,
+// Komponenten entdecken: Rolle, Zusammensetzung, Nutzbarkeit (Software), fehlende Zutaten,
 // keine erfundenen Inhalte, Speichern erst nach Bestätigung. Plus: Kochansicht und Entnahme.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,16 +17,16 @@ import { anfrage, festerAnbieter, ids, OPTIONEN, SEED, snapshot, zeile } from '.
 
 const HAUSHALT = [
   ...SEED,
-  zeile(20, 'Gehackte Tomaten (Dose)', 'rot', 100, 79, 800, { art: 'zutat', einheit: 'g', portion_menge: 400, kosten_menge: 400, lagerort: 'vorrat', bald_ablaufen: true }),
-  zeile(21, 'Zwiebeln', 'gruen', 100, 99, 100, { art: 'zutat', einheit: 'g', portion_menge: 100, kosten_menge: 1000, lagerort: 'vorrat' }),
-  zeile(22, 'Tomaten-Basis', 'rot', 150, 228, 6, {
-    art: 'komponente', kosten_menge: 6, zusammensetzung: ['Tomaten', 'Zwiebeln', 'Knoblauch'], gerichtstypen: ['pasta', 'pizza', 'suppe'], richtung: 'italienisch',
+  zeile(20, 'Gehackte Tomaten (Dose)', 'rot', 100, 800, { art: 'zutat', einheit: 'g', portion_menge: 400, lagerort: 'vorrat', bald_ablaufen: true }),
+  zeile(21, 'Zwiebeln', 'gruen', 100, 100, { art: 'zutat', einheit: 'g', portion_menge: 100, lagerort: 'vorrat' }),
+  zeile(22, 'Tomaten-Basis', 'rot', 150, 6, {
+    art: 'komponente', zusammensetzung: ['Tomaten', 'Zwiebeln', 'Knoblauch'], gerichtstypen: ['pasta', 'pizza', 'suppe'], richtung: 'italienisch',
   }),
 ];
 const tomatenBasisRoh = () => ({
   name: 'Tomaten-Sugo', rolle: 'rot', richtung: 'italienisch', gerichtstypen: ['pasta', 'pizza', 'wrap', 'suppe', 'auflauf', 'eintopf'],
   verwendung: ['Pasta', 'Shakshuka'], beschreibung: 'Tomaten mit Zwiebeln und Knoblauch eingekocht.',
-  zutaten: [{ id: 'b20', menge: 800 }, { id: 'b21', menge: 150 }, { name: 'Knoblauch', menge: 10, einheit: 'g' }, { id: 'g-oel' }],
+  zutaten: [{ id: 'b20', menge: 800 }, { id: 'b21', menge: 150 }, { name: 'Oregano', menge: 5, einheit: 'g' }, { id: 'g-oel' }],
   portionen: 6, portion_g: 150, lagerort: 'gefrierfach',
 });
 
@@ -68,22 +68,17 @@ describe('Komponenten verstehen: Rolle, Zusammensetzung, Funktion', () => {
 });
 
 describe('Komponenten-Vorschläge prüfen', () => {
-  test('verwerten: Zutaten aus dem Vorrat mit Mengen, Rest wird eingekauft; Kosten nur aus bekannten Preisen', () => {
+  test('verwerten: Zutaten aus dem Vorrat mit Mengen, Rest wird eingekauft', () => {
     const k = pruefeKomponente(tomatenBasisRoh(), snapshot(HAUSHALT), 'k1');
     assert.ok(k);
     assert.deepEqual(k.zutaten.map((z) => [z.name, z.quelle, z.menge]), [
       ['Gehackte Tomaten (Dose)', 'bestand', 800],
       ['Zwiebeln', 'bestand', 100],          // nur 100 g da …
       ['Zwiebeln', 'einkauf', 50],           // … 50 g fehlen
-      ['Knoblauch', 'einkauf', 10],
+      ['Oregano', 'einkauf', 5],
       ['Öl', 'grundausstattung', null],
     ]);
-    // Herstellung: Tomaten 800 g × 0,79 €/400 g = 158 ct; Zwiebeln 150 g × 0,099 = 14,85 ct; Knoblauch unbekannt
-    assert.equal(k.kosten.status, 'teilweise');
-    assert.equal(k.kosten.gesamt_cent, 173);
-    assert.deepEqual(k.kosten.unbekannt, ['Knoblauch']);
-    // Einkauf in Packungen: Zwiebeln 1 × 1 kg = 0,99 €; Knoblauch unbekannt
-    assert.deepEqual([k.einkauf.gesamt_cent, k.einkauf.unbekannt], [99, ['Knoblauch']]);
+    assert.equal('kosten' in k, false, 'keine Kosten');
     assert.equal(k.typ, 'neu');
     assert.ok(k.verwertet.includes('Gehackte Tomaten (Dose)'), 'bald ablaufende Tomaten werden verwertet');
   });
@@ -143,18 +138,12 @@ describe('Komponente übernehmen – erst nach Bestätigung', () => {
     assert.deepEqual(aufrufe, [], 'die Engine hat keinen Datenbankzugriff');
     const sorte = komponenteAlsSorte(e.komponenten[0]);
     assert.deepEqual(
-      [sorte.art, sorte.farbe, sorte.herkunft, sorte.einheit, sorte.lagerort, sorte.kosten_cent, sorte.kosten_menge],
-      ['komponente', 'rot', 'selbstgemacht', 'portion', 'gefrierfach', null, 6],
-      'Preis nur, wenn vollständig berechnet',
+      [sorte.art, sorte.farbe, sorte.herkunft, sorte.einheit, sorte.lagerort],
+      ['komponente', 'rot', 'selbstgemacht', 'portion', 'gefrierfach'],
     );
-    assert.deepEqual(sorte.zusammensetzung, ['Gehackte Tomaten (Dose)', 'Zwiebeln', 'Knoblauch']);
+    assert.equal('kosten_cent' in sorte, false, 'kein Preis');
+    assert.deepEqual(sorte.zusammensetzung, ['Gehackte Tomaten (Dose)', 'Zwiebeln', 'Oregano']);
     assert.deepEqual(sorte.gerichtstypen, ['pasta', 'pizza', 'wrap', 'suppe', 'auflauf', 'eintopf']);
-  });
-
-  test('vollständig berechnete Herstellung → „X € für N Portionen“', () => {
-    const k = pruefeKomponente({ ...tomatenBasisRoh(), zutaten: [{ id: 'b20', menge: 800 }, { id: 'g-oel' }] }, snapshot(HAUSHALT), 'x')!;
-    assert.equal(k.kosten.status, 'berechnet');
-    assert.deepEqual([komponenteAlsSorte(k).kosten_cent, komponenteAlsSorte(k).kosten_menge], [158, 6]);
   });
 });
 

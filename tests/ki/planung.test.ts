@@ -100,8 +100,8 @@ describe('Resteverwertung', () => {
 
 describe('Auftauen', () => {
   const vorrat = (): VorratSorte[] => [
-    { id: 15, name: 'Lasagne-Portion', farbe: 'blau', art: 'komplettgericht', einheit: 'portion', portion_menge: 1, groesse_g: 350, anzahl: 6, abgelaufen: 0, kosten_cent: 85, kosten_menge: 1, mindestbestand: 2, lagerort: 'gefrierfach' },
-    { id: 30, name: 'Reis', farbe: 'gelb', art: 'zutat', einheit: 'g', portion_menge: 75, groesse_g: 75, anzahl: 500, abgelaufen: 0, kosten_cent: null, kosten_menge: 1, mindestbestand: 0, lagerort: 'vorrat' },
+    { id: 15, name: 'Lasagne-Portion', farbe: 'blau', art: 'komplettgericht', einheit: 'portion', portion_menge: 1, groesse_g: 350, anzahl: 6, abgelaufen: 0, mindestbestand: 2, lagerort: 'gefrierfach' },
+    { id: 30, name: 'Reis', farbe: 'gelb', art: 'zutat', einheit: 'g', portion_menge: 75, groesse_g: 75, anzahl: 500, abgelaufen: 0, mindestbestand: 0, lagerort: 'vorrat' },
   ];
   const plan = (id: string, datum: string) => ({
     id, art: 'mahlzeit' as const, titel: 'Lasagne-Abend', datum, erstellt_am: '2026-09-27T10:00:00Z',
@@ -192,7 +192,7 @@ describe('Rest-Snapshot', () => {
   });
 
   test('eine zusätzliche Sorte mit Menge taucht im Rest auf', () => {
-    const s = restSnapshot(snapshot([zeile(40, 'Reis', 'gelb', 75, 149, 500, { einheit: 'g', portion_menge: 75 })]), new Map([[40, 150]]));
+    const s = restSnapshot(snapshot([zeile(40, 'Reis', 'gelb', 75, 500, { einheit: 'g', portion_menge: 75 })]), new Map([[40, 150]]));
     assert.equal(s.zutaten.find((z) => z.name === 'Reis')?.anzahl, 350);
   });
 });

@@ -3,14 +3,14 @@
 // allgemeiner KI-Zugang missbraucht werden.
 import { naehrwertAus } from './naehrwerte.ts';
 import type {
-  Aktion, FeedbackEintrag, GerichtKurz, KiAnfrage, Modus, Optionen, PreisInfo, Snapshot, SnapshotZutat,
+  Aktion, FeedbackEintrag, GerichtKurz, KiAnfrage, Modus, Optionen, Snapshot, SnapshotZutat,
 } from './typen.ts';
 import { ARTEN, EINHEITEN } from './typen.ts';
 import { normalisiereEigenschaften } from './validierung.ts';
 import { saubereGerichtstypen, saubereRichtung, saubereZusammensetzung } from './snapshot.ts';
 import { kuerze } from './text.ts';
 
-const GRENZEN = { zutaten: 300, preise: 300, gesehen: 60, feedback: 120, favoriten: 10, anzahl: 5, woche: 7 };
+const GRENZEN = { zutaten: 300, gesehen: 60, feedback: 120, favoriten: 10, anzahl: 5, woche: 7 };
 const AUFGABEN = ['gerichte', 'komponenten', 'woche'] as const;
 const MAX_MENGE = 1_000_000;
 const QUELLEN = ['bestand', 'kuehlschrank', 'grundausstattung'] as const;
@@ -48,8 +48,6 @@ function zutat(x: unknown): SnapshotZutat | null {
     anzahl: zahlOderNull(z.anzahl, 0, MAX_MENGE),
     portion_menge: einheit === 'portion' ? 1 : zahlOderNull(z.portion_menge, 1, MAX_MENGE) ?? 1,
     groesse_g: zahlOderNull(z.groesse_g, 1, 100000),
-    kosten_cent: zahlOderNull(z.kosten_cent, 0, 1_000_000),
-    kosten_menge: zahlOderNull(z.kosten_menge, 1, MAX_MENGE) ?? 1,
     zusammensetzung: saubereZusammensetzung(z.zusammensetzung),
     notiz: kuerze(z.notiz, 200) || null,
     bald_verbrauchen: z.bald_verbrauchen === true,
@@ -78,21 +76,6 @@ function naehrwertVon(x: unknown, einheit: SnapshotZutat['einheit']): SnapshotZu
     naehrwert_menge: zahlOderNull(n.menge, 1, MAX_MENGE) }, einheit);
 }
 
-function preis(x: unknown): PreisInfo | null {
-  const p = x as Record<string, unknown>;
-  const name = kuerze(p?.name, 80);
-  const kosten = zahlOderNull(p?.kosten_cent, 0, 1_000_000);
-  if (!name || kosten === null) return null;
-  const einheit = eins(p.einheit, EINHEITEN) ?? 'portion';
-  return {
-    name,
-    kosten_cent: kosten,
-    kosten_menge: zahlOderNull(p.kosten_menge, 1, MAX_MENGE) ?? 1,
-    einheit,
-    portion_menge: einheit === 'portion' ? 1 : zahlOderNull(p.portion_menge, 1, MAX_MENGE) ?? 1,
-  };
-}
-
 function gerichtKurz(x: unknown): GerichtKurz | null {
   const g = x as Record<string, unknown>;
   const name = kuerze(g?.name, 80);
@@ -113,7 +96,6 @@ export function pruefeAnfrage(roh: unknown): KiAnfrage {
   const snapshot: Snapshot = {
     datum: kuerze(s.datum, 30),
     zutaten: liste(s.zutaten, GRENZEN.zutaten).map(zutat).filter((z): z is SnapshotZutat => z !== null),
-    preise: liste(s.preise, GRENZEN.preise).map(preis).filter((p): p is PreisInfo => p !== null),
     abgelaufen: liste(s.abgelaufen, 50)
       .map((x) => x as Record<string, unknown>)
       .map((x) => ({ name: kuerze(x?.name, 80), menge: zahlOderNull(x?.menge, 1, MAX_MENGE), einheit: eins(x?.einheit, EINHEITEN) ?? 'portion' }))
@@ -124,7 +106,6 @@ export function pruefeAnfrage(roh: unknown): KiAnfrage {
   const optionen: Optionen = {
     personen: zahlOderNull(o.personen, 1, 12) ?? 2,
     max_minuten: zahlOderNull(o.max_minuten, 5, 240),
-    guenstig: o.guenstig !== false,
   };
 
   const gesehen = liste(a.gesehen, GRENZEN.gesehen).map(gerichtKurz).filter((g): g is GerichtKurz => g !== null);

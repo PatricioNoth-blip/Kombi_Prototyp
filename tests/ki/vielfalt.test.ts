@@ -108,7 +108,7 @@ describe('„Gerade etwas anderes“ ist keine Ablehnung', () => {
 describe('Priorität beim Verbrauchen – mit Augenmaß', () => {
   const basis: GerichtZutat = {
     id: 'b1', name: 'x', quelle: 'bestand', farbe: 'rot', art: 'zutat', einheit: 'portion', menge: 1, portionen: 1,
-    kosten_cent: 10, bald_verbrauchen: false, geoeffnet: false, zusammensetzung: null, block_typ_id: 1,
+    bald_verbrauchen: false, geoeffnet: false, zusammensetzung: null, block_typ_id: 1,
   };
 
   test('geöffnet > bald ablaufend > Rest > Komplettgericht > Komponente > Vorrat', () => {

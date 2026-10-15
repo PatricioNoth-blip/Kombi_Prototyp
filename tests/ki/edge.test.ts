@@ -63,7 +63,7 @@ describe('Edge Function was-essen', () => {
     assert.ok(!kiAufrufe[0].body.includes('geheim'));
     assert.deepEqual(e.gerichte.map((g: { name: string }) => g.name), ['Linsen-Pizza-Wrap']);
     assert.equal(e.verworfen[0].name, 'Lachs-Traum', 'erfundene Zutaten → verworfen');
-    assert.equal(e.gerichte[0].kosten.gesamt_cent, 8 + 12, 'Kosten aus Bestandspreisen');
+    assert.equal('kosten' in e.gerichte[0], false, 'keine Kosten');
   });
 
   test('kaputte oder zu große Anfragen → 400', async () => {

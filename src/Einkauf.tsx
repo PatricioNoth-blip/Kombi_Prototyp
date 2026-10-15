@@ -4,14 +4,13 @@ import {
   findeSorte, kategorieFuer, leseEingabe, mangelVorschlaege,
   type Einkaufsliste, type Einkaufszeile, type Quelle, type VorratSorte,
 } from '../supabase/functions/_shared/kombi/einkaufsliste.ts';
-import { euroText } from '../supabase/functions/_shared/kombi/kosten.ts';
 import { fehlerText, type Sorte } from './api';
 import { eintragAendern, eintragHinzufuegen, einkaufBuchen, einkaufRueckgaengig, zeilenStatus } from './haushalt';
 import { Blatt } from './Blatt';
 import { SorteFormular } from './Sorten';
 import { Icon } from './Icon';
 import { Bild } from './Bild';
-import { euroZuCent, heuteIso, mengeText } from './format';
+import { heuteIso, mengeText } from './format';
 import { lagerort as lagerInfo } from './farben';
 
 const lagerortName = (l: VorratSorte['lagerort']) => lagerInfo(l).name;
@@ -127,7 +126,6 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, onMeldung,
               <span className="zeile-titel">{z.name}</span>
               <span className="zeile-meta">{mengeZeile(z)}{gruende.length ? ` · ${gruende.join(', ')}` : ''}</span>
             </span>
-            {!gekauft && <span className="zeile-wert">{z.preis ? euroText(z.preis.cent) : ''}</span>}
           </button>
           {gekauft && (
             <button type="button" className="knopf klein akzent" onClick={() => setUebernahme(z)}>
@@ -147,15 +145,11 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, onMeldung,
     </section>
   );
 
-  const k = liste.kosten;
-  const summe = k.status === 'leer' ? '' : k.bekannt_cent === null ? 'Preis unbekannt'
-    : k.unbekannt > 0 ? `ab ${euroText(k.bekannt_cent)} · ${k.unbekannt} ohne Preis` : `≈ ${euroText(k.bekannt_cent)}`;
 
   return (
     <div className="einkauf">
       <div className="einkauf-kopf">
         <strong>{offenZ.length === 0 ? 'Alles erledigt' : `${offenZ.length} ${offenZ.length === 1 ? 'Ding' : 'Dinge'} zu kaufen`}</strong>
-        {summe && <span>{summe}</span>}
       </div>
 
       <form className="einkauf-eingabe" onSubmit={hinzufuegen}>
@@ -175,7 +169,7 @@ export function Einkauf({ liste, sorten, bestand, baukasten, planung, onMeldung,
 
       {gruppe('Zum Einkaufen', heute)}
       {gruppe('Für geplante Gerichte', geplant)}
-      {gruppe('Im Wagen', wagen, '„Einbuchen“ heißt: in den Vorrat aufnehmen – mit der tatsächlich gekauften Menge und dem Preis. Abhaken allein ändert den Vorrat nicht.')}
+      {gruppe('Im Wagen', wagen, '„Einbuchen“ heißt: in den Vorrat aufnehmen – mit der tatsächlich gekauften Menge. Abhaken allein ändert den Vorrat nicht.')}
 
       {mangel.length > 0 && (
         <section className="abschnitt" aria-label="Fast leer oder aufgebraucht">
@@ -331,15 +325,6 @@ function ZeileBlatt({ z, frei, onMeldung, onGeaendert, onSchliessen }: {
       </section>
 
       <section>
-        <h3 className="unterkopf">Preis</h3>
-        {z.preis ? (
-          <p className="klein"><strong>{euroText(z.preis.cent)}</strong> für {z.preis.text} – ganze Packungen nach eurem gespeicherten Preis.</p>
-        ) : (
-          <p className="leise klein">Preis unbekannt{z.sorte ? ' – bei der Sorte eintragen oder beim Einbuchen angeben.' : '.'}</p>
-        )}
-      </section>
-
-      <section>
         <h3 className="unterkopf">{einEintrag ? 'Menge ändern' : 'Mehr kaufen'}</h3>
         <form className="eigene-anzahl" onSubmit={mengeSpeichern}>
           <input type="number" inputMode="numeric" min={1} step={1} value={menge} onChange={(e) => setMenge(e.target.value)}
@@ -377,37 +362,24 @@ function UebernahmeBlatt({ z, bestand, sorten, baukasten, planung, onGebucht, on
   const sorte = sorten.find((s) => s.id === sorteId) ?? null;
   const [menge, setMenge] = useState(z.menge !== null && !z.menge_offen && z.sorte ? String(z.menge) : '');
   const [ablauf, setAblauf] = useState('');
-  const [preis, setPreis] = useState('');
   const [neu, setNeu] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [laeuft, setLaeuft] = useState(false);
 
   const zahl = Number(menge);
   const einheit = sorte?.einheit ?? 'stueck';
-  const preisCent = euroZuCent(preis);
-  const stueckpreis = (() => {
-    if (preisCent === null || Number.isNaN(preisCent) || !Number.isInteger(zahl) || zahl < 1) return null;
-    const bezug = einheit === 'g' || einheit === 'ml' ? Math.min(100, zahl) : 1;
-    return { cent: Math.round((preisCent * bezug) / zahl), bezug };
-  })();
   const einheitKurz = einheit === 'stueck' ? 'Stück' : einheit === 'portion' ? 'Portionen' : einheit;
-  const packung = sorte && sorte.kosten_menge > 1 ? sorte.kosten_menge : null;
-  const vorschlaege = [...new Set([
-    ...(z.menge !== null && z.sorte && sorte && z.sorte.id === sorte.id ? [z.menge] : []),
-    ...(packung ? [packung, packung * 2] : []),
-  ])].filter((n) => n > 0).sort((a, b) => a - b);
+  const vorschlaege = z.menge !== null && z.menge > 0 && z.sorte && sorte && z.sorte.id === sorte.id ? [z.menge] : [];
 
   async function buchen(e: FormEvent) {
     e.preventDefault();
     if (!sorte) return setFehler('Bitte wählen, in welche Sorte es kommt.');
     if (!Number.isInteger(zahl) || zahl < 1) return setFehler(`Bitte die gekaufte Menge in ${einheitKurz} eingeben.`);
-    const cent = euroZuCent(preis);
-    if (Number.isNaN(cent)) return setFehler('Preis: z. B. 1,29 eingeben – oder leer lassen.');
     setFehler(null);
     setLaeuft(true);
     try {
       const id = await einkaufBuchen({
-        schluessel: z.schluessel, einheit: z.einheit_schluessel, block_typ_id: sorte.id, menge: zahl, ablauf_am: ablauf || null, preis_cent: cent,
+        schluessel: z.schluessel, einheit: z.einheit_schluessel, block_typ_id: sorte.id, menge: zahl, ablauf_am: ablauf || null,
       });
       onGebucht(`+${mengeText(zahl, einheit)} ${sorte.name} im Vorrat.`, () => einkaufRueckgaengig(id));
     } catch (err) {
@@ -454,7 +426,7 @@ function UebernahmeBlatt({ z, bestand, sorten, baukasten, planung, onGebucht, on
             <div className="chips">
               {vorschlaege.map((n) => (
                 <button key={n} type="button" className={`chip${zahl === n ? ' gewaehlt' : ''}`} onClick={() => setMenge(String(n))}>
-                  {mengeText(n, einheit)}{packung && n % packung === 0 ? ` (${n / packung} ${n / packung === 1 ? 'Packung' : 'Packungen'})` : ''}
+                  {mengeText(n, einheit)}
                 </button>
               ))}
             </div>
@@ -466,20 +438,11 @@ function UebernahmeBlatt({ z, bestand, sorten, baukasten, planung, onGebucht, on
           <small>Weniger oder mehr gekauft als geplant? Einfach die echte Menge eintragen – der Rest bleibt auf der Liste.</small>
         </fieldset>
 
-        <div className="reihe">
-          <label className="feld">
-            <span>Haltbar bis (optional)</span>
-            <input type="date" value={ablauf} min={heuteIso()} onChange={(e) => setAblauf(e.target.value)} />
-          </label>
-          <label className="feld">
-            <span>Bezahlt (optional)</span>
-            <input type="text" inputMode="decimal" value={preis} onChange={(e) => setPreis(e.target.value)} placeholder="z. B. 1,29" aria-label="Bezahlter Preis in Euro" />
-          </label>
-        </div>
+        <label className="feld">
+          <span>Haltbar bis (optional)</span>
+          <input type="date" value={ablauf} min={heuteIso()} onChange={(e) => setAblauf(e.target.value)} />
+        </label>
         {sorte && <small>Kommt in: {lagerortName(sorte.lagerort)}</small>}
-        {sorte && stueckpreis !== null && (
-          <small>= {euroText(stueckpreis.cent)} je {mengeText(stueckpreis.bezug, einheit)} · wird der neue Preis von {sorte.name}</small>
-        )}
 
         {fehler && <p className="fehlertext">{fehler}</p>}
         <button type="submit" className="knopf haupt" disabled={laeuft || (sorteId !== null && !sorte)}>

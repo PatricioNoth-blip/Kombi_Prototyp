@@ -1,4 +1,4 @@
-// Notfall-Einkauf und Multi-Use-Zutaten, Abwägung Kosten vs. Nutzen.
+// Notfall-Einkauf und Multi-Use-Zutaten, Abwägung beim Bewerten.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { erzeugeVorschlaege } from '../../supabase/functions/_shared/kombi/engine.ts';
@@ -28,16 +28,10 @@ describe('Notfall-Einkauf', () => {
     assert.equal(e.einkauf, null);
   });
 
-  test('Preis nur aus Daten: bekannter Preis einer leeren Sorte, sonst „unbekannt“ statt geschätzt', () => {
-    const ohneSattmacher = snapshot(nurFarben('braun', 'rot', 'weiss'), '');
-    const unbekannt = waehleMultiUse(ohneSattmacher, 'x');
-    assert.equal(unbekannt.preis_cent, null);
-
-    const mitPreis = snapshot([...nurFarben('braun', 'rot', 'weiss'),
-      { id: 99, name: 'Reis', farbe: 'gelb', anzahl: 0, bald_ablaufen: false, groesse_g: 125, kosten_cent: 9, lagerort: 'vorrat' }], '');
-    const e = waehleMultiUse(mitPreis, 'x');
-    assert.equal(e.name, 'Reis');
-    assert.equal(e.preis_cent, 9);
+  test('Einkaufsvorschlag ohne Preis – Kombi rechnet nicht mit Geld', () => {
+    const e = waehleMultiUse(snapshot(nurFarben('braun', 'rot', 'weiss'), ''), 'x');
+    assert.equal('preis_cent' in e, false);
+    assert.ok(e.gruende.every((g) => !/€|preis/i.test(g)), JSON.stringify(e.gruende));
   });
 
   test('KI-Einkauf wird geprüft: zu wenig Nutzen → eigener Multi-Use-Vorschlag', async () => {
@@ -48,13 +42,13 @@ describe('Notfall-Einkauf', () => {
     assert.ok(MULTI_USE.some((m) => m.name === e.einkauf?.name));
   });
 
-  test('KI-Einkauf mit vielen Möglichkeiten wird übernommen – ohne erfundenen Preis', () => {
+  test('KI-Einkauf mit vielen Möglichkeiten wird übernommen – ohne Preisangabe der KI', () => {
     const e = pruefeEinkauf(
       { name: 'Gehackte Tomaten', ermoeglicht: ['Chili', 'Curry', 'Suppe', 'Pizza', 'Ragù', 'Shakshuka'], begruendung: 'kostet 0,49 €' },
       snapshot(nurFarben('weiss'), ''), 'x',
     );
     assert.ok(e);
-    assert.equal(e.preis_cent, null);
+    assert.doesNotMatch(e.begruendung, /€/);
     assert.equal(e.ermoeglicht.length, 6);
   });
 });
@@ -81,41 +75,29 @@ describe('Multi-Use-Zutaten', () => {
   });
 });
 
-describe('Abwägung statt „immer das Billigste“', () => {
-  test('ein etwas teureres Gericht, das bald Ablaufendes und mehr Bausteine nutzt, gewinnt', () => {
+describe('Abwägung statt „immer das Einfachste“', () => {
+  test('ein Gericht, das bald Ablaufendes und mehr Bausteine nutzt, gewinnt', () => {
     const bestand = SEED.map((z) => (z.name === 'TK-Spinat' || z.name === 'Kichererbsen' ? { ...z, bald_ablaufen: true } : z));
     const snap = snapshot(bestand, '');
-    const billig = pruefeGericht({ name: 'Linsen pur', zutaten: [{ id: 'b3', bloecke: 2 }, { id: 'b9', bloecke: 2 }], zeit_min: 10,
+    const schlicht = pruefeGericht({ name: 'Linsen pur', zutaten: [{ id: 'b3', bloecke: 2 }, { id: 'b9', bloecke: 2 }], zeit_min: 10,
       eigenschaften: { gerichtstyp: 'wrap', sattmacher: 'wrap', hauptzutat: 'linsen' } }, snap, OPTIONEN, 'a');
     const kreativ = pruefeGericht({ name: 'Kichererbsen-Spinat-Curry-Wrap', zeit_min: 12,
       zutaten: [{ id: 'b4', bloecke: 2 }, { id: 'b7', bloecke: 2 }, { id: 'b2', bloecke: 2 }, { id: 'b9', bloecke: 2 }, { id: 'b11', bloecke: 1 }],
       eigenschaften: { gerichtstyp: 'wrap', sattmacher: 'wrap', hauptzutat: 'kichererbsen' } }, snap, OPTIONEN, 'b');
-    assert.ok(billig.ok && kreativ.ok);
-    assert.ok(billig.wert.kosten.pro_portion_cent < kreativ.wert.kosten.pro_portion_cent, 'Linsen sind billiger');
+    assert.ok(schlicht.ok && kreativ.ok);
     const l = berechneLeitplanken([], { art: 'normal' });
-    assert.ok(bewerte(kreativ.wert, OPTIONEN, [], l) > bewerte(billig.wert, OPTIONEN, [], l));
+    assert.ok(bewerte(kreativ.wert, OPTIONEN, [], l) > bewerte(schlicht.wert, OPTIONEN, [], l));
   });
 });
 
 describe('Notfall-Einkauf: von der Software bewertet und begründet', () => {
-  test('Gründe kommen aus Daten: passt zu Vorhandenem, Haltbarkeit, Lagerung, Preis unbekannt', () => {
+  test('Gründe kommen aus Daten: passt zu Vorhandenem, Haltbarkeit, Lagerung', () => {
     const e = waehleMultiUse(snapshot(nurFarben('braun', 'rot', 'weiss'), ''), 'x');
     assert.ok(['Reis', 'Pasta'].includes(e.name), e.name);
     assert.ok(e.gruende.some((g) => /Lücke/.test(g)), 'füllt die Sattmacher-Lücke');
     assert.ok(e.gruende.some((g) => /^Passt zu \d+ Sachen, die schon da sind: /.test(g)));
     assert.ok(e.gruende.some((g) => /haltbar, ohne Kühlung lagerbar/.test(g)));
-    assert.ok(e.gruende.includes('Preis unbekannt.'));
     assert.match(e.heute ?? '', new RegExp(`^${e.name} \\+ `), 'konkrete Kombination mit dem Bestand');
-  });
-
-  test('bekannter Preis wird mit Bezug genannt – aus dem Bestand, nicht geschätzt', () => {
-    const mitPreis = snapshot([...nurFarben('braun', 'rot', 'weiss'),
-      { id: 99, name: 'Reis', farbe: 'gelb', anzahl: 0, bald_ablaufen: false, groesse_g: 75, kosten_cent: 149, lagerort: 'vorrat', einheit: 'g', portion_menge: 75, kosten_menge: 1000 }], '');
-    const e = waehleMultiUse(mitPreis, 'x');
-    assert.equal(e.name, 'Reis');
-    assert.equal(e.preis_cent, 149);
-    assert.equal(e.preis_bezug, 'für 1 kg');
-    assert.ok(e.gruende.includes('Zuletzt 1,49 € für 1 kg.'));
   });
 
   test('Kombinierbarkeit zählt: mit Linsen und Soße im Bestand gewinnt ein Sattmacher', () => {
@@ -126,7 +108,7 @@ describe('Notfall-Einkauf: von der Software bewertet und begründet', () => {
 });
 
 describe('Neue Bausteine: sauber definiert, erst nach „übernehmen“ gespeichert', () => {
-  test('Art, Farbe, Lagerort, Portionen, Zutaten; Kosten nur aus bekannten Preisen', () => {
+  test('Art, Farbe, Lagerort, Portionen, Zutaten – Preisangaben der KI werden entfernt', () => {
     const b = pruefeBaustein({
       name: 'Tomaten-Linsen-Basis', art: 'komponente', farbe: 'rot', lagerort: 'gefrierfach', portionen: 6, portion_g: 150,
       zutaten: [{ id: 'b3', portionen: 3 }, { id: 'b1', portionen: 2 }, { name: 'Zwiebeln' }],
@@ -135,11 +117,7 @@ describe('Neue Bausteine: sauber definiert, erst nach „übernehmen“ gespeich
     assert.ok(b);
     assert.deepEqual([b.bestandsart, b.farbe, b.lagerort, b.portionen, b.portion_g], ['komponente', 'rot', 'gefrierfach', 6, 150]);
     assert.deepEqual(b.zutaten, ['Linsen gekocht', 'Tomatensoße', 'Zwiebeln']);
-    // Linsen 3 × 8 + Soße 2 × 17 = 58 ct bekannt, Zwiebeln unbekannt → teilweise, pro Portion ab 10 ct
-    assert.equal(b.kosten.status, 'teilweise');
-    assert.equal(b.kosten.gesamt_cent, 58);
-    assert.equal(b.kosten.pro_portion_cent, 10);
-    assert.deepEqual(b.kosten.unbekannt, ['Zwiebeln']);
+    assert.equal('kosten' in b, false);
     assert.equal(b.begruendung, 'Vielseitig.', 'Preis der KI entfernt');
   });
 

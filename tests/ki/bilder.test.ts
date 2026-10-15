@@ -18,10 +18,10 @@ const JETZT = '2026-09-28T12:00:00.000Z';
 
 /** Haushalt mit normalen Zutaten: Tomate, Gurke, Joghurt, Brot */
 const FRISCH = [
-  zeile(31, 'REWE Strauchtomaten 500 g', 'gruen', 100, 199, 500, { art: 'zutat', einheit: 'g', portion_menge: 100, kosten_menge: 500, lagerort: 'kuehlschrank' }),
-  zeile(32, 'Salatgurke', 'gruen', 300, 69, 1, { art: 'zutat', einheit: 'stueck', lagerort: 'kuehlschrank' }),
-  zeile(33, 'Griechischer Joghurt 10%', 'schwarz', 100, 149, 500, { art: 'zutat', einheit: 'g', portion_menge: 100, kosten_menge: 500, lagerort: 'kuehlschrank' }),
-  zeile(34, 'Fladenbrot', 'gelb', 100, 129, 2, { art: 'zutat', einheit: 'stueck', lagerort: 'vorrat' }),
+  zeile(31, 'REWE Strauchtomaten 500 g', 'gruen', 100, 500, { art: 'zutat', einheit: 'g', portion_menge: 100, lagerort: 'kuehlschrank' }),
+  zeile(32, 'Salatgurke', 'gruen', 300, 1, { art: 'zutat', einheit: 'stueck', lagerort: 'kuehlschrank' }),
+  zeile(33, 'Griechischer Joghurt 10%', 'schwarz', 100, 500, { art: 'zutat', einheit: 'g', portion_menge: 100, lagerort: 'kuehlschrank' }),
+  zeile(34, 'Fladenbrot', 'gelb', 100, 2, { art: 'zutat', einheit: 'stueck', lagerort: 'vorrat' }),
 ];
 
 function bowl(image_request?: unknown): Gericht {
