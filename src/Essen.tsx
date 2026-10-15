@@ -295,8 +295,12 @@ export function Essen({
         setMuster(l.muster);
       }
       if (aktion === 'skip') {
-        // „Gerade etwas anderes“: sehr Ähnliches aus dem Puffer zurückstellen – ohne etwas zu lernen.
-        s.puffer = s.puffer.filter((p) => aehnlichkeit(kurz(p), kurz(g)) < 0.5);
+        // „Gerade etwas anderes“: sehr Ähnliches zurückstellen – ohne etwas zu lernen. Grundrezepte nur nach
+        // hinten schieben: Jedes mögliche Grundrezept kommt dran, bevor improvisiert wird.
+        const aehnlich = (p: Gericht) => aehnlichkeit(kurz(p), kurz(g)) >= 0.5;
+        s.puffer = s.phase === 'grundrezepte'
+          ? [...s.puffer.filter((p) => !aehnlich(p)), ...s.puffer.filter(aehnlich)]
+          : s.puffer.filter((p) => !aehnlich(p));
       }
       if (!zeigeNaechstes(s)) void anfordern(s, s.grundmodus, s.phase === 'grundrezepte' ? ALLE_GEZEIGT : null);
     };
