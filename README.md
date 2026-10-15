@@ -277,7 +277,15 @@ Ohne Einrichtung läuft „Was essen wir?“ im **Demo-Modus**: Vorschläge nach
    Falls eine Meldung zu Docker kommt: an den deploy-Befehl `--use-api` anhängen.
 3. Fertig. Unter der Karte steht dann „Ideen von der KI (…)“ statt „Demo ohne KI“.
 
-**Nach einem Update der Kombi-Engine** (z. B. diesem) die Edge Function neu deployen, sonst läuft auf Supabase noch die alte Prüflogik:
+**Automatisch deployen (empfohlen):** Der Workflow „KI-Funktion deployen (Supabase)“ (`.github/workflows/edge-function.yml`)
+deployt `was-essen`, sobald sich `supabase/functions/` auf `main` ändert, und prüft danach, ob Supabase die neue Version
+ausliefert. Einmalig einrichten:
+1. In Supabase oben rechts aufs Profil → **Account preferences → Access Tokens → Generate new token** (Name z. B. „GitHub“), Token kopieren.
+2. In GitHub im Repository **Settings → Secrets and variables → Actions → New repository secret**: Name `SUPABASE_ACCESS_TOKEN`, Wert = Token.
+3. **Actions → „KI-Funktion deployen (Supabase)“ → Run workflow** – danach läuft es bei jedem Merge von selbst.
+
+Ohne das Secret deployt der Workflow nichts (nur ein Hinweis). **Von Hand** geht es weiterhin so – nach einem Update der
+Kombi-Engine neu deployen, sonst läuft auf Supabase noch die alte Prüflogik:
 ```
 npx.cmd supabase functions deploy was-essen --project-ref yjjgfdvpqmclocgejrhz --no-verify-jwt
 ```
