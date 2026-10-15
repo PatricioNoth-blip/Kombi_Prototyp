@@ -163,7 +163,7 @@ export function SorteBlatt({
           {art.id === 'komplettgericht' && <p className="abschnitt-fuss">Wird als Ganzes gegessen – entnommen werden ganze Portionen.</p>}
         </section>
       ) : (
-        <p className="leise abstand-oben">Aufgebraucht – gerade ist nichts davon im Vorrat. Über „Einbuchen“ kommt wieder etwas dazu.</p>
+        <p className="leise abstand-oben">Gerade ist nichts davon da. Über „Einbuchen“ trägst du ein, wie viel du hast.</p>
       )}
 
       {/* Ebene 2: was man damit machen kann */}

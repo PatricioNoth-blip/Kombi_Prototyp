@@ -223,6 +223,8 @@ export function Essen({
     try {
       // Nur der freie Vorrat: was für geplante Mahlzeiten reserviert ist, wird nicht noch einmal verplant.
       const snapshot = restSnapshot(await ladeSnapshot(kuehlschrank, { alleReste: grundmodus.art === 'reste' }), reserviert);
+      // Frisch geladen – die Übersicht (direkt kochbar / es fehlt etwas) zieht nach, damit beides passt.
+      onGeaendert();
       const id = uuid();
       const gespeichert = await starteSession(id, optionen, kuehlschrank).catch(() => false);
       const s: Session = {

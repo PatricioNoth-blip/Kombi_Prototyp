@@ -36,8 +36,12 @@ Ansicht hat eine Adresse (z. B. `#/vorrat/gefrierfach`), „Zurück“ funktioni
   Fertig**, Zutaten jederzeit einblendbar, Display bleibt an) bis zu „Guten Appetit!“ mit dem, was im Vorrat bleibt – und
   Rückgängig.
 - **📦 Vorrat:** Suche, „Dein Vorrat · 16 Artikel“ mit **einer** Zeile zur Lage („2 bald verbrauchen · 1 wird knapp ·
-  1 aufgebraucht“), „Jetzt wichtig“, Lagerorte als Fotokarten, „Wichtigste Vorräte“ mit
-  Zustand, alle Sorten. **„Wird knapp“** (noch etwas da, aber unter dem Mindestbestand) und **„aufgebraucht“** (nichts mehr da)
+  1 aufgebraucht“), „Jetzt wichtig“, **„Wo liegt was?“** (Lagerorte als Fotokarten, „6 von 18 da“) und **„Deine
+  Bausteine“**: die Obergruppen Basis & Soßen, Protein, Gemüse, Sattmacher, Fertiggerichte, Gewürze & Extras als Fotokarten
+  mit „4 von 13 da“, Füllbalken und den ersten Namen. Im Lagerort, in einer Gruppe und unter „Alle Sorten“ steht alles nach
+  diesen Gruppen geordnet; Sorten ohne Bestand stehen darunter als kleine Knöpfe („Gerade nicht da – antippen zum
+  Einbuchen“), damit z. B. Reis und Nudeln auch mit Menge 0 sofort zu finden sind. Die Suche kennt gleichbedeutende
+  Namen („Pasta“ findet Nudeln, „Basmati“ findet Reis). **„Wird knapp“** (noch etwas da, aber unter dem Mindestbestand) und **„aufgebraucht“** (nichts mehr da)
   sind getrennte Zustände mit eigener Farbe. Eine Sorte im Detail: Menge und Zustand, Entnehmen, Damit möglich, Passt dazu,
   Auftauen – und unter „Details“ Haltbarkeit, Nährwerte, Zusammensetzung, Nutzung, Chargen. Findet die Suche nichts,
   gibt es „Suche leeren“ und „Etwas Neues eintragen“.
@@ -378,7 +382,7 @@ npm run test:ki     # nur „Was essen wir?“ – läuft überall, auch unter W
 npm run test:db     # nur Datenbank
 ```
 
-Die 283 Tests in `tests/ki/` laufen ohne KI und ohne Gebühren, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
+Die 286 Tests in `tests/ki/` laufen ohne KI und ohne Gebühren, mit einem regelbasierten Anbieter und KI-Attrappen. Sie prüfen unter anderem:
 - Grundbausteine und Grundrezepte: Erkennen des Grundvorrats (trocken ≠ gekocht, nie Fleisch), 25 Rezepte mit vollem Grundvorrat alle kochbar und geprüft, Mengen je Personenzahl in der Einheit der Sorte, „fehlt“ mit Menge und „zu wenig“, Zwiebeln/Möhren/Knoblauch immer da, zusätzlich genannte Zutaten nie abgebucht, Basis ersetzt Linsen und Tomaten, Gemüse ab der Hälfte, Extras optional, Pizza nur wenn da, Reihenfolge (Dringendes zuerst, Gesehenes raus, Reste), Woche ohne Doppelreservierung
 - Bilder: nur sichere https-URLs, keine Hotlinks, Priorität eigen → gefunden → generiert → lokal → keins, kaputte Quelle (Status „fehler“) und fehlendes Bild → Fallback, Bildanforderung der KI (übernommen / „steak“ verworfen / URL verworfen / fehlt), Beschreibung nur aus Rezeptdaten, unbekannte Pizza bleibt Pizza, Commons-Auswertung (Lizenz, Motiv, fremde Zutaten, Pflanze statt Lebensmittel), Pipeline gefunden/generiert/nichts/offline, Keys nie im Ergebnis, jede App-Anfrage besteht die Prüfung der Function
 - Semantische Zutaten: „REWE Strauchtomaten 500 g“ → Tomate, Spezielles vor Allgemeinem, Unbekanntes bleibt unbekannt
@@ -398,7 +402,7 @@ Die 283 Tests in `tests/ki/` laufen ohne KI und ohne Gebühren, mit einem regelb
 - Einkaufsliste: Zusammenführen, Verrechnen mit dem Vorrat, reservierte Mengen, tatsächlich gekaufte Menge, Zeilenstatus, Mangel
 - Woche ohne Doppelreservierung, geplante Mahlzeit entfernen, Resteverwertung (auch „nichts Sinnvolles möglich“), Auftau-Regeln, Batch-Cooking nur aus echten Daten
 - Kalorien: Summe aus echten Mengen, je Portion, unbekannt ≠ 0, teilweise („ab …“), Makros nur wenn vollständig, KI-Angaben ignoriert; Produktion skalieren (vorhanden / benötigt / fehlt)
-- Oberfläche ohne Browser: fünf Bereiche, Zustand beim Wechsel, Adressen und Zurück, Start immer zuerst; Startseite: Vorschlag vor allen Kennzahlen, Geplantes zuerst, nichts doppelt, Produktionszeile aus denselben Daten wie die Produktion; heute gekocht; „wird knapp“ ≠ „aufgebraucht“ ≠ „bald verbrauchen“ mit denselben Zahlen in Start, Vorrat, Produktion; gemerkte Rezepte ohne Doppelte; Lagerorte, Füllstand, Suche
+- Oberfläche ohne Browser: fünf Bereiche, Zustand beim Wechsel, Adressen und Zurück, Start immer zuerst; Startseite: Vorschlag vor allen Kennzahlen, Geplantes zuerst, nichts doppelt, Produktionszeile aus denselben Daten wie die Produktion; heute gekocht; „wird knapp“ ≠ „aufgebraucht“ ≠ „bald verbrauchen“ mit denselben Zahlen in Start, Vorrat, Produktion; gemerkte Rezepte ohne Doppelte; Lagerorte, Obergruppen, Füllstand, Suche (auch „Pasta“ → Nudeln)
 
 Für `test:db` müssen die Postgres-Programme installiert sein (macOS: `brew install postgresql`, Ubuntu/WSL: `sudo apt install postgresql`). Das Skript startet eine Wegwerf-Datenbank und löscht sie danach wieder. Die echte Supabase-Datenbank wird nie angefasst. Zum Schluss prüft es, dass `scripts/schema-stand.sql` nach allen Migrationen „komplett“ meldet – so bleibt die Diagnose für die echte Datenbank aktuell. Die beiden Skripte für den SQL-Editor (`schema-stand.sql`, `daten-export.sql`) bleiben **unter 100 Zeilen**, in reinem ASCII und ohne Kommentare: Der Supabase-SQL-Editor hängt an SELECT-Abfragen automatisch `limit 1000` an – bei längeren Texten mitten hinein (beobachtet: in Zeile 100), was als „syntax error“ endet. Tritt so ein Fehler auf, neben „Run“ die Begrenzung auf **„No limit“** stellen.
 Bei jedem Push laufen alle Tests, der App-Build und eine Deno-Prüfung der Edge Function automatisch in GitHub Actions (Workflow „CI“).
@@ -479,7 +483,7 @@ src/Start.tsx, src/startseite.ts     Startseite („Was möchtest du heute koche
 src/Hilfe.tsx                        „So funktioniert Kombi“: drei Schritte und alle Begriffe in einfacher Sprache
 src/rezepte.ts                       gemerkte Rezepte ohne Doppelte (getestet)
 src/GerichtBild.tsx                  Gerichtsbild: echtes Foto oder gezeichneter „Teller von oben“ aus den echten Zutaten
-src/Vorrat.tsx                       Vorrat: Übersicht und Lagerort-Ansicht
+src/Vorrat.tsx                       Vorrat: Übersicht, Lagerorte und Obergruppen
 src/SorteBlatt.tsx                   Details einer Sorte in drei Ebenen
 src/Produktion.tsx                   Jetzt sinnvoll, Vorgemerkt, Empfohlen, Produktion in zwei Schritten, Batch
 src/Einkauf.tsx                      Einkaufsliste und „Einbuchen“

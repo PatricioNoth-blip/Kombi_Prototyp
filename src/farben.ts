@@ -14,6 +14,25 @@ export const FARBEN = [
 
 export type Farbe = (typeof FARBEN)[number]['id'];
 
+/**
+ * Obergruppen im Vorrat – die Bausteine des Baukastens (Rot, Braun, Grün, Gelb), dazu fertige Gerichte
+ * und Extras. Welche Sorte wohin gehört, steht in gruppeVon() (dashboard.ts).
+ */
+export const GRUPPEN = [
+  { id: 'basis', name: 'Basis & Soßen', farbe: 'rot' },
+  { id: 'protein', name: 'Protein', farbe: 'braun' },
+  { id: 'gemuese', name: 'Gemüse', farbe: 'gruen' },
+  { id: 'sattmacher', name: 'Sattmacher', farbe: 'gelb' },
+  { id: 'fertig', name: 'Fertiggerichte', farbe: 'blau' },
+  { id: 'extras', name: 'Gewürze & Extras', farbe: 'weiss' },
+] as const;
+
+export type GruppeId = (typeof GRUPPEN)[number]['id'];
+
+export function gruppe(id: GruppeId) {
+  return GRUPPEN.find((g) => g.id === id)!;
+}
+
 export const LAGERORTE = [
   { id: 'gefrierfach', name: 'Gefrierfach', icon: 'schneeflocke' },
   { id: 'kuehlschrank', name: 'Kühlschrank', icon: 'kuehlschrank' },

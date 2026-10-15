@@ -340,7 +340,6 @@ export function Inventar() {
                 laeuft={laeuft}
                 reserviert={liste.verteilung.reserviert}
                 auftauen={nav.bereich === 'vorrat' ? auftauenBereich : null}
-                nutzung={h.nutzung}
                 onOeffnen={oeffneSorte}
                 onEntnehmen={entnehmen}
                 onHinzufuegen={() => (bestand.length ? setPlusMenue(true) : setNeueSorte(true))}
@@ -360,7 +359,7 @@ export function Inventar() {
                 herstellungen={h.herstellungen}
                 heute={heute}
                 onOeffnen={oeffneSorte}
-                onWoche={() => dispatch({ typ: 'route', route: { bereich: 'essen', ort: null, art: null, ansicht: 'woche', sorte: null } })}
+                onWoche={() => dispatch({ typ: 'route', route: { bereich: 'essen', ort: null, gruppe: null, ansicht: 'woche', sorte: null } })}
                 onMeldung={melde}
                 onGeaendert={() => void laden()}
               />

@@ -558,15 +558,19 @@ if (!APP_URL) {
     return `Hintergrund ${grund}`;
   });
 
-  await pruefe('Vorrat: Lagerorte und alle Sorten', async () => {
+  await pruefe('Vorrat: Lagerorte, Bausteine und alle Sorten (auch ohne Bestand)', async () => {
     await page.click('.tabbar button:has-text("Vorrat")');
     await page.waitForTimeout(300);
     const orte = await page.locator('.ort-karte').allInnerTexts();
+    const gruppen = (await page.locator('.gruppe-karte strong').allInnerTexts()).map((t) => t.trim());
+    if (bestand.length && !gruppen.length) throw new Error('keine Bausteine-Karten');
     await page.click('.alle-knopf');
-    await page.waitForSelector('.ort-ansicht .vorrat-zeile');
+    await page.waitForSelector('.ort-ansicht .vorrat-zeile, .ort-ansicht .leer-sorte');
+    // Vorhandenes als Zeile, Sorten ohne Bestand als „Einbuchen“-Knopf – zusammen jede Sorte genau einmal
     const zeilen = await page.locator('.ort-ansicht .vorrat-zeile').count();
-    if (zeilen !== bestand.length) throw new Error(`${zeilen} Zeilen statt ${bestand.length}`);
-    return `${orte.map((o) => o.replace(/\s+/g, ' ')).join(' | ')}; ${zeilen} Sorten`;
+    const leer = await page.locator('.ort-ansicht .leer-sorte').count();
+    if (zeilen + leer !== bestand.length) throw new Error(`${zeilen} Zeilen + ${leer} ohne Bestand statt ${bestand.length}`);
+    return `${orte.map((o) => o.replace(/\s+/g, ' ')).join(' | ')}; Bausteine: ${gruppen.join(', ')}; ${zeilen} Sorten da, ${leer} ohne Bestand`;
   });
 
   if (sorte && sorte.anzahl > 0) {
@@ -683,6 +687,9 @@ if (!APP_URL) {
     try {
       // Zusätzlich genannt (nur im Browser): damit sicher etwas direkt kochbar ist
       await feld.fill('Nudeln, passierte Tomaten');
+      // Bucht jemand während des Checks ein, ändert sich, was kochbar ist – das ist kein Fehler der App.
+      const stand = async () => JSON.stringify((await ladeBestand()).map((s) => [s.id, s.anzahl]));
+      const vorher = await stand();
       const liste = page.locator(`${bereich} section[aria-label="Grundrezepte"]`);
       await liste.waitFor();
       const zahl = async (i) => Number(((await liste.locator('[role="tab"]').nth(i).innerText()).match(/\d+/) ?? ['0'])[0]);
@@ -700,7 +707,11 @@ if (!APP_URL) {
         await page.click(`${bereich} .entscheidung button:has-text("Anderer Vorschlag")`);
       }
       await page.waitForFunction(() => document.querySelector('.essen')?.textContent?.includes('Alle passenden Grundrezepte gezeigt'), null, { timeout: 60000 });
-      if (gezeigt.length !== kochbar) throw new Error(`${kochbar} kochbar, aber ${gezeigt.length} gezeigt: ${gezeigt.join(', ')}`);
+      if (gezeigt.length !== kochbar) {
+        const fehler = `${kochbar} kochbar, aber ${gezeigt.length} gezeigt: ${gezeigt.join(', ')}`;
+        if ((await stand()) !== vorher) return `⚠ extern: Vorrat wurde während des Checks geändert – ${fehler}`;
+        throw new Error(fehler);
+      }
       if (new Set(gezeigt).size !== gezeigt.length) throw new Error(`doppelt gezeigt: ${gezeigt.join(', ')}`);
       return `${kochbar} direkt kochbar (${gezeigt.join(', ')}) nacheinander, ${fast} mit fehlenden Zutaten in der Liste – danach improvisiert`;
     } finally {
