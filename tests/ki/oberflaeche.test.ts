@@ -9,7 +9,8 @@ import { ohneDoppelte, rezeptSchluessel, schonGespeichert } from '../../src/reze
 import type { Gericht } from '../../supabase/functions/_shared/kombi/typen.ts';
 import type { KomponentenVorschlag } from '../../supabase/functions/_shared/kombi/typen.ts';
 import {
-  freieTage, fuellstand, heuteWichtig, istDringend, nachzukochen, ortKacheln, produktionsGruende, sortenFuer, tagName, vorratsLage, vorratsLageText, zustand,
+  freieTage, fuellstand, gruppenKacheln, gruppeVon, heuteWichtig, istDringend, nachzukochen, ortKacheln, passtZuSuche, produktionsGruende, sortenFuer, tagName,
+  vorratsLage, vorratsLageText, zustand,
 } from '../../src/dashboard.ts';
 import type { Sorte } from '../../src/api.ts';
 import { leseEingabe } from '../../supabase/functions/_shared/kombi/einkaufsliste.ts';
@@ -35,12 +36,12 @@ describe('Navigation: fünf Bereiche, Zustand, Adressen, Zurück', () => {
   test('geöffneter Lagerort und Filter bleiben beim Wechsel erhalten, Scrollposition je Bereich', () => {
     let z: NavZustand = navigiere(START, { typ: 'wechsle', bereich: 'vorrat', scroll: 0 });
     z = navigiere(z, { typ: 'vorrat', teil: { ort: 'gefrierfach' } });
-    z = navigiere(z, { typ: 'vorrat', teil: { art: 'komponente' } });
+    z = navigiere(z, { typ: 'vorrat', teil: { gruppe: 'protein' } });
     z = navigiere(z, { typ: 'wechsle', bereich: 'essen', scroll: 420 });
     z = navigiere(z, { typ: 'essen', teil: { ansicht: 'woche' } });
     z = navigiere(z, { typ: 'wechsle', bereich: 'produktion', scroll: 90 });
     z = navigiere(z, { typ: 'wechsle', bereich: 'vorrat', scroll: 0 });
-    assert.deepEqual([z.vorrat.ort, z.vorrat.art, z.scroll.vorrat, z.scroll.essen, z.essen.ansicht], ['gefrierfach', 'komponente', 420, 90, 'woche']);
+    assert.deepEqual([z.vorrat.ort, z.vorrat.gruppe, z.scroll.vorrat, z.scroll.essen, z.essen.ansicht], ['gefrierfach', 'protein', 420, 90, 'woche']);
   });
 
   test('nochmal auf den aktiven Reiter → zurück zum Anfang des Bereichs; Wechsel schließt Details', () => {
@@ -51,14 +52,17 @@ describe('Navigation: fünf Bereiche, Zustand, Adressen, Zurück', () => {
   });
 
   test('Deep Links: Adresse ↔ Zustand, Unbekanntes führt zum Start, alte Adresse „komponenten“ → Produktion', () => {
-    const r = routeAus('#/vorrat/gefrierfach?art=komponente&sorte=12');
-    assert.deepEqual(r, { bereich: 'vorrat', ort: 'gefrierfach', art: 'komponente', ansicht: 'heute', sorte: 12 });
+    const r = routeAus('#/vorrat/gefrierfach?gruppe=protein&sorte=12');
+    assert.deepEqual(r, { bereich: 'vorrat', ort: 'gefrierfach', gruppe: 'protein', ansicht: 'heute', sorte: 12 });
     const z = navigiere(START, { typ: 'route', route: r });
-    assert.equal(hashVon(z), '#/vorrat/gefrierfach?art=komponente&sorte=12');
+    assert.equal(hashVon(z), '#/vorrat/gefrierfach?gruppe=protein&sorte=12');
+    assert.equal(routeAus('#/vorrat/alle?gruppe=sattmacher').gruppe, 'sattmacher');
+    assert.equal(routeAus('#/vorrat/gefrierfach?art=komponente').gruppe, null, 'alte Adressen mit Art-Filter öffnen ungefiltert');
     assert.equal(hashVon(navigiere(START, { typ: 'route', route: routeAus('#/essen/woche') })), '#/essen/woche');
     assert.equal(routeAus('#/komponenten').bereich, 'produktion');
     assert.equal(routeAus('#/admin/x').bereich, 'start');
-    assert.equal(routeAus('#/vorrat/keller?art=x&sorte=-1').ort, null);
+    assert.equal(routeAus('#/vorrat/keller?gruppe=x&sorte=-1').ort, null);
+    assert.equal(routeAus('#/vorrat/alle?gruppe=x').gruppe, null);
     assert.equal(routeAus('').bereich, 'start');
     for (const h of ['#/start', '#/essen', '#/vorrat', '#/vorrat/alle', '#/produktion', '#/einkauf', '#/einkauf?sorte=3']) {
       assert.equal(hashVon(navigiere(START, { typ: 'route', route: routeAus(h) })), h, h);
@@ -68,7 +72,7 @@ describe('Navigation: fünf Bereiche, Zustand, Adressen, Zurück', () => {
   test('Zurück: Bereich, Lagerort und geöffnete Details bekommen einen Verlaufseintrag, Filter nicht', () => {
     const vorrat = navigiere(START, { typ: 'wechsle', bereich: 'vorrat', scroll: 0 });
     const ort = navigiere(vorrat, { typ: 'vorrat', teil: { ort: 'gefrierfach' } });
-    const filter = navigiere(ort, { typ: 'vorrat', teil: { art: 'zutat' } });
+    const filter = navigiere(ort, { typ: 'vorrat', teil: { gruppe: 'sattmacher' } });
     const detail = navigiere(filter, { typ: 'sorte', id: 5 });
     assert.equal(neuerEintrag(START, vorrat), true);
     assert.equal(neuerEintrag(vorrat, ort), true);
@@ -76,7 +80,7 @@ describe('Navigation: fünf Bereiche, Zustand, Adressen, Zurück', () => {
     assert.equal(neuerEintrag(filter, detail), true);
     // Zurück = die vorige Adresse wird wieder angewendet
     const zurueck = navigiere(detail, { typ: 'route', route: routeAus(hashVon(filter)) });
-    assert.deepEqual([zurueck.bereich, zurueck.vorrat.ort, zurueck.vorrat.art, zurueck.sorte], ['vorrat', 'gefrierfach', 'zutat', null]);
+    assert.deepEqual([zurueck.bereich, zurueck.vorrat.ort, zurueck.vorrat.gruppe, zurueck.sorte], ['vorrat', 'gefrierfach', 'sattmacher', null]);
   });
 
   test('beim Öffnen immer Start (außer ein Link zeigt woandershin); alte Speicherstände sind kein Problem', () => {
@@ -276,16 +280,58 @@ describe('Vorrat als Übersicht', () => {
     assert.equal(fuellstand(sorte(4, 'D', { anzahl: 3 })), null);
   });
 
-  test('Lagerort-Ansicht: Filter nach Art und Suche (auch in der Zusammensetzung), Vorhandenes zuerst', () => {
+  test('Lagerort-Ansicht: Filter nach Obergruppe und Suche (auch in der Zusammensetzung), Vorhandenes zuerst', () => {
     const bestand = [
       sorte(1, 'Burrito', { farbe: 'blau', art: 'komplettgericht', zusammensetzung: ['Tortilla', 'Kidneybohnen'] }),
       sorte(2, 'Bohnen', { art: 'zutat', anzahl: 0 }),
-      sorte(3, 'Äpfel', { art: 'zutat', lagerort: 'kuehlschrank' }),
+      sorte(3, 'Äpfel', { farbe: 'gruen', art: 'zutat', lagerort: 'kuehlschrank' }),
       sorte(4, 'Chili', { art: 'komponente', bald_ablaufen: true }),
     ];
-    assert.deepEqual(sortenFuer(bestand, { ort: 'gefrierfach', art: null, suche: '' }, HEUTE).map((s) => s.name), ['Chili', 'Burrito', 'Bohnen']);
-    assert.deepEqual(sortenFuer(bestand, { ort: 'alle', art: null, suche: 'bohne' }, HEUTE).map((s) => s.name), ['Burrito', 'Bohnen']);
-    assert.deepEqual(sortenFuer(bestand, { ort: 'alle', art: 'zutat', suche: 'apfel' }, HEUTE).map((s) => s.name), ['Äpfel']);
+    assert.deepEqual(sortenFuer(bestand, { ort: 'gefrierfach', gruppe: null, suche: '' }, HEUTE).map((s) => s.name), ['Chili', 'Burrito', 'Bohnen']);
+    assert.deepEqual(sortenFuer(bestand, { ort: 'alle', gruppe: null, suche: 'bohne' }, HEUTE).map((s) => s.name), ['Burrito', 'Bohnen']);
+    assert.deepEqual(sortenFuer(bestand, { ort: 'alle', gruppe: 'gemuese', suche: 'apfel' }, HEUTE).map((s) => s.name), ['Äpfel']);
+    assert.deepEqual(sortenFuer(bestand, { ort: 'gefrierfach', gruppe: 'basis', suche: '' }, HEUTE).map((s) => s.name), ['Chili', 'Bohnen']);
+  });
+
+  test('Obergruppen: Komplettgerichte sind Fertiggerichte, sonst entscheidet die Kombi-Farbe', () => {
+    assert.equal(gruppeVon(sorte(1, 'Tomatensoße', { farbe: 'rot' })), 'basis');
+    assert.equal(gruppeVon(sorte(2, 'Linsen gekocht', { farbe: 'braun' })), 'protein');
+    assert.equal(gruppeVon(sorte(3, 'TK-Spinat', { farbe: 'gruen', art: 'zutat' })), 'gemuese');
+    assert.equal(gruppeVon(sorte(4, 'Rote Linsen, trocken', { farbe: 'gelb', art: 'zutat' })), 'sattmacher');
+    assert.equal(gruppeVon(sorte(5, 'Lasagne-Portion', { farbe: 'gelb', art: 'komplettgericht' })), 'fertig');
+    assert.equal(gruppeVon(sorte(6, 'Margherita-Pizza', { farbe: 'blau', art: 'komplettgericht' })), 'fertig');
+    assert.equal(gruppeVon(sorte(7, 'Booster Italien', { farbe: 'weiss' })), 'extras');
+    assert.equal(gruppeVon(sorte(8, 'Crunch', { farbe: 'schwarz' })), 'extras');
+  });
+
+  test('Gruppen-Kacheln: feste Reihenfolge, nur Gruppen mit Sorten, „da“ zählt nur Vorhandenes, Vorhandenes zuerst genannt', () => {
+    const bestand = [
+      sorte(1, 'Reis', { farbe: 'gelb', art: 'zutat', lagerort: 'vorrat', anzahl: 0 }),
+      sorte(2, 'Nudeln', { farbe: 'gelb', art: 'zutat', lagerort: 'vorrat', einheit: 'g', anzahl: 500 }),
+      sorte(3, 'Mehl', { farbe: 'gelb', art: 'zutat', lagerort: 'vorrat', anzahl: 0 }),
+      sorte(4, 'Kartoffeln', { farbe: 'gelb', art: 'zutat', lagerort: 'vorrat', anzahl: 0 }),
+      sorte(5, 'Tomatensoße', { farbe: 'rot', bald_ablaufen: true }),
+      sorte(6, 'Pizza', { farbe: 'blau', art: 'komplettgericht', anzahl: 0 }),
+    ];
+    const k = gruppenKacheln(bestand, HEUTE);
+    assert.deepEqual(k.map((x) => x.id), ['basis', 'sattmacher', 'fertig']);
+    const satt = k.find((x) => x.id === 'sattmacher')!;
+    assert.deepEqual([satt.sorten, satt.da, satt.namen], [4, 1, ['Nudeln', 'Kartoffeln', 'Mehl']]);
+    assert.deepEqual([k[0].da, k[0].achtung], [1, 1]);
+    assert.deepEqual(gruppenKacheln(bestand, HEUTE, 'gefrierfach').map((x) => [x.id, x.sorten]), [['basis', 1], ['fertig', 1]]);
+  });
+
+  test('Suche kennt gleichbedeutende Namen: „Pasta“ findet Nudeln, „Basmati“ findet Reis – aber nichts Falsches', () => {
+    const nudeln = sorte(1, 'Nudeln', { farbe: 'gelb', art: 'zutat' });
+    const reis = sorte(2, 'Reis', { farbe: 'gelb', art: 'zutat' });
+    const kidney = sorte(3, 'Gekochte Kidneybohnen', { farbe: 'braun' });
+    assert.equal(passtZuSuche(nudeln, 'Pasta'), true);
+    assert.equal(passtZuSuche(nudeln, 'spaghetti'), true);
+    assert.equal(passtZuSuche(reis, 'Basmati'), true);
+    assert.equal(passtZuSuche(reis, 'Pasta'), false);
+    assert.equal(passtZuSuche(kidney, 'rote Bohnen'), true);
+    assert.equal(passtZuSuche(nudeln, 'Hackfleisch'), false);
+    assert.equal(passtZuSuche(nudeln, 'nud'), true, 'Teilwörter weiter über den Namen');
   });
 });
 

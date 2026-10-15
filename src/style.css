@@ -651,6 +651,46 @@ span.chip { cursor: default; }
 .ort-karte.ton-blau { --t-grund: color-mix(in srgb, var(--info-weich) 60%, var(--flaeche)); }
 .ort-karte.ton-gelb { --t-grund: color-mix(in srgb, var(--achtung-weich) 60%, var(--flaeche)); }
 
+.vorrat-held-unter { font-size: var(--t-meta); color: var(--text-2); }
+.alle-knopf { margin-top: 16px; }
+
+/* Obergruppen: Fotokarten in der Übersicht, Abschnitte in Lagerort und „Alle Sorten“ */
+.gruppen-karten { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.gruppe-karte { position: relative; display: grid; align-content: start; overflow: hidden; padding: 0; border: 1px solid var(--rand); border-radius: var(--r); background: color-mix(in srgb, var(--ton) 45%, var(--flaeche)); box-shadow: var(--karte-schatten); text-align: left; }
+.gruppe-karte::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--f); z-index: 1; }
+.f-weiss.gruppe-karte::before { background: var(--text-3); }
+.gruppe-bild-flaeche { display: block; width: 100%; height: 84px; object-fit: cover; }
+.gruppe-symbol { display: grid; place-items: center; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--ton) 55%, var(--flaeche)) 0%, var(--ton) 70%); }
+.gruppe-symbol > span { filter: drop-shadow(0 3px 5px rgb(60 30 10 / 0.18)); line-height: 1; }
+.gruppe-bild-flaeche.gruppe-symbol { font-size: 40px; padding-top: 22px; }
+.gruppe-achtung { position: absolute; left: 8px; top: 12px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 11px; background: var(--flaeche); color: var(--kritisch); font-size: 12px; font-weight: 650; box-shadow: 0 2px 6px rgb(60 30 10 / 0.15); z-index: 1; }
+.gruppe-karte-text { display: grid; gap: 4px; padding: 10px 12px 12px; }
+.gruppe-karte-text strong { font-size: var(--t-sekundaer); font-weight: 750; letter-spacing: -0.01em; color: var(--titel); line-height: 1.2; }
+.gruppe-stand { font-size: var(--t-meta); font-weight: 600; color: var(--text); }
+.gruppe-karte-text small { font-size: var(--t-meta); color: var(--text-2); line-height: 1.3; }
+.gruppe-balken { display: block; height: 5px; border-radius: 3px; background: var(--flaeche-3); overflow: hidden; }
+.gruppe-balken > span { display: block; height: 100%; border-radius: inherit; background: var(--f); }
+.f-weiss .gruppe-balken > span { background: var(--text-3); }
+
+.gruppe-abschnitt { margin-top: 22px; }
+.gruppe-kopf { display: flex; align-items: center; gap: 10px; margin: 0 2px 10px; }
+.gruppe-kopf h3 { flex: 1; min-width: 0; font-size: var(--t-titel); font-weight: 750; letter-spacing: -0.01em; color: var(--titel); }
+.gruppe-zahl { flex: none; font-size: var(--t-meta); color: var(--text-2); }
+.gruppe-bild-rund { flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--flaeche), 0 0 0 4px var(--f); }
+.f-weiss .gruppe-bild-rund, .f-weiss.gruppe-bild-rund { box-shadow: 0 0 0 2px var(--flaeche), 0 0 0 4px var(--text-3); }
+.gruppe-bild-rund.gruppe-symbol { font-size: 21px; }
+.ort-kopf.mit-bild { display: flex; align-items: center; gap: 14px; }
+.ort-kopf.mit-bild .gruppe-bild-rund { width: 56px; height: 56px; }
+.ort-kopf.mit-bild .gruppe-bild-rund.gruppe-symbol { font-size: 30px; }
+.ort-kopf.mit-bild > div { display: grid; gap: 2px; }
+
+.leer-sorten { margin-top: 10px; padding: 12px; border-radius: var(--r); border: 1.5px dashed var(--trenn); }
+.leer-sorten > p { margin: 0 2px 8px; font-size: var(--t-meta); color: var(--text-2); }
+.leer-sorte { gap: 6px; padding: 0 10px 0 4px; background: var(--flaeche); color: var(--text); }
+.leer-sorte > .icon { color: var(--akzent); }
+.bild-mini { width: 28px; height: 28px; }
+.bild-mini.bild-symbol { font-size: 15px; }
+
 .bild-zeile .zeile { gap: 12px; padding: 9px 12px; }
 .bild-zeile .bild-rund { width: 44px; height: 44px; }
 .ort-meta > span { white-space: nowrap; }

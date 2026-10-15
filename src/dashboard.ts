@@ -1,8 +1,10 @@
 // Vorrat als Haushalts-Übersicht: Was ist heute wichtig, was liegt wo, wie voll ist es?
 // Reine Berechnungen aus den echten Bestandsdaten – nichts wird geschätzt.
-import type { Art, Farbe, KomponentenVorschlag } from '../supabase/functions/_shared/kombi/typen.ts';
+import type { Farbe, KomponentenVorschlag } from '../supabase/functions/_shared/kombi/typen.ts';
 import { normalisiere } from '../supabase/functions/_shared/kombi/text.ts';
+import { bausteineFuerName } from '../supabase/functions/_shared/kombi/grundbausteine.ts';
 import type { Sorte } from './api';
+import { GRUPPEN, type GruppeId } from './farben.ts';
 import { artVon, einheitVon, mengeText, portionenVon } from './format.ts';
 import type { VorratOrt } from './navigation.ts';
 
@@ -158,18 +160,59 @@ export function fuellstand(s: Sorte): { anteil: number; text: string } | null {
 /** „Äpfel“ → „apfel“: Umlaute ohne Punkte (normalisiere() schreibt sie aus: „aepfel“) */
 const ohnePunkte = (t: string) => normalisiere(t.normalize('NFD').replace(/[̀-ͯ]/g, ''));
 
-/** Suche in Name und Zusammensetzung (ohne Groß/klein; „apfel“, „äpfel“ und „aepfel“ finden „Äpfel“). */
+/**
+ * Suche in Name und Zusammensetzung (ohne Groß/klein; „apfel“, „äpfel“ und „aepfel“ finden „Äpfel“).
+ * Dazu gleichbedeutende Namen über die Grundbausteine: „Pasta“ findet „Nudeln“, „Basmati“ findet „Reis“.
+ */
 export function passtZuSuche(s: Sorte, suche: string): boolean {
   if (!normalisiere(suche)) return true;
   const text = [s.name, ...(s.zusammensetzung ?? [])].join(' ');
-  return normalisiere(text).includes(normalisiere(suche)) || ohnePunkte(text).includes(ohnePunkte(suche));
+  if (normalisiere(text).includes(normalisiere(suche)) || ohnePunkte(text).includes(ohnePunkte(suche))) return true;
+  const gesucht = bausteineFuerName(suche).map((b) => b.id);
+  return gesucht.length > 0 && bausteineFuerName(s.name, s.farbe).some((b) => gesucht.includes(b.id));
 }
 
-/** Sorten eines Lagerorts (oder alle), optional nach Art und Suche; Vorhandenes und Dringendes zuerst. */
-export function sortenFuer(bestand: Sorte[], f: { ort: VorratOrt; art: Art | null; suche: string }, heute: string): Sorte[] {
+const GRUPPE_NACH_FARBE: Record<Farbe, GruppeId> = {
+  rot: 'basis', braun: 'protein', gruen: 'gemuese', gelb: 'sattmacher', blau: 'fertig', weiss: 'extras', schwarz: 'extras',
+};
+
+/** Obergruppe einer Sorte: Komplettgerichte sind Fertiggerichte, sonst entscheidet die Kombi-Farbe. */
+export function gruppeVon(s: Pick<Sorte, 'art' | 'farbe' | 'lagerort' | 'name'>): GruppeId {
+  return artVon(s) === 'komplettgericht' ? 'fertig' : GRUPPE_NACH_FARBE[s.farbe] ?? 'extras';
+}
+
+export type GruppenKachel = {
+  id: GruppeId;
+  /** Sorten der Gruppe (auch leere) */
+  sorten: number;
+  /** davon gerade da */
+  da: number;
+  /** die ersten drei Namen – Vorhandenes zuerst */
+  namen: string[];
+  /** Sorten mit „Jetzt wichtig“ (bald verbrauchen …) */
+  achtung: number;
+};
+
+/** Obergruppen in fester Reihenfolge – nur die, zu denen es Sorten gibt. */
+export function gruppenKacheln(bestand: Sorte[], heute: string, ort: VorratOrt = 'alle'): GruppenKachel[] {
+  const sorten = sortenFuer(bestand, { ort, gruppe: null, suche: '' }, heute);
+  return GRUPPEN.map((g) => {
+    const drin = sorten.filter((s) => gruppeVon(s) === g.id);
+    return {
+      id: g.id,
+      sorten: drin.length,
+      da: drin.filter((s) => s.anzahl > 0).length,
+      namen: drin.slice(0, 3).map((s) => s.name),
+      achtung: drin.filter((s) => istDringend(zustand(s, heute))).length,
+    };
+  }).filter((k) => k.sorten > 0);
+}
+
+/** Sorten eines Lagerorts (oder alle), optional nach Obergruppe und Suche; Vorhandenes und Dringendes zuerst. */
+export function sortenFuer(bestand: Sorte[], f: { ort: VorratOrt; gruppe: GruppeId | null; suche: string }, heute: string): Sorte[] {
   return bestand
     .filter((s) => f.ort === 'alle' || (s.lagerort ?? 'gefrierfach') === f.ort)
-    .filter((s) => !f.art || artVon(s) === f.art)
+    .filter((s) => !f.gruppe || gruppeVon(s) === f.gruppe)
     .filter((s) => passtZuSuche(s, f.suche))
     .sort((a, b) => {
       const za = zustand(a, heute);

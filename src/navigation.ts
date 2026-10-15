@@ -1,7 +1,7 @@
 // Navigation: fünf Bereiche, Adressen zum Verlinken (#/vorrat/gefrierfach) und Zurück wie gewohnt.
 // Was man in einem Bereich geöffnet, gefiltert oder gescrollt hat, bleibt beim Wechsel erhalten.
 // Rein und ohne Laufzeit-Importe, damit es sich ohne Browser testen lässt.
-import type { Art } from '../supabase/functions/_shared/kombi/typen.ts';
+import { GRUPPEN, type GruppeId } from './farben.ts';
 import type { IconName } from './Icon';
 
 export type Bereich = 'start' | 'essen' | 'vorrat' | 'produktion' | 'einkauf';
@@ -17,7 +17,7 @@ export const BEREICHE: { id: Bereich; name: string; icon: IconName }[] = [
 
 export type NavZustand = {
   bereich: Bereich;
-  vorrat: { ort: VorratOrt | null; art: Art | null; suche: string };
+  vorrat: { ort: VorratOrt | null; gruppe: GruppeId | null; suche: string };
   essen: { ansicht: 'heute' | 'woche' };
   /** geöffnete Sorte (Detail) – gehört zur Adresse, damit „Zurück“ sie schließt */
   sorte: number | null;
@@ -28,7 +28,7 @@ export type NavZustand = {
 export type Route = {
   bereich: Bereich;
   ort: VorratOrt | null;
-  art: Art | null;
+  gruppe: GruppeId | null;
   ansicht: 'heute' | 'woche';
   sorte: number | null;
 };
@@ -42,7 +42,7 @@ export type NavAktion =
 
 export const START: NavZustand = {
   bereich: 'start',
-  vorrat: { ort: null, art: null, suche: '' },
+  vorrat: { ort: null, gruppe: null, suche: '' },
   essen: { ansicht: 'heute' },
   sorte: null,
   scroll: { start: 0, essen: 0, vorrat: 0, produktion: 0, einkauf: 0 },
@@ -50,7 +50,7 @@ export const START: NavZustand = {
 
 const BEREICH_IDS = BEREICHE.map((b) => b.id) as string[];
 const ORTE: string[] = ['gefrierfach', 'kuehlschrank', 'vorrat', 'alle'];
-const ARTEN: string[] = ['zutat', 'komponente', 'komplettgericht'];
+const GRUPPEN_IDS: string[] = GRUPPEN.map((g) => g.id);
 
 /** Tab antippen: Wechsel merkt sich die Scrollposition; nochmal auf den aktiven Tab = zurück zum Anfang. */
 export function navigiere(z: NavZustand, a: NavAktion): NavZustand {
@@ -68,11 +68,11 @@ export function navigiere(z: NavZustand, a: NavAktion): NavZustand {
       return { ...z, bereich: a.bereich, sorte: null, scroll: { ...z.scroll, [z.bereich]: Math.max(0, a.scroll) } };
     case 'vorrat': {
       const vorrat = { ...z.vorrat, ...a.teil };
-      // neuer Lagerort → Art-Filter zurücksetzen und oben anfangen
+      // neuer Lagerort → Gruppen-Filter zurücksetzen und oben anfangen
       const ortNeu = a.teil.ort !== undefined && a.teil.ort !== z.vorrat.ort;
       return {
         ...z,
-        vorrat: ortNeu && a.teil.art === undefined ? { ...vorrat, art: null } : vorrat,
+        vorrat: ortNeu && a.teil.gruppe === undefined ? { ...vorrat, gruppe: null } : vorrat,
         scroll: ortNeu ? { ...z.scroll, vorrat: 0 } : z.scroll,
       };
     }
@@ -85,7 +85,7 @@ export function navigiere(z: NavZustand, a: NavAktion): NavZustand {
       return {
         ...z,
         bereich: r.bereich,
-        vorrat: r.bereich === 'vorrat' ? { ...z.vorrat, ort: r.ort, art: r.ort ? r.art : null } : z.vorrat,
+        vorrat: r.bereich === 'vorrat' ? { ...z.vorrat, ort: r.ort, gruppe: r.ort ? r.gruppe : null } : z.vorrat,
         essen: r.bereich === 'essen' ? { ansicht: r.ansicht } : z.essen,
         sorte: r.sorte,
       };
@@ -95,9 +95,9 @@ export function navigiere(z: NavZustand, a: NavAktion): NavZustand {
 
 // ───────── Adressen ─────────
 
-/** „#/vorrat/gefrierfach?art=komponente&sorte=12“ → Route. Unbekanntes → Start. */
+/** „#/vorrat/gefrierfach?gruppe=protein&sorte=12“ → Route. Unbekanntes → Start. */
 export function routeAus(hash: string): Route {
-  const leer: Route = { bereich: 'start', ort: null, art: null, ansicht: 'heute', sorte: null };
+  const leer: Route = { bereich: 'start', ort: null, gruppe: null, ansicht: 'heute', sorte: null };
   const [pfad, abfrage = ''] = hash.replace(/^#\/?/, '').split('?');
   const teile = pfad.split('/').filter(Boolean).map((t) => decodeURIComponent(t));
   const q = new Map(abfrage.split('&').filter(Boolean).map((p) => {
@@ -110,8 +110,8 @@ export function routeAus(hash: string): Route {
   const sorteRoh = Number(q.get('sorte'));
   const sorte = Number.isInteger(sorteRoh) && sorteRoh > 0 ? sorteRoh : null;
   const ort = bereich === 'vorrat' && ORTE.includes(teile[1]) ? (teile[1] as VorratOrt) : null;
-  const art = ort && ARTEN.includes(q.get('art') ?? '') ? (q.get('art') as Art) : null;
-  return { ...leer, bereich, ort, art, ansicht: bereich === 'essen' && teile[1] === 'woche' ? 'woche' : 'heute', sorte };
+  const gruppe = ort && GRUPPEN_IDS.includes(q.get('gruppe') ?? '') ? (q.get('gruppe') as GruppeId) : null;
+  return { ...leer, bereich, ort, gruppe, ansicht: bereich === 'essen' && teile[1] === 'woche' ? 'woche' : 'heute', sorte };
 }
 
 /** Adresse des aktuellen Zustands. */
@@ -120,7 +120,7 @@ export function hashVon(z: NavZustand): string {
   const q: string[] = [];
   if (z.bereich === 'vorrat' && z.vorrat.ort) {
     pfad += `/${z.vorrat.ort}`;
-    if (z.vorrat.art) q.push(`art=${z.vorrat.art}`);
+    if (z.vorrat.gruppe) q.push(`gruppe=${z.vorrat.gruppe}`);
   }
   if (z.bereich === 'essen' && z.essen.ansicht === 'woche') pfad += '/woche';
   if (z.sorte !== null) q.push(`sorte=${z.sorte}`);
@@ -136,7 +136,7 @@ export function neuerEintrag(alt: NavZustand, neu: NavZustand): boolean {
 // ───────── Gemerkt für den nächsten Start ─────────
 
 /**
- * Gemerkter Zustand: nur Filter (Art im Vorrat, Essen/Woche). Die App öffnet immer mit dem Start –
+ * Gemerkter Zustand: nur die Ansicht im Essen (Heute/Woche). Die App öffnet immer mit dem Start –
  * außer ein Link zeigt woandershin (dann bestimmt die Adresse den Bereich).
  */
 export function ladeNav(text: string | null, hash = ''): NavZustand {

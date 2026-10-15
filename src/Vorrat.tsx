@@ -1,13 +1,14 @@
-import type { ReactNode } from 'react';
-import type { NutzungZeile } from '../supabase/functions/_shared/kombi/batch.ts';
+import { type ReactNode, useEffect, useRef } from 'react';
 import type { Sorte } from './api';
-import { ARTEN_INFO, farbe as farbInfo, lagerort, LAGERORTE } from './farben';
+import { gruppe, type GruppeId, lagerort, LAGERORTE } from './farben';
 import { Icon, type IconName } from './Icon';
-import { artVon, einheitVon, mengeKurz, mengeText, portionMengeVon } from './format';
-import { heuteWichtig, istDringend, ortKacheln, sortenFuer, vorratsLage, vorratsLageText, zustand, type Wichtig } from './dashboard';
-import { Bild, DEKO, ORT_FOTO } from './Bild';
+import { artVon, einheitVon, mengeKurz, portionenText, portionenVon, portionMengeVon } from './format';
+import {
+  gruppenKacheln, gruppeVon, heuteWichtig, ortKacheln, sortenFuer, vorratsLage, vorratsLageText, zustand, type GruppenKachel, type Wichtig,
+} from './dashboard';
+import { Bild, DEKO, GRUPPE_EMOJI, GRUPPE_FOTO, ORT_FOTO } from './Bild';
 import { sortenBild } from './bildApi';
-import { Box, tonVon, WarnIcon, WichtigKacheln, zustandKurz } from './Karten';
+import { Box, WarnIcon, WichtigKacheln } from './Karten';
 import type { NavZustand } from './navigation';
 
 type Props = {
@@ -21,7 +22,6 @@ type Props = {
   reserviert: Map<number, number>;
   /** „Für heute auftauen“ (fertig gerendert, kann leer sein) */
   auftauen: ReactNode;
-  nutzung: NutzungZeile[];
   onOeffnen: (s: Sorte) => void;
   onEntnehmen: (s: Sorte, menge: number) => void;
   /** „Hinzufügen“: Einbuchen oder neue Sorte */
@@ -31,7 +31,20 @@ type Props = {
 /** Eine Portion – oder der Rest, wenn weniger da ist. */
 export const einePortion = (s: Sorte) => Math.min(portionMengeVon(s), s.anzahl);
 
-const rolleVon = (s: Sorte) => (artVon(s) === 'komplettgericht' ? 'Komplettgericht' : farbInfo(s.farbe).bedeutung);
+/** Was die Zeile über eine Sorte sagt: bei Gramm/ml wie viele Portionen das sind, sonst woher sie kommt. */
+function ueberSorte(s: Sorte, zeigeOrt: boolean): string {
+  const e = einheitVon(s);
+  const teile = [
+    zeigeOrt ? lagerort(s.lagerort).name : null,
+    (e === 'g' || e === 'ml') && portionenVon(s) >= 1 ? `≈ ${portionenText(portionenVon(s))}`
+      : artVon(s) === 'komplettgericht' ? 'Fertiggericht'
+        : s.herkunft === 'selbstgemacht' ? 'Selbst gemacht' : s.herkunft === 'gekauft' ? 'Gekauft' : null,
+  ];
+  return teile.filter(Boolean).join(' · ');
+}
+
+/** Nichts da und nichts zu sagen (kein „nachkochen“): kommt als Knopf unter „Gerade nicht da“ statt als Zeile. */
+const nurLeer = (s: Sorte, heute: string) => s.anzahl <= 0 && !zustand(s, heute);
 
 /** Farbe des Zustands – wie die Kacheln: läuft ab/abgelaufen rot, geöffnet gelb, aufgetaut blau, knapp/aufgebraucht neutral */
 export const zustandKlasse = (w: Wichtig) =>
@@ -41,7 +54,7 @@ function Suchfeld({ wert, onAendern }: { wert: string; onAendern: (t: string) =>
   return (
     <label className="suchfeld">
       <Icon name="suche" groesse={17} />
-      <input type="search" value={wert} onChange={(e) => onAendern(e.target.value)} placeholder="Suchen (z. B. Tomaten, Reis, …)" aria-label="Im Vorrat suchen" />
+      <input type="search" value={wert} onChange={(e) => onAendern(e.target.value)} placeholder="Suchen (z. B. Nudeln, Reis, …)" aria-label="Im Vorrat suchen" />
       {wert && (
         <button type="button" className="such-leeren" onClick={() => onAendern('')} aria-label="Suche leeren">
           <Icon name="schliessen" groesse={12} />
@@ -49,6 +62,13 @@ function Suchfeld({ wert, onAendern }: { wert: string; onAendern: (t: string) =>
       )}
     </label>
   );
+}
+
+/** Foto der Obergruppe – rund (Abschnitt) oder als Fläche (Karte); Extras mit Symbol. */
+function GruppeBild({ id, art }: { id: GruppeId; art: 'rund' | 'flaeche' }) {
+  const foto = GRUPPE_FOTO[id];
+  if (foto) return <img className={`gruppe-bild gruppe-bild-${art}`} src={foto} alt="" aria-hidden="true" draggable={false} />;
+  return <span className={`gruppe-bild gruppe-bild-${art} gruppe-symbol`} aria-hidden="true"><span>{GRUPPE_EMOJI[id]}</span></span>;
 }
 
 function SorteZeile({ s, heute, reserviert, zeigeOrt, laeuft, onOeffnen, onEntnehmen }: {
@@ -60,10 +80,10 @@ function SorteZeile({ s, heute, reserviert, zeigeOrt, laeuft, onOeffnen, onEntne
   const unter = z
     ? <span className={zustandKlasse(z)}>{z.art === 'bald' ? z.text : z.art === 'leer' || z.art === 'niedrig' ? `${z.titel} · ${z.text}` : z.titel}</span>
     : s.anzahl <= 0
-      ? <span>Aufgebraucht</span>
+      ? <span>Gerade nicht da</span>
       : reserviert > 0
         ? <span>{mengeKurz(reserviert, einheitVon(s)).zahl} eingeplant</span>
-        : <span>{zeigeOrt ? `${rolleVon(s)} · ${lagerort(s.lagerort).name}` : rolleVon(s)}</span>;
+        : <span>{ueberSorte(s, zeigeOrt)}</span>;
   return (
     <li className={`vorrat-zeile f-${s.farbe}`}>
       <div className={`zeile${s.anzahl === 0 ? ' leer' : ''}`}>
@@ -89,8 +109,75 @@ function SorteZeile({ s, heute, reserviert, zeigeOrt, laeuft, onOeffnen, onEntne
   );
 }
 
-/** Der Vorrat: erst was wichtig ist und wo was liegt – Einzelheiten erst beim Öffnen. */
-export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reserviert, auftauen, nutzung, onOeffnen, onEntnehmen, onHinzufuegen }: Props) {
+/** Sorten ohne Bestand: kleine Knöpfe – antippen öffnet die Sorte, dort „Einbuchen“. */
+function LeereSorten({ sorten, alle, onOeffnen }: { sorten: Sorte[]; alle: boolean; onOeffnen: (s: Sorte) => void }) {
+  return (
+    <div className="leer-sorten">
+      <p>{alle ? 'Noch nichts eingebucht' : 'Gerade nicht da'} – antippen zum Einbuchen</p>
+      <div className="chips">
+        {sorten.map((s) => (
+          <button key={s.id} type="button" className="chip leer-sorte" onClick={() => onOeffnen(s)}>
+            <Bild name={s.name} farbe={s.farbe} art="klein" className="bild-mini" bild={sortenBild(s)} />
+            {s.name}
+            <Icon name="plus" groesse={14} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Filter nach Obergruppe – die gewählte ist beim Öffnen sichtbar, auch wenn sie weiter rechts liegt. */
+function GruppenFilter({ gruppen, gewaehlt, onWahl }: { gruppen: GruppenKachel[]; gewaehlt: GruppeId | null; onWahl: (id: GruppeId | null) => void }) {
+  const leiste = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const l = leiste.current;
+    const chip = l?.querySelector<HTMLElement>('.gewaehlt');
+    if (l && chip && (chip.offsetLeft + chip.offsetWidth > l.scrollLeft + l.clientWidth || chip.offsetLeft < l.scrollLeft)) {
+      l.scrollLeft = chip.offsetLeft - 20;
+    }
+  }, [gewaehlt]);
+  return (
+    <div ref={leiste} className="chips scroll abstand-oben" role="group" aria-label="Nach Gruppe filtern">
+      <button type="button" className={`chip${gewaehlt === null ? ' gewaehlt' : ''}`} aria-pressed={gewaehlt === null} onClick={() => onWahl(null)}>
+        Alle
+      </button>
+      {gruppen.map((k) => (
+        <button key={k.id} type="button" className={`chip${gewaehlt === k.id ? ' gewaehlt' : ''}`} aria-pressed={gewaehlt === k.id} onClick={() => onWahl(k.id)}>
+          <span className={`punkt f-${gruppe(k.id).farbe}`} aria-hidden="true" />
+          {gruppe(k.id).name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Obergruppen als Fotokarten: wie viele Sorten da sind und was dazugehört. */
+function GruppenKarten({ kacheln, onWahl }: { kacheln: GruppenKachel[]; onWahl: (id: GruppeId) => void }) {
+  return (
+    <div className="gruppen-karten">
+      {kacheln.map((k) => {
+        const g = gruppe(k.id);
+        const weitere = k.sorten - k.namen.length;
+        return (
+          <button key={k.id} type="button" className={`gruppe-karte f-${g.farbe}`} onClick={() => onWahl(k.id)}>
+            <GruppeBild id={k.id} art="flaeche" />
+            {k.achtung > 0 && <span className="gruppe-achtung"><Icon name="info" groesse={13} /> {k.achtung} bald verbrauchen</span>}
+            <span className="gruppe-karte-text">
+              <strong>{g.name}</strong>
+              <span className="gruppe-stand">{k.da} von {k.sorten} da</span>
+              <span className="gruppe-balken" aria-hidden="true"><span style={{ width: `${Math.round((100 * k.da) / k.sorten)}%` }} /></span>
+              <small>{k.namen.join(', ')}{weitere > 0 ? ` +${weitere}` : ''}</small>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Der Vorrat: erst was wichtig ist, dann wo was liegt und welche Bausteine da sind – Einzelheiten beim Öffnen. */
+export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reserviert, auftauen, onOeffnen, onEntnehmen, onHinzufuegen }: Props) {
   if (bestand.length === 0) {
     return (
       <div className="leer-karte">
@@ -117,48 +204,50 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
       laeuft={laeuft.has(s.id)} onOeffnen={onOeffnen} onEntnehmen={onEntnehmen} />
   );
 
-  // ───────── Ein Lagerort (oder alles) ─────────
+  // ───────── Ein Lagerort, eine Gruppe oder alles ─────────
   if (nav.ort) {
     const ort = nav.ort;
-    const titel = ort === 'alle' ? (nav.art === 'komponente' ? 'Komponenten' : 'Alle Sorten') : lagerort(ort).name;
-    const imOrt = sortenFuer(bestand, { ort, art: null, suche: '' }, heute);
-    const arten = ARTEN_INFO.filter((a) => imOrt.some((s) => artVon(s) === a.id));
-    const sorten = sortenFuer(bestand, { ort, art: nav.art, suche: nav.suche }, heute);
-    const da = imOrt.filter((s) => s.anzahl > 0).length;
+    const titel = ort !== 'alle' ? lagerort(ort).name : nav.gruppe ? gruppe(nav.gruppe).name : 'Alle Sorten';
+    const imOrt = sortenFuer(bestand, { ort, gruppe: null, suche: '' }, heute);
+    const gruppen = gruppenKacheln(bestand, heute, ort);
+    const sorten = sortenFuer(bestand, { ort, gruppe: nav.gruppe, suche: nav.suche }, heute);
+    const gezaehlt = nav.gruppe ? imOrt.filter((s) => gruppeVon(s) === nav.gruppe) : imOrt;
     return (
       <div className="ort-ansicht">
         <button type="button" className="zurueck-knopf" onClick={onZurueck}>
           <Icon name="zurueck" groesse={18} /> Vorrat
         </button>
-        <div className="ort-kopf">
-          <h2>{titel}</h2>
-          <p className="leise klein">{da} von {imOrt.length} Sorten da</p>
+        <div className={`ort-kopf${ort === 'alle' && nav.gruppe ? ' mit-bild' : ''}`}>
+          {ort === 'alle' && nav.gruppe && <GruppeBild id={nav.gruppe} art="rund" />}
+          <div>
+            <h2>{titel}</h2>
+            <p className="leise klein">{gezaehlt.filter((s) => s.anzahl > 0).length} von {gezaehlt.length} Sorten da</p>
+          </div>
         </div>
         <Suchfeld wert={nav.suche} onAendern={(t) => onNav({ suche: t })} />
-        {arten.length > 1 && (
-          <div className="chips scroll abstand-oben" role="group" aria-label="Nach Art filtern">
-            <button type="button" className={`chip${nav.art === null ? ' gewaehlt' : ''}`} aria-pressed={nav.art === null} onClick={() => onNav({ art: null })}>
-              Alle
-            </button>
-            {arten.map((a) => (
-              <button key={a.id} type="button" className={`chip${nav.art === a.id ? ' gewaehlt' : ''}`} aria-pressed={nav.art === a.id} onClick={() => onNav({ art: a.id })}>
-                {a.mehrzahl}
-              </button>
-            ))}
-          </div>
-        )}
+        {gruppen.length > 1 && <GruppenFilter gruppen={gruppen} gewaehlt={nav.gruppe} onWahl={(id) => onNav({ gruppe: id })} />}
         {sorten.length === 0 ? (
           nichtsGefunden
-        ) : nav.art || nav.suche ? (
+        ) : nav.suche ? (
           <ul className="liste mit-bild abstand-oben">{sorten.map((s) => zeile(s, ort === 'alle'))}</ul>
         ) : (
-          arten.map((a) => {
-            const gruppe = sorten.filter((s) => artVon(s) === a.id);
-            if (gruppe.length === 0) return null;
+          gruppen.map((k) => {
+            const inGruppe = sorten.filter((s) => gruppeVon(s) === k.id);
+            if (inGruppe.length === 0) return null;
+            const g = gruppe(k.id);
+            const zeilen = inGruppe.filter((s) => !nurLeer(s, heute));
+            const leer = inGruppe.filter((s) => nurLeer(s, heute));
             return (
-              <section key={a.id}>
-                <h3 className="unterkopf">{a.mehrzahl}</h3>
-                <ul className="liste mit-bild">{gruppe.map((s) => zeile(s, ort === 'alle'))}</ul>
+              <section key={k.id} className={`gruppe-abschnitt f-${g.farbe}`} aria-label={g.name}>
+                {!nav.gruppe && (
+                  <div className="gruppe-kopf">
+                    <GruppeBild id={k.id} art="rund" />
+                    <h3>{g.name}</h3>
+                    <span className="gruppe-zahl">{inGruppe.filter((s) => s.anzahl > 0).length} von {inGruppe.length} da</span>
+                  </div>
+                )}
+                {zeilen.length > 0 && <ul className="liste mit-bild">{zeilen.map((s) => zeile(s, ort === 'alle'))}</ul>}
+                {leer.length > 0 && <LeereSorten sorten={leer} alle={zeilen.length === 0} onOeffnen={onOeffnen} />}
               </section>
             );
           })
@@ -169,7 +258,7 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
 
   // ───────── Übersicht ─────────
   if (nav.suche) {
-    const treffer = sortenFuer(bestand, { ort: 'alle', art: null, suche: nav.suche }, heute);
+    const treffer = sortenFuer(bestand, { ort: 'alle', gruppe: null, suche: nav.suche }, heute);
     return (
       <>
         <Suchfeld wert={nav.suche} onAendern={(t) => onNav({ suche: t })} />
@@ -179,22 +268,10 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
   }
 
   const wichtig = heuteWichtig(bestand, heute);
-  const kacheln = ortKacheln(bestand, heute);
+  const orte = ortKacheln(bestand, heute);
+  const gruppen = gruppenKacheln(bestand, heute);
   const lage = vorratsLage(bestand, heute);
   const lageText = vorratsLageText(lage);
-  const da = bestand.filter((s) => s.anzahl > 0);
-  const anzahl = (id: string) => da.filter((s) => (s.lagerort ?? 'gefrierfach') === id).length;
-  const verbrauch = new Map(nutzung.map((n) => [n.block_typ_id, n.verbrauch_28]));
-  // „Deine wichtigsten Vorräte“: was Aufmerksamkeit braucht, dann was am meisten verbraucht wird
-  const wichtigste = [...bestand]
-    .filter((s) => s.anzahl > 0 || zustand(s, heute))
-    .sort((a, b) => {
-      const za = zustand(a, heute);
-      const zb = zustand(b, heute);
-      const rang = (z: Wichtig | null) => (istDringend(z) ? 0 : 1);
-      return rang(za) - rang(zb) || (verbrauch.get(b.id) ?? 0) - (verbrauch.get(a.id) ?? 0) || a.name.localeCompare(b.name, 'de');
-    })
-    .slice(0, 6);
   const ICON: Record<string, IconName> = Object.fromEntries(LAGERORTE.map((l) => [l.id, l.icon]));
   const TON: Record<string, string> = { kuehlschrank: 'ton-gruen', gefrierfach: 'ton-blau', vorrat: 'ton-gelb' };
 
@@ -207,6 +284,7 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
         <div className="vorrat-held-kopf">
           <p className="vorrat-held-titel">Dein Vorrat</p>
           <span className="vorrat-held-zahl">{lage.artikel} Artikel</span>
+          <p className="vorrat-held-unter">{bestand.length} Sorten · {bestand.length - lage.artikel} gerade nicht da</p>
           <p className={`vorrat-lage${lageText ? ' status-achtung' : ' status-ok'}`}>
             <Icon name={lageText ? 'info' : 'haken'} groesse={16} /> {lageText ?? 'Alles in Ordnung'}
           </p>
@@ -221,42 +299,30 @@ export function Vorrat({ bestand, heute, nav, onNav, onZurueck, laeuft, reservie
 
       {auftauen}
 
-      <div className="ort-karten" aria-label="Lagerorte">
-        {kacheln.map((k) => (
-          <button key={k.id} type="button" className={`ort-karte ${TON[k.id]}`} onClick={() => onNav({ ort: k.id })}>
-            <img src={ORT_FOTO[k.id]} alt="" aria-hidden="true" />
-            <span className="ort-karte-text">
-              <span className="icon-rund"><Icon name={ICON[k.id]} groesse={17} /></span>
-              <strong>{LAGERORTE.find((l) => l.id === k.id)!.name}</strong>
-              <small>{anzahl(k.id)} Artikel</small>
-            </span>
-          </button>
-        ))}
-      </div>
+      <section className="abschnitt" aria-label="Lagerorte">
+        <div className="abschnitt-kopf"><h2>Wo liegt was?</h2></div>
+        <div className="ort-karten">
+          {orte.map((k) => (
+            <button key={k.id} type="button" className={`ort-karte ${TON[k.id]}`} onClick={() => onNav({ ort: k.id })}>
+              <img src={ORT_FOTO[k.id]} alt="" aria-hidden="true" />
+              <span className="ort-karte-text">
+                <span className="icon-rund"><Icon name={ICON[k.id]} groesse={17} /></span>
+                <strong>{LAGERORTE.find((l) => l.id === k.id)!.name}</strong>
+                <small>{k.sorten ? `${k.sorten - k.leer} von ${k.sorten} da` : 'noch leer'}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
 
-      <Box titel="Wichtigste Vorräte" link={{ text: 'Alle', onClick: () => onNav({ ort: 'alle' }), grau: true }} className="alle-box">
-        <ul className="liste mit-bild gross bild-zeile">
-          {wichtigste.map((s) => {
-            const z = zustand(s, heute);
-            return (
-              <li key={s.id}>
-                <button type="button" className="zeile" onClick={() => onOeffnen(s)}>
-                  <Bild name={s.name} farbe={s.farbe} art="rund" bild={sortenBild(s)} />
-                  <span className="zeile-haupt">
-                    <span className="zeile-titel">{s.name}</span>
-                    <span className="zeile-meta ort-meta">
-                      <span>{mengeText(s.anzahl, einheitVon(s))}</span> · <span><Icon name={ICON[s.lagerort ?? 'gefrierfach']} groesse={13} /> {lagerort(s.lagerort).name}</span>
-                    </span>
-                  </span>
-                  <span className={`pille ${tonVon(z)}`}>{zustandKurz(z)}</span>
-                  <Icon name="pfeil" groesse={16} className="zeile-pfeil" />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        <button type="button" className="link breit alle-knopf" onClick={() => onNav({ ort: 'alle' })}>Alle {bestand.length} Sorten</button>
-      </Box>
+      <section className="abschnitt" aria-label="Gruppen">
+        <div className="abschnitt-kopf"><h2>Deine Bausteine</h2></div>
+        <GruppenKarten kacheln={gruppen} onWahl={(id) => onNav({ ort: 'alle', gruppe: id })} />
+      </section>
+
+      <button type="button" className="knopf zweit breit alle-knopf" onClick={() => onNav({ ort: 'alle', gruppe: null })}>
+        Alle {bestand.length} Sorten
+      </button>
     </>
   );
 }

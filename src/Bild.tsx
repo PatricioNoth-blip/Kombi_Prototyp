@@ -8,6 +8,7 @@ import { useState } from 'react';
 import type { Farbe } from '../supabase/functions/_shared/kombi/typen.ts';
 import { type BildDaten, bildUrlFuerBreite, sichereBildUrl } from '../supabase/functions/_shared/kombi/bilder.ts';
 import { erkenneZutat, KATEGORIE_EMOJI } from '../supabase/functions/_shared/kombi/zutaten.ts';
+import type { GruppeId } from './farben';
 import tomatensosse from './bilder/tomatensosse.webp';
 import pasta from './bilder/pasta.webp';
 import curry from './bilder/curry.webp';
@@ -27,6 +28,13 @@ import vorratsschrank from './bilder/vorratsschrank.webp';
 
 export const DEKO = { heldTomaten, heldGemuese, topf };
 export const ORT_FOTO = { kuehlschrank, gefrierfach, vorrat: vorratsschrank } as const;
+/** Fotos der Obergruppen im Vorrat (Extras ohne Foto – dort steht ein Symbol). */
+export const GRUPPE_FOTO: Record<GruppeId, string | null> = {
+  basis: tomatensosse, protein: falafel, gemuese: ofengemuese, sattmacher: pasta, fertig: curry, extras: null,
+};
+export const GRUPPE_EMOJI: Record<GruppeId, string> = {
+  basis: '🥫', protein: '🫘', gemuese: '🥦', sattmacher: '🍝', fertig: '🍕', extras: '🧂',
+};
 
 /** gross = taugt auch für große Flächen; sonst nur für kleine, runde Bilder */
 type Foto = { src: string; gross: boolean };
